@@ -89,6 +89,13 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
   const [adventureId, setAdventureId] = useState("");
   const [targetPlayers, setTargetPlayers] = useState("4");
   const [error, setError] = useState<string | null>(null);
+  const statusLabel = (status: string) => ({
+    live: tr("live", "live"),
+    paused: tr("paused", "pausiert"),
+    ready_to_start: tr("ready to start", "startbereit"),
+    ended: tr("ended", "beendet"),
+    draft: tr("draft", "Entwurf"),
+  }[status] ?? status);
 
   const availableRulesets = useMemo(() => ensureFallbackRulesets(rulesetGroups(documents), adventures), [documents, adventures]);
   const rulesetAdventures = useMemo(() => {
@@ -127,7 +134,7 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
     const adventure = adventures.find((item) => item.id === adventureId) ?? null;
     const campaignId = adventure?.campaign_id ?? campaigns[0]?.id ?? "";
     if (!name.trim() || !rulesetWork || !rulesetVersion || !adventureId || !campaignId) {
-      setError(tr("Choose a session name, ruleset, and adventure.", "Bitte Session-Name, Regelwerk und Abenteuer auswählen."));
+      setError(tr("Choose a session name, ruleset, and adventure.", "Bitte Sitzungsname, Regelwerk und Abenteuer auswählen."));
       return;
     }
     setError(null);
@@ -142,11 +149,11 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
           target_player_count: Number(targetPlayers) || 4,
           language: locale,
         });
-        notify({ title: tr("Session created", "Session erstellt"), message: tr(`${created.name} is ready for players to join.`, `${created.name} ist für den Spielerbeitritt bereit.`), tone: "success" });
+        notify({ title: tr("Session created", "Sitzung erstellt"), message: tr(`${created.name} is ready for players to join.`, `${created.name} ist für den Spielerbeitritt bereit.`), tone: "success" });
         setIsCreateOpen(false);
         router.refresh();
       } catch (createError) {
-        setError(createError instanceof Error ? createError.message : tr("Could not create session.", "Session konnte nicht erstellt werden."));
+        setError(createError instanceof Error ? createError.message : tr("Could not create session.", "Sitzung konnte nicht erstellt werden."));
       }
     });
   }
@@ -158,7 +165,7 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
     startTransition(async () => {
       try {
         await deleteSession(session.id);
-        notify({ title: tr("Session deleted", "Session gelöscht"), message: tr(`${session.name} was removed.`, `${session.name} wurde entfernt.`), tone: "success" });
+        notify({ title: tr("Session deleted", "Sitzung gelöscht"), message: tr(`${session.name} was removed.`, `${session.name} wurde entfernt.`), tone: "success" });
         router.refresh();
       } catch (deleteError) {
         notify({ title: "Session", message: deleteError instanceof Error ? deleteError.message : tr("Delete failed.", "Löschen fehlgeschlagen."), tone: "error" });
@@ -169,20 +176,20 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
   return (
     <div className="page-stack">
       <PageIntro
-        eyebrow={tr("Sessions", "Sessions")}
-        title={tr("AI GM Sessions", "KI-Spielleiter-Sessions")}
-        description={tr("Sessions connect the adventure, ruleset, player join flow, shared visual board, voice, ambience, and dice.", "Sessions verbinden Abenteuer, Regelwerk, Spielerbeitritt, gemeinsames Visual Board, Sprache, Atmosphäre und Würfel.")}
+        eyebrow={tr("Sessions", "Sitzungen")}
+        title={tr("AI DM Sessions", "KI-Spielleiter-Sitzungen")}
+        description={tr("Sessions connect the adventure, ruleset, player join flow, shared visual board, voice, ambience, and dice.", "Sitzungen verbinden Abenteuer, Regelwerk, Spielerbeitritt, gemeinsame Bildanzeige, Sprache, Atmosphäre und Würfel.")}
         actions={
           <div className="page-actions">
             <button className="studio-button" onClick={openCreateModal} type="button">
-              {tr("Add Session", "Session hinzufügen")}
+              {tr("Add Session", "Sitzung hinzufügen")}
             </button>
           </div>
         }
       />
 
       <div className="stat-grid">
-        <StatCard label="Sessions" value={sessions.length} />
+        <StatCard label={tr("Sessions", "Sitzungen")} value={sessions.length} />
         <StatCard label="Live" value={sessions.filter((session) => session.status === "live").length} />
         <StatCard label={tr("Adventures", "Abenteuer")} value={adventures.length} />
         <StatCard label={tr("Rulebooks", "Regelbücher")} value={documents.filter((document) => document.type === "rules").length} />
@@ -195,14 +202,14 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
           return (
             <article className="session-card" key={session.id}>
               <div className="asset-chip__head">
-                <StatusPill tone={statusTone(session.status)}>{session.status}</StatusPill>
+                <StatusPill tone={statusTone(session.status)}>{statusLabel(session.status)}</StatusPill>
               </div>
               <strong>{session.name}</strong>
               <p>{session.ruleset_work} {session.ruleset_version} · {adventure?.name || tr("No adventure", "Kein Abenteuer")}</p>
               <p className="muted-copy">{tr(`Planned for ${session.target_player_count} players`, `Geplant für ${session.target_player_count} Spieler`)}</p>
               <div className="button-row">
                 <Link className="studio-button studio-button--ghost studio-button--inline" href={`/sessions/${session.id}`}>
-                  {tr("Open Session", "Session öffnen")}
+                  {tr("Open Session", "Sitzung öffnen")}
                 </Link>
                 <Link className="studio-button studio-button--ghost studio-button--inline" href={`/session-join/${session.join_token}`}>
                   {tr("Join link", "Beitrittslink")}
@@ -222,7 +229,7 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
           <section aria-modal="true" className="modal-card" onClick={(event) => event.stopPropagation()} role="dialog">
             <div className="modal-card__header">
               <div>
-                <h2 className="studio-panel__title">{tr("Add Session", "Session hinzufügen")}</h2>
+                <h2 className="studio-panel__title">{tr("Add Session", "Sitzung hinzufügen")}</h2>
                 <p className="studio-panel__description">{tr("Name, ruleset, adventure, and planned player count define the starting point.", "Name, Regelwerk, Abenteuer und geplante Spielerzahl definieren den Startpunkt der Runde.")}</p>
               </div>
               <button className="studio-button studio-button--ghost studio-button--inline" onClick={() => setIsCreateOpen(false)} type="button">
@@ -231,7 +238,7 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
             </div>
 
             <div className="form-grid">
-              <input onChange={(event) => setName(event.target.value)} placeholder={tr("Session name", "Session-Name")} value={name} />
+              <input onChange={(event) => setName(event.target.value)} placeholder={tr("Session name", "Sitzungsname")} value={name} />
               <select onChange={(event) => setRulesetKey(event.target.value)} value={rulesetKey}>
                 <option value="">{tr("Choose ruleset", "Regelwerk wählen")}</option>
                 {availableRulesets.map((group) => (
@@ -261,7 +268,7 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
                   {tr("Cancel", "Abbrechen")}
                 </button>
                 <button className="studio-button" disabled={isPending} onClick={handleCreate} type="button">
-                  {tr("Create Session", "Session erstellen")}
+                  {tr("Create Session", "Sitzung erstellen")}
                 </button>
               </div>
             </div>

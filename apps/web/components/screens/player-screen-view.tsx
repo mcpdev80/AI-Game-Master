@@ -186,8 +186,6 @@ function looksUsablePlayerTurn(text: string): boolean {
   return letterCount >= Math.max(8, Math.floor(normalized.length * 0.45));
 }
 
-const WAKE_PHRASE = "Unsere Antwort";
-const FINISH_PHRASE = "Ende unserer Antwort";
 
 type AudioContextConstructor = typeof AudioContext;
 
@@ -213,10 +211,10 @@ function pickRecordingMimeType(): string {
   return "";
 }
 
-async function blobToWav(blob: Blob): Promise<Blob> {
+async function blobToWav(blob: Blob, language: string = "en"): Promise<Blob> {
   const AudioContextCtor = getAudioContextConstructor();
   if (!AudioContextCtor) {
-    throw new Error("AudioContext wird von diesem Browser nicht unterstützt.");
+    throw new Error(language === "de" ? "AudioContext wird von diesem Browser nicht unterstützt." : "This browser does not support AudioContext.");
   }
 
   const arrayBuffer = await blob.arrayBuffer();
@@ -225,7 +223,9 @@ async function blobToWav(blob: Blob): Promise<Blob> {
     const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
     return audioBufferToWavBlob(decoded);
   } catch (error) {
-    throw new Error(error instanceof Error ? `Audio konnte nicht nach WAV konvertiert werden: ${error.message}` : "Audio konnte nicht nach WAV konvertiert werden.");
+    throw new Error(error instanceof Error
+      ? (language === "de" ? `Audio konnte nicht nach WAV konvertiert werden: ${error.message}` : `Could not convert audio to WAV: ${error.message}`)
+      : (language === "de" ? "Audio konnte nicht nach WAV konvertiert werden." : "Could not convert audio to WAV."));
   } finally {
     await audioContext.close().catch(() => undefined);
   }
@@ -234,7 +234,7 @@ async function blobToWav(blob: Blob): Promise<Blob> {
 async function uploadSTTBlob(blob: Blob, fallbackFilename: string, language?: string): Promise<string> {
   const formData = new FormData();
   try {
-    const wavBlob = await blobToWav(blob);
+    const wavBlob = await blobToWav(blob, language);
     formData.append("file", wavBlob, fallbackFilename.replace(/\.[^.]+$/, ".wav"));
   } catch {
     formData.append("file", blob, fallbackFilename);
@@ -373,7 +373,8 @@ function buildDiceDetectionMessage(
   notes: string,
   expectedDice: string[],
   detectedDice: Array<{ type: string; value: number }>,
-  finalValues: number[]
+  finalValues: number[],
+  language: "en" | "de"
 ): string {
   const trimmedNotes = notes.trim();
   const hasImpossibleDetectedDie = detectedDice.some((die) => {
@@ -385,9 +386,13 @@ function buildDiceDetectionMessage(
   }
   const expectedSummary = expectedDice.map((type, index) => `${type} ${finalValues[index] ?? 1}`).join(", ");
   if (hasImpossibleDetectedDie) {
-    return `Der erkannte Text war unplausibel. Übernommen wurde: ${expectedSummary}. Bitte kurz prüfen und bei Bedarf korrigieren.`;
+    return language === "de"
+      ? `Der erkannte Text war unplausibel. Übernommen wurde: ${expectedSummary}. Bitte kurz prüfen und bei Bedarf korrigieren.`
+      : `The recognized text was implausible. Applied values: ${expectedSummary}. Check and correct them if needed.`;
   }
-  return `Erkannt: ${expectedSummary}. Bitte kurz prüfen und bei Bedarf korrigieren.`;
+  return language === "de"
+    ? `Erkannt: ${expectedSummary}. Bitte kurz prüfen und bei Bedarf korrigieren.`
+    : `Detected: ${expectedSummary}. Check and correct the values if needed.`;
 }
 
 function normalizeSpeechCommandPrefix(text: string): string {
@@ -414,6 +419,8 @@ export function PlayerScreenView({
   playerLinks: PlayerLinkSlot[];
 }) {
   const { locale, tr } = useI18n();
+  const wakePhrase = tr("Our answer", "Unsere Antwort");
+  const finishPhrase = tr("End of our answer", "Ende unserer Antwort");
   const [liveSession, setLiveSession] = useState<Session | null>(session);
   const [enableState, setEnableState] = useState<EnableState>({
     board: false,
@@ -597,7 +604,7 @@ export function PlayerScreenView({
       visualPayload.scene ||
       liveSession?.state.last_narration ||
       liveSession?.state.session_recap ||
-      "Warte auf die nächste Ausgabe des AI DM."
+      tr("Waiting for the AI DM's next output.", "Warte auf die nächste Ausgabe des KI-Spielleiters.")
   );
   const referencedDocument =
     typeof visualPayload.document_id === "string" ? documents.find((document) => document.id === visualPayload.document_id) ?? null : null;
@@ -646,18 +653,18 @@ export function PlayerScreenView({
       if (explicitAttackBonus) {
         return {
           total: base + explicitAttackBonus.value,
-          breakdown: `Gewürfelt ${base} ${formatSigned(explicitAttackBonus.value)} Angriffsbonus = ${base + explicitAttackBonus.value}`,
+          breakdown: tr(`Rolled ${base} ${formatSigned(explicitAttackBonus.value)} attack bonus = ${base + explicitAttackBonus.value}`, `Gewürfelt ${base} ${formatSigned(explicitAttackBonus.value)} Angriffsbonus = ${base + explicitAttackBonus.value}`),
         };
       }
-      const parts: string[] = [`Gewürfelt ${base}`];
+      const parts: string[] = [tr(`Rolled ${base}`, `Gewürfelt ${base}`)];
       let total = base;
       if (derivedAbilityModifier !== null) {
         total += derivedAbilityModifier;
-        parts.push(`${formatSigned(derivedAbilityModifier)} ${rollRequestAbility || "Attribut"}`);
+        parts.push(`${formatSigned(derivedAbilityModifier)} ${rollRequestAbility || tr("ability", "Attribut")}`);
       }
       if (proficiencyBonus !== null) {
         total += proficiencyBonus;
-        parts.push(`${formatSigned(proficiencyBonus)} Übungsbonus`);
+        parts.push(`${formatSigned(proficiencyBonus)} ${tr("proficiency bonus", "Übungsbonus")}`);
       }
       if (parts.length > 1) {
         return {
@@ -667,24 +674,24 @@ export function PlayerScreenView({
       }
       return {
         total: base,
-        breakdown: `Gewürfelt ${base}`,
+        breakdown: tr(`Rolled ${base}`, `Gewürfelt ${base}`),
       };
     }
     if (rollRequestType === "damage") {
       const rolledDamage = normalizedValues.reduce((sum, value) => sum + value, 0);
-      const parts: string[] = [`Gewürfelt ${normalizedValues.join(" + ")}`];
+      const parts: string[] = [tr(`Rolled ${normalizedValues.join(" + ")}`, `Gewürfelt ${normalizedValues.join(" + ")}`)];
       let total = rolledDamage;
       if (derivedAbilityModifier !== null) {
         total += derivedAbilityModifier;
-        parts.push(`${formatSigned(derivedAbilityModifier)} ${rollRequestAbility || "Attribut"}`);
+        parts.push(`${formatSigned(derivedAbilityModifier)} ${rollRequestAbility || tr("ability", "Attribut")}`);
       }
       return {
         total,
-        breakdown: parts.length > 1 ? `${parts.join(" ")} = ${total}` : `Gewürfelt ${rolledDamage}`,
+        breakdown: parts.length > 1 ? `${parts.join(" ")} = ${total}` : tr(`Rolled ${rolledDamage}`, `Gewürfelt ${rolledDamage}`),
       };
     }
     return null;
-  }, [derivedAbilityModifier, diceValues, explicitAttackBonus, normalizedRollDice, proficiencyBonus, rollRequestAbility, rollRequestType]);
+  }, [derivedAbilityModifier, diceValues, explicitAttackBonus, normalizedRollDice, proficiencyBonus, rollRequestAbility, rollRequestType, tr]);
   const joinedPlayers = playerLinks.filter((slot) => slot.player_slot.status === "joined" || slot.player_slot.status === "ready").length;
   const readyPlayers = playerLinks.filter((slot) => slot.player_slot.status === "ready").length;
   const sessionRulebookCount = rulesDocument ? 1 : 0;
@@ -709,22 +716,22 @@ export function PlayerScreenView({
 
   const voiceConsoleState = useMemo(() => {
     if (promptPending) {
-      return { mode: "processing", title: "Verarbeitet", theme: "gold" };
+      return { mode: tr("processing", "Verarbeitung"), title: tr("Processing", "Wird verarbeitet"), theme: "gold" };
     }
     if (sttPending) {
-      return { mode: "transcribing", title: "Transkribiert", theme: "cyan" };
+      return { mode: tr("transcribing", "Transkription"), title: tr("Transcribing", "Wird transkribiert"), theme: "cyan" };
     }
     if (conversationPhase === "capturing") {
-      return { mode: "listening", title: "Spieler spricht", theme: "blue" };
+      return { mode: tr("listening", "zuhören"), title: tr("Player speaking", "Spieler spricht"), theme: "blue" };
     }
     if (isRecording) {
-      return { mode: "listening", title: "Lauscht", theme: "blue" };
+      return { mode: tr("listening", "zuhören"), title: tr("Listening", "Hört zu"), theme: "blue" };
     }
     if (isSpeaking || ttsWaitingToStart) {
-      return { mode: "speaking", title: "DM spricht", theme: "red" };
+      return { mode: tr("speaking", "spricht"), title: tr("DM speaking", "Spielleiter spricht"), theme: "red" };
     }
-    return { mode: "idle", title: `Warte auf "${WAKE_PHRASE}"`, theme: "blue" };
-  }, [conversationPhase, isRecording, isSpeaking, promptPending, sttPending, ttsWaitingToStart]);
+    return { mode: tr("idle", "bereit"), title: tr(`Waiting for "${wakePhrase}"`, `Warte auf „${wakePhrase}“`), theme: "blue" };
+  }, [conversationPhase, isRecording, isSpeaking, promptPending, sttPending, tr, ttsWaitingToStart, wakePhrase]);
 
   useEffect(() => {
     if (rollResolutionPending) {
@@ -793,29 +800,32 @@ export function PlayerScreenView({
     ambient.loop = true;
     ambient.volume = isAudioMuted ? 0 : (isSpeaking ? 0.16 : 0.52) * playbackVolume;
     void ambient.play().catch(() => {
-      setAmbientError("Ambient konnte nicht automatisch gestartet werden.");
+      setAmbientError(tr("Ambient audio could not start automatically.", "Die Umgebungsgeräusche konnten nicht automatisch gestartet werden."));
     });
-  }, [ambientActive, ambientUrl, enableState.audio, isAudioMuted, isSpeaking, playbackVolume]);
+  }, [ambientActive, ambientUrl, enableState.audio, isAudioMuted, isSpeaking, playbackVolume, tr]);
 
   async function transcribeWakeBlob(blob: Blob, mimeType: string) {
     const extension = mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "mp4" : "webm";
-    return uploadSTTBlob(blob, `wake.${extension}`, liveSession?.language);
+    return uploadSTTBlob(blob, `wake.${extension}`, locale);
   }
 
   async function finalizeWakeCapture(reason: "end_keyword" | "silence") {
-    const finalText = captureBufferRef.current.replace(/ende unserer antwort/gi, "").trim();
+    const finalText = captureBufferRef.current
+      .replace(/ende unserer antwort/gi, "")
+      .replace(/end of our answer/gi, "")
+      .trim();
     captureBufferRef.current = "";
     captureSilenceChunksRef.current = 0;
     setConversationPhase("idle");
     setWakeListening(true);
     if (!finalText || promptPendingRef.current) {
       if (reason === "end_keyword") {
-        setSTTTranscript(finalText || "Keine Spielerantwort erkannt.");
+        setSTTTranscript(finalText || tr("No player response detected.", "Keine Spielerantwort erkannt."));
       }
       return;
     }
     if (!looksUsablePlayerTurn(finalText)) {
-      setSTTTranscript(finalText || "Spielerantwort zu kurz oder unklar.");
+      setSTTTranscript(finalText || tr("Player response was too short or unclear.", "Spielerantwort war zu kurz oder unklar."));
       return;
     }
     setSTTTranscript(finalText);
@@ -837,18 +847,18 @@ export function PlayerScreenView({
 
     const normalized = normalizeSpeechCommandPrefix(cleanedTranscript);
     if (conversationPhaseRef.current !== "capturing") {
-      const wakePrefix = WAKE_PHRASE.toLowerCase();
+      const wakePrefix = wakePhrase.toLowerCase();
       if (!normalized.startsWith(wakePrefix)) {
         return;
       }
       const remainder = cleanedTranscript
-        .slice(cleanedTranscript.toLowerCase().indexOf(wakePrefix) + WAKE_PHRASE.length)
+        .slice(cleanedTranscript.toLowerCase().indexOf(wakePrefix) + wakePhrase.length)
         .trim()
         .replace(/^[:,.-]\s*/, "");
       captureBufferRef.current = remainder;
       captureSilenceChunksRef.current = 0;
       setConversationPhase("capturing");
-      setSTTTranscript(remainder || `${WAKE_PHRASE} erkannt.`);
+      setSTTTranscript(remainder || tr(`${wakePhrase} detected.`, `${wakePhrase} erkannt.`));
       return;
     }
 
@@ -918,7 +928,7 @@ export function PlayerScreenView({
               if (!cancelled) {
                 const message = error instanceof Error ? error.message : "Wake-Word fehlgeschlagen.";
                 if (!isIgnorableSTTErrorMessage(message)) {
-                  setSTTError(`Wake-Word fehlgeschlagen: ${message}`);
+                  setSTTError(tr(`Wake word failed: ${message}`, `Aktivierungswort fehlgeschlagen: ${message}`));
                 }
               }
             } finally {
@@ -945,7 +955,7 @@ export function PlayerScreenView({
           setWakeListening(false);
           const message = error instanceof Error ? error.message : "Wake-Word fehlgeschlagen.";
           if (!isIgnorableSTTErrorMessage(message)) {
-            setSTTError(`Wake-Word fehlgeschlagen: ${message}`);
+            setSTTError(tr(`Wake word failed: ${message}`, `Aktivierungswort fehlgeschlagen: ${message}`));
           }
         }
       }
@@ -1009,7 +1019,7 @@ export function PlayerScreenView({
         await ttsRef.current.play();
       } catch (error) {
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : "Sprachausgabe konnte nicht geladen werden.";
+          const message = error instanceof Error ? error.message : tr("Could not load speech output.", "Sprachausgabe konnte nicht geladen werden.");
           if (!isIgnorableTTSErrorMessage(message)) {
             setTTSError(message);
           }
@@ -1167,9 +1177,9 @@ export function PlayerScreenView({
         return diceValues[index] ?? 1;
       });
       setDiceValues(nextValues);
-      setDiceDetectMessage(buildDiceDetectionMessage(String(response.notes || ""), normalizedRollDice, detectedDice, nextValues));
+      setDiceDetectMessage(buildDiceDetectionMessage(String(response.notes || ""), normalizedRollDice, detectedDice, nextValues, locale));
     } catch (error) {
-      setDiceDetectError(error instanceof Error ? error.message : "Würfelerkennung fehlgeschlagen.");
+      setDiceDetectError(error instanceof Error ? error.message : tr("Dice recognition failed.", "Würfelerkennung fehlgeschlagen."));
       setDiceDetectMessage("");
     } finally {
       setDiceDetectPending(false);
@@ -1232,7 +1242,7 @@ export function PlayerScreenView({
       setCollectedRollDice([]);
     } catch (error) {
       setRollResolutionPending(false);
-      setPromptError(error instanceof Error ? error.message : "Wurfergebnis konnte nicht gesendet werden.");
+      setPromptError(error instanceof Error ? error.message : tr("Could not send roll result.", "Wurfergebnis konnte nicht gesendet werden."));
     } finally {
       setDiceSubmitPending(false);
     }
@@ -1258,7 +1268,7 @@ export function PlayerScreenView({
     if (!liveSession || promptPending) {
       return;
     }
-    await sendPlayerInput("Weiter.", false);
+    await sendPlayerInput(tr("Continue.", "Weiter."), false);
   }
 
   function handleStopPlayback() {
@@ -1290,7 +1300,7 @@ export function PlayerScreenView({
         await ttsRef.current.play();
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Sprachausgabe konnte nicht erneut gestartet werden.";
+      const message = error instanceof Error ? error.message : tr("Could not restart speech output.", "Sprachausgabe konnte nicht erneut gestartet werden.");
       if (!isIgnorableTTSErrorMessage(message)) {
         setTTSError(message);
       }
@@ -1381,29 +1391,29 @@ export function PlayerScreenView({
 
   const stageTitle =
     effectiveVisualMode === "rules_reference"
-      ? String(visualPayload.document_name || referencedDocument?.name || "Regelwerk")
+      ? String(visualPayload.document_name || referencedDocument?.name || tr("Rulebook", "Regelwerk"))
       : effectiveVisualMode === "dice_capture"
       ? hasRollRequest
-        ? rollRequestLabel || "Probe ausführen"
-        : "Würfelkamera"
+        ? rollRequestLabel || tr("Make a check", "Probe ausführen")
+        : tr("Dice Camera", "Würfelkamera")
       : rollResolutionPending
-      ? "Wurf wird aufgelöst"
-      : String(visualPayload.title || liveSession?.name || "AI DM Bühne");
+      ? tr("Resolving Roll", "Wurf wird aufgelöst")
+      : String(visualPayload.title || liveSession?.name || tr("AI DM Stage", "KI-Spielleiter-Bühne"));
 
   const stageText =
     effectiveVisualMode === "rules_reference"
-      ? String(visualPayload.excerpt || "Kein Auszug geladen.")
+      ? String(visualPayload.excerpt || tr("No excerpt loaded.", "Kein Auszug geladen."))
       : effectiveVisualMode === "dice_capture" && hasRollRequest
       ? [
           rollRequestInstructions,
           rollRequestReason,
-          rollRequestDice.length ? `Würfel: ${rollRequestDice.join(", ")}` : "",
+          rollRequestDice.length ? `${tr("Dice", "Würfel")}: ${rollRequestDice.join(", ")}` : "",
           rollRequestDC !== null && Number.isFinite(rollRequestDC) && !rollRequestHideDC ? `SG ${rollRequestDC}` : "",
         ]
           .filter(Boolean)
           .join(" ")
       : rollResolutionPending
-      ? "Der bestätigte Wurf wird gerade an den Spielleiter übergeben."
+      ? tr("The confirmed roll is being sent to the DM.", "Der bestätigte Wurf wird gerade an den Spielleiter übergeben.")
       : summarizeStageText(String(visualPayload.scene || narrationText));
 
   if (!enableState.board) {
@@ -1411,20 +1421,20 @@ export function PlayerScreenView({
       <main className="player-screen player-screen--boot">
         <div className="player-screen__backdrop" />
         <section className="boot-screen">
-          <p className="eyebrow">AI DM Visual Board</p>
-          <h1>{liveSession?.name || "Session wird vorbereitet"}</h1>
+          <p className="eyebrow">{tr("AI DM Visual Board", "Visuelles Board des KI-Spielleiters")}</p>
+          <h1>{liveSession?.name || tr("Preparing session", "Sitzung wird vorbereitet")}</h1>
           <p>
-            Aktiviere das Board einmal bewusst, damit Browser Audio, Mikrofon, Kamera und optional Fullscreen freigeben können.
+            {tr("Activate the board once so the browser can enable audio, microphone, camera, and optional fullscreen.", "Aktiviere das Board einmal, damit der Browser Audio, Mikrofon, Kamera und optional den Vollbildmodus freigeben kann.")}
           </p>
           <button className="studio-button boot-screen__button" onClick={handleActivateBoard} type="button">
-            Board aktivieren
+            {tr("Activate Board", "Board aktivieren")}
           </button>
           <div className="boot-screen__list">
-            <span><Volume2 size={16} /> Audio freigeben</span>
-			<span>Die Erzählerstimme ist KI-generiert / AI-generated.</span>
-            <span><Mic size={16} /> Mikrofon freigeben</span>
-            <span><Camera size={16} /> Kamera freigeben</span>
-            <span><Maximize size={16} /> Fullscreen optional</span>
+            <span><Volume2 size={16} /> {tr("Enable audio", "Audio freigeben")}</span>
+			<span>{tr("The narrator voice is AI-generated.", "Die Erzählerstimme ist KI-generiert.")}</span>
+            <span><Mic size={16} /> {tr("Enable microphone", "Mikrofon freigeben")}</span>
+            <span><Camera size={16} /> {tr("Enable camera", "Kamera freigeben")}</span>
+            <span><Maximize size={16} /> {tr("Fullscreen optional", "Vollbild optional")}</span>
           </div>
         </section>
       </main>
@@ -1437,50 +1447,50 @@ export function PlayerScreenView({
 
       <header className="player-topbar">
         <div className="player-topbar__meta">
-          <p className="eyebrow">AI DM Visual Board</p>
-          <strong>{liveSession?.name || "Keine Live-Session"}</strong>
+          <p className="eyebrow">{tr("AI DM Visual Board", "Visuelles Board des KI-Spielleiters")}</p>
+          <strong>{liveSession?.name || tr("No live session", "Keine Live-Sitzung")}</strong>
         </div>
         <div className="player-topbar__chips">
-          <span aria-label={`Verbindung ${liveSession ? "aktiv" : "inaktiv"}`} className={`player-chip player-chip--icon ${liveSession ? "is-active" : ""}`} title={`Verbindung ${liveSession ? "aktiv" : "inaktiv"}`}>
+          <span aria-label={`${tr("Connection", "Verbindung")} ${liveSession ? tr("active", "aktiv") : tr("inactive", "inaktiv")}`} className={`player-chip player-chip--icon ${liveSession ? "is-active" : ""}`} title={`${tr("Connection", "Verbindung")} ${liveSession ? tr("active", "aktiv") : tr("inactive", "inaktiv")}`}>
             <Wifi size={15} />
           </span>
           <div className="player-chip-group">
             <button
-              aria-label={`Audio ${enableState.audio ? (isAudioMuted ? "stumm" : "aktiv") : "aus"}`}
+              aria-label={`Audio ${enableState.audio ? (isAudioMuted ? tr("muted", "stumm") : tr("active", "aktiv")) : tr("off", "aus")}`}
               className={`player-chip player-chip--icon ${enableState.audio && !isAudioMuted ? "is-active" : ""}`}
               onClick={handleToggleAudioMute}
-              title={`Audio ${enableState.audio ? (isAudioMuted ? "stumm" : "aktiv") : "aus"}`}
+              title={`Audio ${enableState.audio ? (isAudioMuted ? tr("muted", "stumm") : tr("active", "aktiv")) : tr("off", "aus")}`}
               type="button"
             >
               {isAudioMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
             </button>
             <div className="player-chip-group__hover">
-              <button aria-label="Leiser" className="player-chip-group__mini" onClick={() => adjustVolume(-0.12)} type="button">
+              <button aria-label={tr("Quieter", "Leiser")} className="player-chip-group__mini" onClick={() => adjustVolume(-0.12)} type="button">
                 <VolumeX size={13} />
               </button>
               <span className="player-chip-group__value">{Math.round(playbackVolume * 100)}%</span>
-              <button aria-label="Lauter" className="player-chip-group__mini" onClick={() => adjustVolume(0.12)} type="button">
+              <button aria-label={tr("Louder", "Lauter")} className="player-chip-group__mini" onClick={() => adjustVolume(0.12)} type="button">
                 <Volume2 size={13} />
               </button>
             </div>
           </div>
           <button
-            aria-label={`Mikrofon ${enableState.mic ? (isMicMuted ? "stumm" : "aktiv") : "aus"}`}
+            aria-label={`${tr("Microphone", "Mikrofon")} ${enableState.mic ? (isMicMuted ? tr("muted", "stumm") : tr("active", "aktiv")) : tr("off", "aus")}`}
             className={`player-chip player-chip--icon ${enableState.mic && !isMicMuted ? "is-active" : ""}`}
             onClick={handleToggleMicMute}
-            title={`Mikrofon ${enableState.mic ? (isMicMuted ? "stumm" : "aktiv") : "aus"}`}
+            title={`${tr("Microphone", "Mikrofon")} ${enableState.mic ? (isMicMuted ? tr("muted", "stumm") : tr("active", "aktiv")) : tr("off", "aus")}`}
             type="button"
           >
             {isMicMuted ? <MicOff size={15} /> : <Mic size={15} />}
           </button>
-          <span aria-label={`Kamera ${enableState.cam ? "aktiv" : "aus"}`} className={`player-chip player-chip--icon ${enableState.cam ? "is-active" : ""}`} title={`Kamera ${enableState.cam ? "aktiv" : "aus"}`}>
+          <span aria-label={`${tr("Camera", "Kamera")} ${enableState.cam ? tr("active", "aktiv") : tr("off", "aus")}`} className={`player-chip player-chip--icon ${enableState.cam ? "is-active" : ""}`} title={`${tr("Camera", "Kamera")} ${enableState.cam ? tr("active", "aktiv") : tr("off", "aus")}`}>
             <Camera size={15} />
           </span>
           <button
-            aria-label={`Fullscreen ${enableState.fullscreen ? "an" : "aus"}`}
+            aria-label={`${tr("Fullscreen", "Vollbild")} ${enableState.fullscreen ? tr("on", "an") : tr("off", "aus")}`}
             className={`player-chip player-chip--icon ${enableState.fullscreen ? "is-active" : ""}`}
             onClick={handleToggleFullscreen}
-            title={`Fullscreen ${enableState.fullscreen ? "an" : "aus"}`}
+            title={`${tr("Fullscreen", "Vollbild")} ${enableState.fullscreen ? tr("on", "an") : tr("off", "aus")}`}
             type="button"
           >
             {enableState.fullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
@@ -1499,43 +1509,43 @@ export function PlayerScreenView({
             <div className="player-stage__status">
               <FileText size={22} />
               <div>
-                <strong>Regelreferenz bereit</strong>
-                <p>Der AI DM hat eine Regelwerksansicht vorbereitet. Öffne das Overlay für die große Ansicht.</p>
+                <strong>{tr("Rules reference ready", "Regelreferenz bereit")}</strong>
+                <p>{tr("The AI DM prepared a rules view. Open the overlay for the full view.", "Der KI-Spielleiter hat eine Regelansicht vorbereitet. Öffne das Overlay für die große Ansicht.")}</p>
               </div>
               <button className="studio-button" onClick={() => setPopupVisible(true)} type="button">
-                Regelwerk öffnen
+                {tr("Open Rulebook", "Regelwerk öffnen")}
               </button>
             </div>
           ) : effectiveVisualMode === "combat" && referencedAsset ? (
             <div className="player-stage__status">
-              <strong>Visuelles Asset bereit</strong>
-              <p>Der AI DM zeigt gerade ein Bild oder Handout. Öffne das Overlay für die große Ansicht.</p>
+              <strong>{tr("Visual asset ready", "Visuelles Medium bereit")}</strong>
+              <p>{tr("The AI DM is showing an image or handout. Open the overlay for the full view.", "Der KI-Spielleiter zeigt ein Bild oder Handout. Öffne das Overlay für die große Ansicht.")}</p>
               <button className="studio-button" onClick={() => setPopupVisible(true)} type="button">
-                Bild öffnen
+                {tr("Open Image", "Bild öffnen")}
               </button>
             </div>
           ) : effectiveVisualMode === "dice_capture" ? (
             <div className="player-stage__status">
               <Camera size={22} />
               <div>
-                <strong>{hasRollRequest ? stageTitle : "Würfelkamera bereit"}</strong>
+                <strong>{hasRollRequest ? stageTitle : tr("Dice camera ready", "Würfelkamera bereit")}</strong>
                 <p>
                   {hasRollRequest
-                    ? stageText || "Lege die geforderten Würfel in die Kamera und würfle jetzt."
-                    : "Bei einem Wurf wird die Kamera als Overlay geöffnet, damit der Wurf im Fokus bleibt."}
+                    ? stageText || tr("Place the requested dice in view and roll now.", "Lege die geforderten Würfel ins Kamerabild und würfle jetzt.")
+                    : tr("For a roll, the camera opens as an overlay to keep it in focus.", "Bei einem Wurf öffnet sich die Kamera als Overlay, damit der Wurf im Fokus bleibt.")}
                 </p>
                 {hasRollRequest ? (
                   <div className="player-stage__roll-request">
-                    {rollRequestDice.length ? <span>Würfel: {rollRequestDice.join(", ")}</span> : null}
-                    {rollRequestAbility ? <span>Attribut: {rollRequestAbility}</span> : null}
-                    {rollRequestSkill ? <span>Fertigkeit: {rollRequestSkill}</span> : null}
+                    {rollRequestDice.length ? <span>{tr("Dice", "Würfel")}: {rollRequestDice.join(", ")}</span> : null}
+                    {rollRequestAbility ? <span>{tr("Ability", "Attribut")}: {rollRequestAbility}</span> : null}
+                    {rollRequestSkill ? <span>{tr("Skill", "Fertigkeit")}: {rollRequestSkill}</span> : null}
                     {rollRequestDC !== null && Number.isFinite(rollRequestDC) && !rollRequestHideDC ? <span>SG {rollRequestDC}</span> : null}
-                    {rollRequestType ? <span>Typ: {rollRequestType}</span> : null}
+                    {rollRequestType ? <span>{tr("Type", "Typ")}: {rollRequestType}</span> : null}
                   </div>
                 ) : null}
               </div>
               <button className="studio-button" disabled={!enableState.cam} onClick={() => setPopupVisible(true)} type="button">
-                Kamera öffnen
+                {tr("Open Camera", "Kamera öffnen")}
               </button>
             </div>
           ) : (
@@ -1543,20 +1553,20 @@ export function PlayerScreenView({
               <div className="player-stage__session-box">
                 <div className="player-stage__session-meta">
                   <button className="player-chip" onClick={() => setMetaPopup("rules")} type="button">
-                    {liveSession ? `${liveSession.ruleset_work} ${liveSession.ruleset_version}` : "Regelwerk"}
+                    {liveSession ? `${liveSession.ruleset_work} ${liveSession.ruleset_version}` : tr("Ruleset", "Regelwerk")}
                   </button>
                   <span className="player-session-meta__text">
-                    Spieler {readyPlayers}/{Math.max(joinedPlayers, liveSession?.target_player_count || 0)}
+                    {tr("Players", "Spieler")} {readyPlayers}/{Math.max(joinedPlayers, liveSession?.target_player_count || 0)}
                   </span>
                   <span className="player-session-meta__text">
-                    Regelwerke {sessionRulebookCount}
+                    {tr("Rulebooks", "Regelbücher")} {sessionRulebookCount}
                   </span>
                 </div>
                 <div className="player-session-adventure">
                   <button className="player-chip" onClick={() => setMetaPopup("adventure")} type="button">
-                    {sessionAdventure ? sessionAdventure.name : "Abenteuer"}
+                    {sessionAdventure ? sessionAdventure.name : tr("Adventure", "Abenteuer")}
                   </button>
-                  <p>{sessionAdventure?.description || "Für diese Session ist noch kein Abenteuer mit Beschreibung hinterlegt."}</p>
+                  <p>{sessionAdventure?.description || tr("No described adventure has been assigned to this session.", "Dieser Sitzung ist noch kein beschriebenes Abenteuer zugeordnet.")}</p>
                 </div>
               </div>
             </div>
@@ -1571,7 +1581,7 @@ export function PlayerScreenView({
             <div className="player-popup__header">
               <strong>{stageTitle}</strong>
               <button className="studio-button studio-button--ghost" onClick={() => setPopupVisible(false)} type="button">
-                Schließen
+                {tr("Close", "Schließen")}
               </button>
             </div>
             <div className="player-popup__body">
@@ -1582,7 +1592,7 @@ export function PlayerScreenView({
                   {hasRollRequest ? (
                     <div className="player-popup__dice-callout">
                       <strong>{stageTitle}</strong>
-                      <p>{stageText || "Würfle jetzt und halte die Würfel klar in die Kamera."}</p>
+                      <p>{stageText || tr("Roll now and keep the dice clearly visible to the camera.", "Würfle jetzt und halte die Würfel deutlich in die Kamera.")}</p>
                       <div className="player-stage__roll-request">
                         {normalizedRollDice.map((die, index) => (
                           <label className="roll-die-input" key={`session-die-${index}`}>
@@ -1606,7 +1616,7 @@ export function PlayerScreenView({
                           onClick={() => void handleDetectDiceRoll()}
                           type="button"
                         >
-                          {diceDetectPending ? "Auswertung läuft..." : "Kamera auswerten"}
+                          {diceDetectPending ? tr("Evaluating...", "Auswertung läuft …") : tr("Evaluate Camera", "Kamera auswerten")}
                         </button>
                         <button
                           className="studio-button"
@@ -1614,7 +1624,7 @@ export function PlayerScreenView({
                           onClick={() => void handleSubmitDiceRoll()}
                           type="button"
                         >
-                          {diceSubmitPending ? "Übermittle Wurf..." : "Wurf bestätigen"}
+                          {diceSubmitPending ? tr("Submitting roll...", "Wurf wird übermittelt …") : tr("Confirm Roll", "Wurf bestätigen")}
                         </button>
                       </div>
                     </div>
@@ -1628,8 +1638,8 @@ export function PlayerScreenView({
                     <div className="player-popup__document">
                       <Camera size={24} />
                       <div>
-                        <strong>Kamera nicht aktiv</strong>
-                        <p>Die Würfelkamera braucht eine aktive Browser-Kamera. Aktiviere das Board mit Kamerazugriff und öffne dann den Dialog erneut.</p>
+                        <strong>{tr("Camera not active", "Kamera nicht aktiv")}</strong>
+                        <p>{tr("The dice camera needs an active browser camera. Enable camera access and reopen this dialog.", "Die Würfelkamera benötigt eine aktive Browserkamera. Aktiviere den Kamerazugriff und öffne diesen Dialog erneut.")}</p>
                       </div>
                     </div>
                   )}
@@ -1653,9 +1663,9 @@ export function PlayerScreenView({
           <div className="player-popup__backdrop" onClick={() => setMetaPopup(null)} />
           <div className="player-popup__panel player-popup__panel--meta">
             <div className="player-popup__header">
-              <strong>{metaPopup === "rules" ? "Regelwerk" : "Abenteuer"}</strong>
+              <strong>{metaPopup === "rules" ? tr("Rulebook", "Regelwerk") : tr("Adventure", "Abenteuer")}</strong>
               <button className="studio-button studio-button--ghost" onClick={() => setMetaPopup(null)} type="button">
-                Schließen
+                {tr("Close", "Schließen")}
               </button>
             </div>
             <div className="player-popup__document">
@@ -1663,7 +1673,7 @@ export function PlayerScreenView({
                 rulesDocument ? (
                   <>
                     <strong>{rulesDocument.name}</strong>
-                    <p>Scrollbare Regelwerksansicht für die aktuell gewählte Session.</p>
+                    <p>{tr("Scrollable rulebook view for the selected session.", "Scrollbare Regelwerksansicht für die ausgewählte Sitzung.")}</p>
                     <div className="player-popup__embed-wrap">
                       <iframe className="player-popup__embed" src={rulesFileUrl} title={rulesDocument.name} />
                     </div>
@@ -1671,13 +1681,13 @@ export function PlayerScreenView({
                 ) : (
                   <>
                     <strong>{`${liveSession?.ruleset_work || "—"} ${liveSession?.ruleset_version || ""}`}</strong>
-                    <p>Für diese Session wurde noch kein passendes Regelwerkdokument gefunden.</p>
+                    <p>{tr("No matching rulebook document was found for this session.", "Für diese Sitzung wurde kein passendes Regelwerkdokument gefunden.")}</p>
                   </>
                 )
               ) : (
                 <>
-                  <strong>{sessionAdventure?.name || "Kein Abenteuer gewählt"}</strong>
-                  <p>{sessionAdventure?.description || "Für diese Session ist noch keine Abenteuerbeschreibung hinterlegt."}</p>
+                  <strong>{sessionAdventure?.name || tr("No adventure selected", "Kein Abenteuer ausgewählt")}</strong>
+                  <p>{sessionAdventure?.description || tr("No adventure description is available for this session.", "Für diese Sitzung ist keine Abenteuerbeschreibung hinterlegt.")}</p>
                 </>
               )}
             </div>
@@ -1687,11 +1697,11 @@ export function PlayerScreenView({
 
       <section className="player-overlay">
         <article className="player-overlay__story">
-          <p className="eyebrow">AI DM sagt</p>
+          <p className="eyebrow">{tr("AI DM says", "KI-Spielleiter sagt")}</p>
           <p className="player-overlay__narration">{narrationText}</p>
           <div className="player-overlay__transcript">
-            <strong>Spielerantwort</strong>
-            <p>{sttTranscript || promptInput || `Warte auf "${WAKE_PHRASE}".`}</p>
+            <strong>{tr("Player response", "Spielerantwort")}</strong>
+            <p>{sttTranscript || promptInput || tr(`Waiting for "${wakePhrase}".`, `Warte auf „${wakePhrase}“.`)}</p>
           </div>
         </article>
 
@@ -1699,17 +1709,17 @@ export function PlayerScreenView({
           <article className={`voice-console voice-console--${voiceConsoleState.theme}`}>
             <div className="voice-console__header">
               <div>
-                <p className="eyebrow">AI DM Voice Console</p>
+                <p className="eyebrow">{tr("AI DM Voice Console", "Sprachkonsole des KI-Spielleiters")}</p>
                 <h2>{voiceConsoleState.title}</h2>
-				<p className="player-audio-note">KI-generierte Stimme / AI-generated voice</p>
+				<p className="player-audio-note">{tr("AI-generated voice", "KI-generierte Stimme")}</p>
               </div>
               <div className="voice-console__badge">{voiceConsoleState.mode}</div>
             </div>
             <div className="voice-console__scanner" aria-hidden="true">
               <div className="voice-console__side voice-console__side--left">
-                <button className="voice-console__key voice-console__key--amber" disabled={isRecording || sttPending || !enableState.mic} onClick={handleStartRecording} type="button">Listen</button>
-                <button className="voice-console__key voice-console__key--amber" onClick={() => setPromptInput(sttTranscript || promptInput)} type="button">Reply</button>
-                <button className="voice-console__key voice-console__key--red" onClick={handleStopPlayback} type="button">Stop</button>
+                <button className="voice-console__key voice-console__key--amber" disabled={isRecording || sttPending || !enableState.mic} onClick={handleStartRecording} type="button">{tr("Listen", "Zuhören")}</button>
+                <button className="voice-console__key voice-console__key--amber" onClick={() => setPromptInput(sttTranscript || promptInput)} type="button">{tr("Reply", "Antworten")}</button>
+                <button className="voice-console__key voice-console__key--red" onClick={handleStopPlayback} type="button">{tr("Stop", "Stopp")}</button>
               </div>
               <div className="voice-console__center">
               <div className="voice-console__bars">
@@ -1718,31 +1728,31 @@ export function PlayerScreenView({
                 <span className="voice-console__bar voice-console__bar--right" />
               </div>
               <div className="voice-console__transport voice-console__transport--column">
-                  <button className="voice-console__action voice-console__action--amber" onClick={handlePausePlayback} type="button"><Pause size={14} />Pause</button>
-                  <button className="voice-console__action voice-console__action--red" onClick={handleStopPlayback} type="button"><Square size={14} />Stop</button>
-                  <button className="voice-console__action voice-console__action--amber" disabled={promptPending || !liveSession} onClick={handleQuickContinue} type="button"><SkipForward size={14} />Weiter</button>
-                  <button className="voice-console__action voice-console__action--amber" disabled={promptPending || sttPending || !liveSession || !(sttTranscript || promptInput).trim()} onClick={handleFinalizePlayerTurn} type="button"><Send size={14} />Antwort abschließen</button>
+                  <button className="voice-console__action voice-console__action--amber" onClick={handlePausePlayback} type="button"><Pause size={14} />{tr("Pause", "Pause")}</button>
+                  <button className="voice-console__action voice-console__action--red" onClick={handleStopPlayback} type="button"><Square size={14} />{tr("Stop", "Stopp")}</button>
+                  <button className="voice-console__action voice-console__action--amber" disabled={promptPending || !liveSession} onClick={handleQuickContinue} type="button"><SkipForward size={14} />{tr("Continue", "Weiter")}</button>
+                  <button className="voice-console__action voice-console__action--amber" disabled={promptPending || sttPending || !liveSession || !(sttTranscript || promptInput).trim()} onClick={handleFinalizePlayerTurn} type="button"><Send size={14} />{tr("Finish Response", "Antwort abschließen")}</button>
               </div>
               <div className="voice-console__mini">
-                <button aria-label="Lauter" className="voice-console__mini-button" onClick={() => adjustVolume(0.12)} type="button"><Volume2 size={14} /></button>
-                <button aria-label="Leiser" className="voice-console__mini-button" onClick={() => adjustVolume(-0.12)} type="button"><VolumeX size={14} /></button>
+                <button aria-label={tr("Louder", "Lauter")} className="voice-console__mini-button" onClick={() => adjustVolume(0.12)} type="button"><Volume2 size={14} /></button>
+                <button aria-label={tr("Quieter", "Leiser")} className="voice-console__mini-button" onClick={() => adjustVolume(-0.12)} type="button"><VolumeX size={14} /></button>
               </div>
             </div>
             <div className="voice-console__side voice-console__side--right">
-              <button className="voice-console__key voice-console__key--amber" onClick={handleRetrySpeech} type="button">Retry</button>
-              <button className="voice-console__key voice-console__key--amber" disabled={promptPending || !liveSession} onClick={handleQuickContinue} type="button">Weiter</button>
+              <button className="voice-console__key voice-console__key--amber" onClick={handleRetrySpeech} type="button">{tr("Retry", "Erneut")}</button>
+              <button className="voice-console__key voice-console__key--amber" disabled={promptPending || !liveSession} onClick={handleQuickContinue} type="button">{tr("Continue", "Weiter")}</button>
             </div>
           </div>
         </article>
 
           <article className="player-overlay__composer">
-            <p className="eyebrow">Manuelle Eingabe</p>
+            <p className="eyebrow">{tr("Manual Input", "Manuelle Eingabe")}</p>
             <div className="player-composer__row">
               <button className="studio-button studio-button--ghost" disabled={isRecording || sttPending || !enableState.mic} onClick={isRecording ? handleStopRecording : handleStartRecording} type="button">
                 <Mic size={16} />
-                {isRecording ? "Aufnahme stoppen" : "Sprache aufnehmen"}
+                {isRecording ? tr("Stop Recording", "Aufnahme stoppen") : tr("Record Voice", "Sprache aufnehmen")}
               </button>
-              <textarea onChange={(event) => setPromptInput(event.target.value)} placeholder={`Beschreibe eine Aktion oder sage später "${WAKE_PHRASE}". Abschließen mit "${FINISH_PHRASE}".`} rows={3} value={promptInput} />
+              <textarea onChange={(event) => setPromptInput(event.target.value)} placeholder={tr(`Describe an action or say "${wakePhrase}". Finish with "${finishPhrase}".`, `Beschreibe eine Aktion oder sage „${wakePhrase}“. Schließe mit „${finishPhrase}“ ab.`)} rows={3} value={promptInput} />
             </div>
             <div className="player-composer__feedback">
               {sttError ? <p className="error-copy">{sttError}</p> : null}
@@ -1751,10 +1761,10 @@ export function PlayerScreenView({
             </div>
             <div className="button-row button-row--end">
               <button className="studio-button studio-button--ghost" disabled={promptPending || sttPending || !liveSession || !(sttTranscript || promptInput).trim()} onClick={handleFinalizePlayerTurn} type="button">
-                Antwort abschließen
+                {tr("Finish Response", "Antwort abschließen")}
               </button>
               <button className="studio-button" disabled={promptPending || sttPending || !liveSession || !promptInput.trim()} onClick={handleSendPrompt} type="button">
-                Senden
+                {tr("Send", "Senden")}
               </button>
             </div>
           </article>

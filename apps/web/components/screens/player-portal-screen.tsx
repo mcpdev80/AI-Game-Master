@@ -11,10 +11,13 @@ import { useI18n } from "../../lib/i18n";
 
 export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) {
   const router = useRouter();
-  const { tr } = useI18n();
+  const { locale, tr } = useI18n();
   const { notify } = useNotifications();
   const [isPending, startTransition] = useTransition();
   const [selectedCharacterId, setSelectedCharacterId] = useState(portal.character?.id ?? "");
+  const statusLabel = (status: string) => (({ ready: tr("ready", "bereit"), joined: tr("joined", "beigetreten"), invited: tr("invited", "eingeladen") } as Record<string, string>)[status] ?? status);
+  const abilityLabel = (ability: string) => locale === "de" ? (({ strength: "STÄ", dexterity: "GES", constitution: "KON", intelligence: "INT", wisdom: "WEI", charisma: "CHA" } as Record<string, string>)[ability] ?? ability.toUpperCase()) : ability.toUpperCase();
+  const contentTypeLabel = (type: string) => (({ document: tr("document", "Dokument"), image: tr("image", "Bild"), map: tr("map", "Karte"), battlemap: tr("battle map", "Kampfkarte"), handout: tr("handout", "Handout"), asset: tr("asset", "Medium") } as Record<string, string>)[type] ?? type);
 
   const releasedNarration =
     portal.session.state.scene_summary || portal.session.state.last_narration || tr("The AI has not released a player-safe scene yet.", "Die KI hat noch keine spielersichere Szene freigegeben.");
@@ -55,19 +58,19 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
         <PageIntro
           eyebrow={tr("Player Portal", "Spielerportal")}
           title={portal.character?.name || portal.player_slot.display_name}
-          description={tr("Choose your character, view released content, and mark yourself ready for the session.", "Wähle deinen Charakter, sieh freigegebene Inhalte und melde dich für den Session-Start als bereit.")}
+          description={tr("Choose your character, view released content, and mark yourself ready for the session.", "Wähle deinen Charakter, sieh freigegebene Inhalte und melde dich für den Sitzungsstart als bereit.")}
           actions={
             <div className="button-row">
               <StatusPill tone="ready">{tr("Player-Safe Zone", "Spielersicherer Bereich")}</StatusPill>
               <StatusPill tone={portal.player_slot.status === "ready" ? "ready" : portal.player_slot.status === "joined" ? "live" : "info"}>
-                {portal.player_slot.status}
+                {statusLabel(portal.player_slot.status)}
               </StatusPill>
             </div>
           }
         />
 
         <div className="dashboard-grid">
-          <Panel title={tr("Join Status", "Beitrittsstatus")} description={tr("Choose a character and mark yourself ready for the session.", "Charakter wählen und für den Session-Start bereit melden.")}>
+          <Panel title={tr("Join Status", "Beitrittsstatus")} description={tr("Choose a character and mark yourself ready for the session.", "Charakter wählen und für den Sitzungsstart bereit melden.")}>
             <div className="form-grid">
               <select onChange={(event) => setSelectedCharacterId(event.target.value)} value={selectedCharacterId}>
                 <option value="">{tr("Choose character", "Charakter wählen")}</option>
@@ -93,7 +96,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
             </div>
           </Panel>
 
-          <Panel title={tr("Session Feed", "Session-Verlauf")} description={tr("The scene currently released for this player.", "Die aktuell für diesen Spieler freigegebene Szene.")}>
+          <Panel title={tr("Session Feed", "Sitzungsverlauf")} description={tr("The scene currently released for this player.", "Die aktuell für diesen Spieler freigegebene Szene.")}>
             <div className="portal-feed">
               <article className="story-box story-box--hero">
                 <Sparkles size={18} />
@@ -104,7 +107,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
               </article>
               <div className="portal-meta-grid">
                 <article className="scope-card">
-                  <strong>Session</strong>
+                  <strong>{tr("Session", "Sitzung")}</strong>
                   <p>{portal.session.name}</p>
                 </article>
                 <article className="scope-card">
@@ -125,7 +128,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                 <div className="ability-grid">
                   {Object.entries(portal.character.abilities || {}).map(([ability, value]) => (
                     <article className="ability-card" key={ability}>
-                      <span>{ability.toUpperCase()}</span>
+                      <span>{abilityLabel(ability)}</span>
                       <strong>{value}</strong>
                     </article>
                   ))}
@@ -170,7 +173,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                       <StatusPill tone="ready">{tr("Released", "Freigegeben")}</StatusPill>
                     </div>
                     <strong>{String(item.name)}</strong>
-                    <p>{String(item.type || "document")}</p>
+                    <p>{contentTypeLabel(String(item.type || "document"))}</p>
                   </div>
                   <a
                     className="studio-button studio-button--ghost studio-button--inline"
@@ -193,11 +196,11 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                     </div>
                     <div className="portal-asset-card__body">
                       <div className="button-row">
-                        <StatusPill tone="default">Media</StatusPill>
+                        <StatusPill tone="default">{tr("Media", "Medien")}</StatusPill>
                         <StatusPill tone="ready">{tr("Player Safe", "Spielersicher")}</StatusPill>
                       </div>
                       <strong>{String(item.name)}</strong>
-                      <p>{String(item.type || "asset")}</p>
+                      <p>{contentTypeLabel(String(item.type || "asset"))}</p>
                     </div>
                     <a className="studio-button studio-button--ghost studio-button--inline" href={assetUrl} rel="noreferrer" target="_blank">
                       {tr("Open", "Öffnen")}

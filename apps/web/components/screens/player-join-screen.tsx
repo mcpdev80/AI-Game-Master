@@ -30,7 +30,7 @@ export function PlayerJoinScreen({ token }: { token: string }) {
     <main className="join-screen">
       <section className="join-card">
         <p className="eyebrow">{tr("Player Join", "Spielerbeitritt")}</p>
-        <h1>{tr("Join the local session portal", "Dem lokalen Session-Portal beitreten")}</h1>
+        <h1>{tr("Join the local session portal", "Dem lokalen Sitzungsportal beitreten")}</h1>
         <p>
           {tr("This link is intended for a single player slot inside the local network. After joining, the player lands in a portal that only shows released and player-safe information.", "Dieser Link ist für einen einzelnen Spielerplatz im lokalen Netzwerk bestimmt. Nach dem Beitritt zeigt das Portal ausschließlich freigegebene und spielersichere Informationen.")}
         </p>
@@ -49,13 +49,13 @@ export function PlayerJoinScreen({ token }: { token: string }) {
           </div>
           <div>
             <dt>{tr("Access", "Zugriff")}</dt>
-            <dd>{tr("Only player-safe content released by the AI session operator appears after join.", "Nach dem Beitritt erscheinen nur spielersichere Inhalte, die von der Session-Leitung freigegeben wurden.")}</dd>
+            <dd>{tr("Only player-safe content released by the AI session operator appears after join.", "Nach dem Beitritt erscheinen nur spielersichere Inhalte, die von der Sitzungsleitung freigegeben wurden.")}</dd>
           </div>
         </div>
         {error ? <p className="error-copy">{error}</p> : null}
         <div className="button-row">
           <button className="studio-button" disabled={isPending} onClick={handleJoin} type="button">
-            {isPending ? tr("Joining...", "Beitritt läuft...") : tr("Join Session", "Session beitreten")}
+            {isPending ? tr("Joining...", "Beitritt läuft …") : tr("Join Session", "Sitzung beitreten")}
             <ArrowRight size={16} />
           </button>
           <Link className="studio-button studio-button--ghost" href={`/player-portal/${token}`}>

@@ -47,12 +47,12 @@ export function SessionJoinScreen({ token, preview }: { token: string; preview: 
   return (
     <main className="join-screen">
       <section className="join-card">
-        <p className="eyebrow">{tr("Session Join", "Session-Beitritt")}</p>
+        <p className="eyebrow">{tr("Session Join", "Sitzungsbeitritt")}</p>
         <h1>{tr("Join the session", "Der Runde beitreten")}</h1>
         <p>
           {preview?.has_progress
-            ? tr("This session is being resumed. You can take over an existing character or join as a new player.", "Diese Session wird wieder aufgenommen. Du kannst einen bestehenden Charakter der Runde übernehmen oder neu hinzukommen.")
-            : tr("Use this general join link, then choose an available character or create a new one.", "Du trittst der Session über den allgemeinen Beitrittslink bei und wählst danach einen freien Charakter oder erstellst einen neuen.")}
+            ? tr("This session is being resumed. You can take over an existing character or join as a new player.", "Diese Sitzung wird wieder aufgenommen. Du kannst einen bestehenden Charakter übernehmen oder neu hinzukommen.")
+            : tr("Use this general join link, then choose an available character or create a new one.", "Du trittst der Sitzung über den allgemeinen Beitrittslink bei und wählst danach einen freien Charakter oder erstellst einen neuen.")}
         </p>
         <div className="hint-box">
           <Users size={16} />

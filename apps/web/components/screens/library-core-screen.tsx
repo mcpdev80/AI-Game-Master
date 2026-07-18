@@ -52,17 +52,21 @@ function deriveRuleset(document: Document) {
   };
 }
 
-function documentKindLabel(document: Document) {
+function documentKindLabel(document: Document, locale: "en" | "de") {
   const kind = String(document.metadata?.kind ?? "");
-  if (kind === "character_builder_guide") return "Builder Guide";
-  if (kind === "level_up_guide") return "Level-Up Guide";
-  if (kind === "short_rules_guide") return "Short Rules";
-  return "Rulebook";
+  if (kind === "character_builder_guide") return locale === "de" ? "Builder-Leitfaden" : "Builder Guide";
+  if (kind === "level_up_guide") return locale === "de" ? "Stufenaufstiegs-Leitfaden" : "Level-Up Guide";
+  if (kind === "short_rules_guide") return locale === "de" ? "Kurzregeln" : "Short Rules";
+  return locale === "de" ? "Regelbuch" : "Rulebook";
 }
 
 export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: Props) {
   const router = useRouter();
   const { locale, tr } = useI18n();
+  const assetTypeLabel = (type: string) => (({
+    image: tr("image", "Bild"), portrait: tr("portrait", "Porträt"), map: tr("map", "Karte"), battlemap: tr("battle map", "Kampfkarte"),
+    token: tr("token", "Spielfigur"), handout: tr("handout", "Handout"), asset: tr("asset", "Medium"), audio: tr("audio", "Audio"),
+  } as Record<string, string>)[type] ?? type);
   const { notify } = useNotifications();
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [activeModal, setActiveModal] = useState<ModalKind>(null);
@@ -381,9 +385,9 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
       ) : null}
 
       {activeTab === "rulebooks" ? (
-        <Panel title="Rulebooks by ruleset" description="Rulebooks werden nach Werk und Version gruppiert.">
+        <Panel title={tr("Rulebooks by Ruleset", "Regelbücher nach Regelwerk")} description={tr("Rulebooks are grouped by work and version.", "Regelbücher werden nach Werk und Version gruppiert.")}>
           <div className="page-stack">
-            {rulesetGroups.length === 0 ? <p className="empty-copy">Noch keine Rulebooks vorhanden.</p> : null}
+            {rulesetGroups.length === 0 ? <p className="empty-copy">{tr("No rulebooks available yet.", "Noch keine Regelbücher vorhanden.")}</p> : null}
             {rulesetGroups.map((group) => (
               <section className="page-stack" key={group.key}>
                 <div className="library-group-head">
@@ -391,7 +395,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
                     <h3 className="studio-panel__title">{group.work}</h3>
                     <p className="studio-panel__description">Version {group.version}</p>
                   </div>
-                  <StatusPill tone="info">{group.items.length} Rulebooks</StatusPill>
+                  <StatusPill tone="info">{group.items.length} {tr("rulebooks", "Regelbücher")}</StatusPill>
                 </div>
                 <div className="list-stack">
                   {group.items.map((document) => (
@@ -399,16 +403,16 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
                       <div className="list-row__icon"><FileText size={18} /></div>
                       <div className="list-row__body">
                         <strong>{document.name}</strong>
-                        <p>{document.chunk_count} Chunks</p>
+                        <p>{document.chunk_count} {tr("chunks", "Abschnitte")}</p>
                       </div>
                       <div className="meta-chip-row">
-                        <StatusPill tone={String(document.metadata?.kind ?? "") ? "ready" : "info"}>{documentKindLabel(document)}</StatusPill>
+                        <StatusPill tone={String(document.metadata?.kind ?? "") ? "ready" : "info"}>{documentKindLabel(document, locale)}</StatusPill>
                         {document.metadata?.system_document ? <StatusPill tone="default">System</StatusPill> : null}
                       </div>
                       <div className="button-row">
                         {document.source_file_path || document.metadata?.system_document ? (
                           <a className="studio-button studio-button--ghost studio-button--inline" href={fileUrl("documents", document.id)} rel="noreferrer" target="_blank">
-                            {String(document.metadata?.kind ?? "") ? "Open Guide" : "Open PDF"}
+                            {String(document.metadata?.kind ?? "") ? tr("Open Guide", "Guide öffnen") : tr("Open PDF", "PDF öffnen")}
                           </a>
                         ) : null}
                         <button
@@ -416,17 +420,17 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
                           onClick={() =>
                             handleDelete(
                               `/api/documents/${document.id}`,
-                              "Delete rulebook",
-                              `${document.name} wurde gelöscht.`,
+                              tr("Delete rulebook", "Regelbuch löschen"),
+                              tr(`${document.name} was deleted.`, `${document.name} wurde gelöscht.`),
                               document.metadata?.system_document
-                                ? `Systemdokument wirklich ausblenden: ${document.name}? Danach kannst du eine neue short_rules.md hochladen.`
-                                : `Rulebook wirklich löschen: ${document.name}?`
+                                ? tr(`Really hide system document ${document.name}? You can upload a new short_rules.md afterward.`, `Systemdokument ${document.name} wirklich ausblenden? Danach kannst du eine neue short_rules.md hochladen.`)
+                                : tr(`Really delete rulebook ${document.name}?`, `Regelbuch ${document.name} wirklich löschen?`)
                             )
                           }
                           type="button"
                         >
                           <Trash2 size={14} />
-                          Delete
+                          {tr("Delete", "Löschen")}
                         </button>
                       </div>
                     </article>
@@ -439,28 +443,28 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
       ) : null}
 
       {activeTab === "adventures" ? (
-        <Panel title="Adventures" description="Adventures können mehreren Regelwerken zugeordnet oder zunächst ungebunden sein.">
+        <Panel title={tr("Adventures", "Abenteuer")} description={tr("Adventures can support multiple rulesets or remain unassigned.", "Abenteuer können mehreren Regelwerken zugeordnet oder zunächst ungebunden sein.")}>
           <div className="card-grid card-grid--three">
-            {adventureCards.length === 0 ? <p className="empty-copy">Noch keine Adventures vorhanden.</p> : null}
+            {adventureCards.length === 0 ? <p className="empty-copy">{tr("No adventures available yet.", "Noch keine Abenteuer vorhanden.")}</p> : null}
             {adventureCards.map((adventure) => (
               <article className="media-card" key={adventure.id}>
                 <div className="media-card__cover"><BookOpen size={34} /></div>
                 <div className="media-card__body">
                   <h3>{adventure.name}</h3>
-                  <p>{adventure.description || "Kein Beschreibungstext hinterlegt."}</p>
+                  <p>{adventure.description || tr("No description available.", "Keine Beschreibung hinterlegt.")}</p>
                   <div className="meta-chip-row">
                     {adventure.compatibleRulesets.length > 0 ? adventure.compatibleRulesets.map((item) => (
                       <StatusPill key={item} tone="info">{item}</StatusPill>
-                    )) : <StatusPill tone="warning">unassigned</StatusPill>}
+                    )) : <StatusPill tone="warning">{tr("unassigned", "nicht zugeordnet")}</StatusPill>}
                   </div>
                   <div className="button-row">
                     <button
                       className="studio-button studio-button--danger studio-button--inline"
-                      onClick={() => handleDelete(`/api/adventures/${adventure.id}`, "Delete adventure", `${adventure.name} wurde gelöscht.`, `Adventure wirklich löschen: ${adventure.name}? Zugehörige Adventure-Dokumente und Assets werden mit entfernt.`)}
+                      onClick={() => handleDelete(`/api/adventures/${adventure.id}`, tr("Delete adventure", "Abenteuer löschen"), tr(`${adventure.name} was deleted.`, `${adventure.name} wurde gelöscht.`), tr(`Really delete adventure ${adventure.name}? Associated documents and assets will also be removed.`, `Abenteuer ${adventure.name} wirklich löschen? Zugehörige Dokumente und Medien werden ebenfalls entfernt.`))}
                       type="button"
                     >
                       <Trash2 size={14} />
-                      Delete
+                      {tr("Delete", "Löschen")}
                     </button>
                   </div>
                 </div>
@@ -471,11 +475,11 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
       ) : null}
 
       {activeTab === "assets" ? (
-        <Panel title="Assets Gallery" description="Alle Assets in einer Galerie, primär nach Typ geordnet und mit Zuordnungs-Badges.">
+        <Panel title={tr("Asset Gallery", "Mediengalerie")} description={tr("All assets grouped by type with assignment badges.", "Alle Medien nach Typ gruppiert und mit Zuordnungskennzeichen.")}>
           <div className="page-stack">
             <div className="library-toolbar">
               <div className="library-toolbar__group">
-                <span className="library-toolbar__label">Typ</span>
+                <span className="library-toolbar__label">{tr("Type", "Typ")}</span>
                 <div className="meta-chip-row">
                   {assetTypeOptions.map((option) => (
                     <button
@@ -484,18 +488,18 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
                       onClick={() => setAssetTypeFilter(option)}
                       type="button"
                     >
-                      {option === "all" ? "Alle" : option}
+                      {option === "all" ? tr("All", "Alle") : option}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="library-toolbar__group">
-                <span className="library-toolbar__label">Zuordnung</span>
+                <span className="library-toolbar__label">{tr("Assignment", "Zuordnung")}</span>
                 <div className="meta-chip-row">
                   {[
-                    { key: "all", label: "Alle" },
-                    { key: "global", label: "Global" },
-                    { key: "linked", label: "Adventure-linked" },
+                    { key: "all", label: tr("All", "Alle") },
+                    { key: "global", label: tr("Global", "Global") },
+                    { key: "linked", label: tr("Adventure-linked", "Mit Abenteuer verknüpft") },
                   ].map((option) => (
                     <button
                       className={`filter-chip${assetScopeFilter === option.key ? " is-active" : ""}`}
@@ -510,14 +514,14 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
               </div>
             </div>
 
-            {filteredAssets.length === 0 ? <p className="empty-copy">Keine Assets für die aktuelle Filterkombination vorhanden.</p> : null}
+            {filteredAssets.length === 0 ? <p className="empty-copy">{tr("No assets match the current filters.", "Keine Medien entsprechen den aktuellen Filtern.")}</p> : null}
 
             {assetGroups.map((group) => (
               <section className="page-stack" key={group.type}>
                 <div className="library-group-head">
                   <div>
-                    <h3 className="studio-panel__title">{group.type}</h3>
-                    <p className="studio-panel__description">{group.items.length} Assets in dieser Kategorie.</p>
+                    <h3 className="studio-panel__title">{assetTypeLabel(group.type)}</h3>
+                    <p className="studio-panel__description">{group.items.length} {tr("assets in this category.", "Medien in dieser Kategorie.")}</p>
                   </div>
                 </div>
                 <div className="asset-gallery-grid">
@@ -529,7 +533,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
                         ) : (
                           <div className="asset-gallery-card__fallback">
                             <Layers size={28} />
-                            <span>{asset.type}</span>
+                            <span>{assetTypeLabel(asset.type)}</span>
                           </div>
                         )}
                       </a>
@@ -542,27 +546,27 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
                           </div>
                         </div>
                         <div className="meta-chip-row">
-                          <StatusPill tone="default">{asset.type}</StatusPill>
+                          <StatusPill tone="default">{assetTypeLabel(asset.type)}</StatusPill>
                           {asset.linkedAdventureIds.length === 0 ? <StatusPill tone="warning">global</StatusPill> : null}
                           {asset.rulesets.slice(0, 2).map((item) => <StatusPill key={`${asset.id}-${item}`} tone="info">{item}</StatusPill>)}
                           {asset.rulesets.length > 2 ? <StatusPill tone="info">+{asset.rulesets.length - 2}</StatusPill> : null}
                         </div>
                         {asset.linkedAdventureNames.length > 0 ? (
                           <p className="asset-gallery-card__meta" title={asset.linkedAdventureNames.join(", ")}>
-                            Adventures: {asset.linkedAdventureNames.join(", ")}
+                            {tr("Adventures", "Abenteuer")}: {asset.linkedAdventureNames.join(", ")}
                           </p>
                         ) : null}
                         <div className="button-row">
                           <a className="studio-button studio-button--ghost studio-button--inline" href={asset.previewUrl} rel="noreferrer" target="_blank">
-                            Open
+                            {tr("Open", "Öffnen")}
                           </a>
                           <button
                             className="studio-button studio-button--danger studio-button--inline"
-                            onClick={() => handleDelete(`/api/assets/${asset.id}`, "Delete asset", `${asset.name} wurde gelöscht.`, `Asset wirklich löschen: ${asset.name}?`)}
+                            onClick={() => handleDelete(`/api/assets/${asset.id}`, tr("Delete asset", "Medium löschen"), tr(`${asset.name} was deleted.`, `${asset.name} wurde gelöscht.`), tr(`Really delete asset ${asset.name}?`, `Medium ${asset.name} wirklich löschen?`))}
                             type="button"
                           >
                             <Trash2 size={14} />
-                            Delete
+                            {tr("Delete", "Löschen")}
                           </button>
                         </div>
                       </div>
@@ -580,27 +584,26 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
           <section className="modal-card" onClick={(event) => event.stopPropagation()} role="dialog">
             <div className="modal-card__header">
               <div>
-                <p className="eyebrow">Add</p>
+                <p className="eyebrow">{tr("Add", "Hinzufügen")}</p>
                 <h2 className="studio-panel__title">
-                  {activeModal === "rules" ? "Rulebook hinzufügen" : activeModal === "adventure" ? "Adventure hinzufügen" : "Asset hinzufügen"}
+                  {activeModal === "rules" ? tr("Add Rulebook", "Regelbuch hinzufügen") : activeModal === "adventure" ? tr("Add Adventure", "Abenteuer hinzufügen") : tr("Add Asset", "Medium hinzufügen")}
                 </h2>
               </div>
             </div>
 
             {activeModal === "rules" ? (
               <div className="form-grid">
-                <input onChange={(event) => setRulesName(event.target.value)} placeholder="Display name" value={rulesName} />
+                <input onChange={(event) => setRulesName(event.target.value)} placeholder={tr("Display name", "Anzeigename")} value={rulesName} />
                 <div className="dual-field-grid">
-                  <input onChange={(event) => setRulesetWork(event.target.value)} placeholder="Werk" value={rulesetWork} />
+                  <input onChange={(event) => setRulesetWork(event.target.value)} placeholder={tr("Work", "Werk")} value={rulesetWork} />
                   <input onChange={(event) => setRulesetVersion(event.target.value)} placeholder="Version" value={rulesetVersion} />
                 </div>
-                <input onChange={(event) => setLanguage(event.target.value)} placeholder="Language" value={language} />
+                <input onChange={(event) => setLanguage(event.target.value)} placeholder={tr("Language", "Sprache")} value={language} />
                 <p className="muted-copy">
-                  Standard für kompakte Tischreferenzen: Datei als <code>short_rules.md</code> hochladen. Sie wird dann automatisch als
-                  <strong> Short Rules</strong> markiert.
+                  {tr("For a compact table reference, upload the file as ", "Für eine kompakte Tischreferenz lade die Datei als ")}<code>short_rules.md</code>{tr(". It will automatically be marked as", ". Sie wird automatisch markiert als")}<strong> {tr("Short Rules", "Kurzregeln")}</strong>.
                 </p>
                 <label className="file-field">
-                  <span>Rules file</span>
+                  <span>{tr("Rules file", "Regeldatei")}</span>
                   <input accept=".pdf,application/pdf,.md,text/markdown,text/plain" onChange={(event) => setRulesFile(event.target.files?.[0] ?? null)} type="file" />
                 </label>
               </div>
@@ -608,16 +611,16 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
 
             {activeModal === "adventure" ? (
               <div className="form-grid">
-                <input onChange={(event) => setAdventureName(event.target.value)} placeholder="Adventure name" value={adventureName} />
-                <textarea onChange={(event) => setAdventureDescription(event.target.value)} placeholder="Description" value={adventureDescription} />
-                <input onChange={(event) => setCompatibleRulesets(event.target.value)} placeholder="Compatible rulesets, e.g. 5E:2014" value={compatibleRulesets} />
-                <input onChange={(event) => setLanguage(event.target.value)} placeholder="Language" value={language} />
+                <input onChange={(event) => setAdventureName(event.target.value)} placeholder={tr("Adventure name", "Abenteuername")} value={adventureName} />
+                <textarea onChange={(event) => setAdventureDescription(event.target.value)} placeholder={tr("Description", "Beschreibung")} value={adventureDescription} />
+                <input onChange={(event) => setCompatibleRulesets(event.target.value)} placeholder={tr("Compatible rulesets, e.g. 5E:2014", "Kompatible Regelwerke, z. B. 5E:2014")} value={compatibleRulesets} />
+                <input onChange={(event) => setLanguage(event.target.value)} placeholder={tr("Language", "Sprache")} value={language} />
                 <label className="file-field">
-                  <span>Adventure PDF</span>
+                  <span>{tr("Adventure PDF", "Abenteuer-PDF")}</span>
                   <input accept=".pdf,application/pdf" onChange={(event) => setAdventurePdf(event.target.files?.[0] ?? null)} type="file" />
                 </label>
                 <label className="file-field">
-                  <span>Resources ZIP</span>
+                  <span>{tr("Resources ZIP", "Ressourcen-ZIP")}</span>
                   <input accept=".zip,application/zip" onChange={(event) => setAdventureZip(event.target.files?.[0] ?? null)} type="file" />
                 </label>
               </div>
@@ -625,23 +628,23 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
 
             {activeModal === "asset" ? (
               <div className="form-grid">
-                <input onChange={(event) => setAssetName(event.target.value)} placeholder="Asset name" value={assetName} />
+                <input onChange={(event) => setAssetName(event.target.value)} placeholder={tr("Asset name", "Medienname")} value={assetName} />
                 <div className="dual-field-grid">
                   <select onChange={(event) => setAssetType(event.target.value)} value={assetType}>
-                    <option value="image">image</option>
-                    <option value="portrait">portrait</option>
-                    <option value="map">map</option>
-                    <option value="battlemap">battlemap</option>
-                    <option value="token">token</option>
-                    <option value="handout">handout</option>
-                    <option value="asset">asset</option>
+                    <option value="image">{tr("image", "Bild")}</option>
+                    <option value="portrait">{tr("portrait", "Porträt")}</option>
+                    <option value="map">{tr("map", "Karte")}</option>
+                    <option value="battlemap">{tr("battle map", "Kampfkarte")}</option>
+                    <option value="token">{tr("token", "Spielfigur")}</option>
+                    <option value="handout">{tr("handout", "Handout")}</option>
+                    <option value="asset">{tr("asset", "Medium")}</option>
                   </select>
-                  <input onChange={(event) => setAssetTags(event.target.value)} placeholder="Tags, kommagetrennt" value={assetTags} />
+                  <input onChange={(event) => setAssetTags(event.target.value)} placeholder={tr("Tags, comma-separated", "Tags, kommagetrennt")} value={assetTags} />
                 </div>
-                <input onChange={(event) => setAssetRulesets(event.target.value)} placeholder="Rulesets, e.g. 5E:2014" value={assetRulesets} />
-                <input onChange={(event) => setAssetAdventureIds(event.target.value)} placeholder="Adventure IDs, optional" value={assetAdventureIds} />
+                <input onChange={(event) => setAssetRulesets(event.target.value)} placeholder={tr("Rulesets, e.g. 5E:2014", "Regelwerke, z. B. 5E:2014")} value={assetRulesets} />
+                <input onChange={(event) => setAssetAdventureIds(event.target.value)} placeholder={tr("Adventure IDs, optional", "Abenteuer-IDs, optional")} value={assetAdventureIds} />
                 <label className="file-field">
-                  <span>Asset file</span>
+                  <span>{tr("Asset file", "Mediendatei")}</span>
                   <input onChange={(event) => setAssetFile(event.target.files?.[0] ?? null)} type="file" />
                 </label>
               </div>
@@ -650,10 +653,10 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
             {error ? <p className="error-copy">{error}</p> : null}
 
             <div className="modal-card__footer">
-              <span className="modal-card__spacer">{isPending ? "Uploading..." : ""}</span>
+              <span className="modal-card__spacer">{isPending ? tr("Uploading...", "Wird hochgeladen …") : ""}</span>
               <div className="button-row modal-card__actions">
                 <button className="studio-button studio-button--ghost" onClick={closeModal} type="button">
-                  Cancel
+                  {tr("Cancel", "Abbrechen")}
                 </button>
                 <button
                   className="studio-button"
@@ -662,7 +665,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
                   type="button"
                 >
                   <Upload size={16} />
-                  {isPending ? "Uploading..." : "Upload"}
+                  {isPending ? tr("Uploading...", "Wird hochgeladen …") : tr("Upload", "Hochladen")}
                 </button>
               </div>
             </div>

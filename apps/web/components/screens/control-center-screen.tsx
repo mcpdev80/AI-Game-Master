@@ -69,8 +69,10 @@ function diceTypeMaxValue(type: DiceType) {
   }
 }
 
-function generateGuidedRollPlan(): GuidedRollStep[] {
-  const labels = ["attack roll", "damage roll", "saving throw", "spell effect", "check"];
+function generateGuidedRollPlan(locale: "en" | "de"): GuidedRollStep[] {
+  const labels = locale === "de"
+    ? ["Angriffswurf", "Schadenswurf", "Rettungswurf", "Zaubereffekt", "Probe"]
+    : ["attack roll", "damage roll", "saving throw", "spell effect", "check"];
   const types: DiceType[] = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"];
   const stepCount = randomInt(1, 2);
   const steps: GuidedRollStep[] = [];
@@ -91,15 +93,20 @@ function generateGuidedRollPlan(): GuidedRollStep[] {
   return steps;
 }
 
-const checks = [
-  { name: "Database", icon: Database, detail: "Postgres connected", tone: "ready" as const },
-  { name: "Player Screen", icon: Monitor, detail: "Second display route ready", tone: "ready" as const },
-  { name: "Player Portal", icon: Wifi, detail: "LAN access enabled", tone: "ready" as const },
-  { name: "Network", icon: Network, detail: "Local network reachable", tone: "ready" as const },
-];
-
 export function ControlCenterScreen({ services, counts, llm, llmGateway, sessions, playerLinks, stt, tts }: ControlCenterScreenProps) {
-  const { locale } = useI18n();
+  const { locale, tr } = useI18n();
+  const checks = [
+    { name: tr("Database", "Datenbank"), icon: Database, detail: tr("Postgres connected", "Postgres verbunden"), tone: "ready" as const },
+    { name: tr("Player Screen", "Spieleransicht"), icon: Monitor, detail: tr("Second display route ready", "Zweiter Bildschirm bereit"), tone: "ready" as const },
+    { name: tr("Player Portal", "Spielerportal"), icon: Wifi, detail: tr("LAN access enabled", "LAN-Zugriff aktiviert"), tone: "ready" as const },
+    { name: tr("Network", "Netzwerk"), icon: Network, detail: tr("Local network reachable", "Lokales Netzwerk erreichbar"), tone: "ready" as const },
+  ];
+  const statusLabel = (status: string) => ({
+    idle: tr("idle", "bereit"), ready: tr("ready", "bereit"), error: tr("error", "Fehler"), unsupported: tr("unsupported", "nicht unterstützt"),
+    stabilizing: tr("stabilizing", "Stabilisierung"), stable: tr("stable", "stabil"), pending: tr("pending", "ausstehend"), active: tr("active", "aktiv"),
+    confirmed: tr("confirmed", "bestätigt"), saved: tr("saved", "gespeichert"), missing: tr("missing", "fehlt"), success: tr("success", "erfolgreich"), running: tr("running", "läuft"),
+    live: tr("live", "live"), paused: tr("paused", "pausiert"), ready_to_start: tr("ready to start", "startbereit"), ended: tr("ended", "beendet"),
+  }[status] ?? status);
   const onlineServices = services.filter((service) => service.status === "online").length;
   const liveSession = sessions.find((session) => session.status === "live") ?? sessions[0] ?? null;
   const joinedPlayers = playerLinks.filter((slot) => slot.player_slot.status === "joined").length;
@@ -109,7 +116,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   const [selectedCameraId, setSelectedCameraId] = useState("");
   const [savedCameraId, setSavedCameraId] = useState("");
   const [cameraStatus, setCameraStatus] = useState<"idle" | "ready" | "error" | "unsupported">("idle");
-  const [cameraMessage, setCameraMessage] = useState("No browser camera test has run yet.");
+  const [cameraMessage, setCameraMessage] = useState(() => tr("No browser camera test has run yet.", "Noch kein Kameratest im Browser durchgeführt."));
   const [cameraSaveNotice, setCameraSaveNotice] = useState("");
   const [isTestingCamera, setIsTestingCamera] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
@@ -123,7 +130,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   const [diceAnalysisImage, setDiceAnalysisImage] = useState<string | null>(null);
   const [diceAnalysisSize, setDiceAnalysisSize] = useState<{ width: number; height: number } | null>(null);
   const [diceStabilityStatus, setDiceStabilityStatus] = useState<"idle" | "stabilizing" | "stable" | "error">("idle");
-  const [diceTestMessage, setDiceTestMessage] = useState("No dice test has been run yet.");
+  const [diceTestMessage, setDiceTestMessage] = useState(() => tr("No dice test has been run yet.", "Noch kein Würfeltest durchgeführt."));
   const [isCapturingDice, setIsCapturingDice] = useState(false);
   const [guidedRollPlan, setGuidedRollPlan] = useState<GuidedRollStep[]>([]);
   const [editableDetectedDice, setEditableDetectedDice] = useState<number[]>([]);
@@ -134,13 +141,13 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   const [savedMicrophoneId, setSavedMicrophoneId] = useState("");
   const [savedSpeakerId, setSavedSpeakerId] = useState("");
   const [audioStatus, setAudioStatus] = useState<"idle" | "ready" | "error" | "unsupported">("idle");
-  const [audioMessage, setAudioMessage] = useState("No microphone or speaker test has run yet.");
+  const [audioMessage, setAudioMessage] = useState(() => tr("No microphone or speaker test has run yet.", "Noch kein Mikrofon- oder Lautsprechertest durchgeführt."));
   const [audioSaveNotice, setAudioSaveNotice] = useState("");
   const [isTestingMicrophone, setIsTestingMicrophone] = useState(false);
   const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [llmTestStatus, setLlmTestStatus] = useState<"idle" | "running" | "success" | "error">("idle");
-  const [llmTestMessage, setLlmTestMessage] = useState("No model test has been run yet.");
+  const [llmTestMessage, setLlmTestMessage] = useState(() => tr("No model test has been run yet.", "Noch kein Modelltest durchgeführt."));
   const [llmBaseUrl, setLlmBaseUrl] = useState(llm.base_url ?? "");
   const [savedLlmBaseUrl, setSavedLlmBaseUrl] = useState(llm.base_url ?? "");
   const [llmModelInput, setLlmModelInput] = useState(llm.model ?? "");
@@ -149,7 +156,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   const [llmSaveNotice, setLlmSaveNotice] = useState("");
   const [isLlmModalOpen, setIsLlmModalOpen] = useState(false);
   const [playerScreenTestStatus, setPlayerScreenTestStatus] = useState<"idle" | "success">("idle");
-  const [playerScreenTestMessage, setPlayerScreenTestMessage] = useState("No player screen test has been triggered yet.");
+  const [playerScreenTestMessage, setPlayerScreenTestMessage] = useState(() => tr("No player screen test has been triggered yet.", "Noch kein Test der Spieleransicht ausgelöst."));
   const [demoStatus, setDemoStatus] = useState<"idle" | "creating" | "error">("idle");
   const [demoError, setDemoError] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -163,33 +170,41 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   const cameraConfigured = savedCameraId.trim().length > 0;
   const audioConfigured = savedMicrophoneId.trim().length > 0 || savedSpeakerId.trim().length > 0;
 
+  useEffect(() => {
+    if (cameraStatus === "idle") setCameraMessage(tr("No browser camera test has run yet.", "Noch kein Kameratest im Browser durchgeführt."));
+    if (diceStabilityStatus === "idle") setDiceTestMessage(tr("No dice test has been run yet.", "Noch kein Würfeltest durchgeführt."));
+    if (audioStatus === "idle") setAudioMessage(tr("No microphone or speaker test has run yet.", "Noch kein Mikrofon- oder Lautsprechertest durchgeführt."));
+    if (llmTestStatus === "idle") setLlmTestMessage(tr("No model test has been run yet.", "Noch kein Modelltest durchgeführt."));
+    if (playerScreenTestStatus === "idle") setPlayerScreenTestMessage(tr("No player screen test has been triggered yet.", "Noch kein Test der Spieleransicht ausgelöst."));
+  }, [audioStatus, cameraStatus, diceStabilityStatus, llmTestStatus, locale, playerScreenTestStatus, tr]);
+
   const selectedCameraLabel = useMemo(
-    () => cameraDevices.find((device) => device.deviceId === selectedCameraId)?.label || "Default browser camera",
-    [cameraDevices, selectedCameraId]
+    () => cameraDevices.find((device) => device.deviceId === selectedCameraId)?.label || tr("Default browser camera", "Standard-Browserkamera"),
+    [cameraDevices, selectedCameraId, tr]
   );
   const savedCameraLabel = useMemo(
-    () => cameraDevices.find((device) => device.deviceId === savedCameraId)?.label || (cameraConfigured ? "Saved camera" : "Not configured"),
-    [cameraConfigured, cameraDevices, savedCameraId]
+    () => cameraDevices.find((device) => device.deviceId === savedCameraId)?.label || (cameraConfigured ? tr("Saved camera", "Gespeicherte Kamera") : tr("Not configured", "Nicht konfiguriert")),
+    [cameraConfigured, cameraDevices, savedCameraId, tr]
   );
   const selectedMicrophoneLabel = useMemo(
-    () => microphoneDevices.find((device) => device.deviceId === selectedMicrophoneId)?.label || "Default microphone",
-    [microphoneDevices, selectedMicrophoneId]
+    () => microphoneDevices.find((device) => device.deviceId === selectedMicrophoneId)?.label || tr("Default microphone", "Standardmikrofon"),
+    [microphoneDevices, selectedMicrophoneId, tr]
   );
   const selectedSpeakerLabel = useMemo(
-    () => speakerDevices.find((device) => device.deviceId === selectedSpeakerId)?.label || "Default browser output",
-    [speakerDevices, selectedSpeakerId]
+    () => speakerDevices.find((device) => device.deviceId === selectedSpeakerId)?.label || tr("Default browser output", "Standard-Browserausgabe"),
+    [speakerDevices, selectedSpeakerId, tr]
   );
   const savedMicrophoneLabel = useMemo(
     () =>
       microphoneDevices.find((device) => device.deviceId === savedMicrophoneId)?.label ||
-      (savedMicrophoneId ? "Saved microphone" : "No microphone saved"),
-    [microphoneDevices, savedMicrophoneId]
+      (savedMicrophoneId ? tr("Saved microphone", "Gespeichertes Mikrofon") : tr("No microphone saved", "Kein Mikrofon gespeichert")),
+    [microphoneDevices, savedMicrophoneId, tr]
   );
   const savedSpeakerLabel = useMemo(
     () =>
       speakerDevices.find((device) => device.deviceId === savedSpeakerId)?.label ||
-      (savedSpeakerId ? "Saved speaker" : "No speaker saved"),
-    [savedSpeakerId, speakerDevices]
+      (savedSpeakerId ? tr("Saved speaker", "Gespeicherter Lautsprecher") : tr("No speaker saved", "Kein Lautsprecher gespeichert")),
+    [savedSpeakerId, speakerDevices, tr]
   );
 
   function stopCameraStream() {
@@ -213,7 +228,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     setDiceAnalysisImage(null);
     setDiceAnalysisSize(null);
     setDiceStabilityStatus("idle");
-    setDiceTestMessage("No dice test has been run yet.");
+    setDiceTestMessage(tr("No dice test has been run yet.", "Noch kein Würfeltest durchgeführt."));
     setDiceFrameDraft(defaultDiceFrameDraft);
     setShowDiceDebugInput(false);
   }
@@ -269,7 +284,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     analyserRef.current = null;
     setMicLevel(0);
     setAudioStatus("idle");
-    setAudioMessage("Microphone test stopped.");
+    setAudioMessage(tr("Microphone test stopped.", "Mikrofontest beendet."));
   }
 
   useEffect(() => {
@@ -300,7 +315,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   async function refreshCameraDevices() {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
       setCameraStatus("unsupported");
-      setCameraMessage("This browser does not expose camera device enumeration.");
+      setCameraMessage(tr("This browser does not expose camera device enumeration.", "Dieser Browser stellt keine Kamerageräteliste bereit."));
       return;
     }
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -311,14 +326,14 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     }
     if (cameras.length === 0) {
       setCameraStatus("error");
-      setCameraMessage("No camera devices were found in this browser.");
+      setCameraMessage(tr("No camera devices were found in this browser.", "In diesem Browser wurden keine Kameras gefunden."));
     }
   }
 
   async function refreshAudioDevices() {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
       setAudioStatus("unsupported");
-      setAudioMessage("This browser does not expose audio device enumeration.");
+      setAudioMessage(tr("This browser does not expose audio device enumeration.", "Dieser Browser stellt keine Audiogeräteliste bereit."));
       return;
     }
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -334,19 +349,19 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     }
     if (microphones.length === 0 && speakers.length === 0) {
       setAudioStatus("error");
-      setAudioMessage("No audio devices were found in this browser.");
+      setAudioMessage(tr("No audio devices were found in this browser.", "In diesem Browser wurden keine Audiogeräte gefunden."));
     }
   }
 
   async function handleCameraTest() {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setCameraStatus("unsupported");
-      setCameraMessage("This browser does not support camera access.");
+      setCameraMessage(tr("This browser does not support camera access.", "Dieser Browser unterstützt keinen Kamerazugriff."));
       return;
     }
 
     setIsTestingCamera(true);
-    setCameraMessage("Requesting camera access...");
+    setCameraMessage(tr("Requesting camera access...", "Kamerazugriff wird angefordert …"));
     try {
       stopCameraStream();
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -359,10 +374,10 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
       }
       await refreshCameraDevices();
       setCameraStatus("ready");
-      setCameraMessage(`Live preview active from ${selectedCameraLabel}.`);
+      setCameraMessage(tr(`Live preview active from ${selectedCameraLabel}.`, `Live-Vorschau von ${selectedCameraLabel} aktiv.`));
     } catch (error) {
       setCameraStatus("error");
-      setCameraMessage(error instanceof Error ? error.message : "Camera access failed.");
+      setCameraMessage(error instanceof Error ? error.message : tr("Camera access failed.", "Kamerazugriff fehlgeschlagen."));
     } finally {
       setIsTestingCamera(false);
     }
@@ -371,18 +386,18 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   function handleStopCameraTest() {
     stopCameraStream();
     setCameraStatus("idle");
-    setCameraMessage("Camera test stopped. The browser stream was released.");
+    setCameraMessage(tr("Camera test stopped. The browser stream was released.", "Kameratest beendet. Der Browserstream wurde freigegeben."));
   }
 
   async function handleMicrophoneTest() {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setAudioStatus("unsupported");
-      setAudioMessage("This browser does not support microphone access.");
+      setAudioMessage(tr("This browser does not support microphone access.", "Dieser Browser unterstützt keinen Mikrofonzugriff."));
       return;
     }
 
     setIsTestingMicrophone(true);
-    setAudioMessage("Requesting microphone access...");
+    setAudioMessage(tr("Requesting microphone access...", "Mikrofonzugriff wird angefordert …"));
     try {
       stopMicrophoneTest();
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -413,10 +428,10 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
       animationFrameRef.current = window.requestAnimationFrame(tick);
       await refreshAudioDevices();
       setAudioStatus("ready");
-      setAudioMessage(`Microphone live from ${selectedMicrophoneLabel}.`);
+      setAudioMessage(tr(`Microphone live from ${selectedMicrophoneLabel}.`, `Mikrofon ${selectedMicrophoneLabel} ist aktiv.`));
     } catch (error) {
       setAudioStatus("error");
-      setAudioMessage(error instanceof Error ? error.message : "Microphone access failed.");
+      setAudioMessage(error instanceof Error ? error.message : tr("Microphone access failed.", "Mikrofonzugriff fehlgeschlagen."));
     } finally {
       setIsTestingMicrophone(false);
     }
@@ -437,10 +452,10 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
       audio.currentTime = 0;
       await audio.play();
       setAudioStatus("ready");
-      setAudioMessage(`Speaker test played on ${selectedSpeakerLabel}.`);
+      setAudioMessage(tr(`Speaker test played on ${selectedSpeakerLabel}.`, `Lautsprechertest über ${selectedSpeakerLabel} abgespielt.`));
     } catch (error) {
       setAudioStatus("error");
-      setAudioMessage(error instanceof Error ? error.message : "Speaker test failed.");
+      setAudioMessage(error instanceof Error ? error.message : tr("Speaker test failed.", "Lautsprechertest fehlgeschlagen."));
     }
   }
 
@@ -486,7 +501,9 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
       window.localStorage.setItem(cameraPreferenceStorageKey, selectedCameraId);
     }
     setSavedCameraId(selectedCameraId);
-    const message = selectedCameraId ? `Saved camera preference: ${selectedCameraLabel}.` : "Camera preference cleared.";
+    const message = selectedCameraId
+      ? tr(`Saved camera preference: ${selectedCameraLabel}.`, `Bevorzugte Kamera gespeichert: ${selectedCameraLabel}.`)
+      : tr("Camera preference cleared.", "Kameraeinstellung zurückgesetzt.");
     setCameraMessage(message);
     setCameraSaveNotice(message);
     window.setTimeout(() => {
@@ -511,13 +528,13 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   async function handleCaptureDiceFrame() {
     if (cameraStatus !== "ready") {
       setDiceStabilityStatus("error");
-      setDiceTestMessage("Start the camera test before capturing a dice frame.");
+      setDiceTestMessage(tr("Start the camera test before capturing a dice frame.", "Starte den Kameratest, bevor du ein Würfelbild aufnimmst."));
       return;
     }
 
     setDiceStabilityStatus("stabilizing");
     setIsCapturingDice(true);
-    setDiceTestMessage("Capturing multiple frames and checking for a stable dice result...");
+    setDiceTestMessage(tr("Capturing multiple frames and checking for a stable dice result...", "Mehrere Bilder werden aufgenommen und auf ein stabiles Würfelergebnis geprüft …"));
     try {
       if (showDiceDebugInput && diceFrameDraft.length > 0) {
         const nextFrame: DiceDetectionFrame = {
@@ -538,7 +555,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
           setDetectedDiceCount(diceFrameDraft.length);
           setEditableDetectedDice(diceFrameDraft.map((die) => die.value));
           setDiceStabilityStatus("stabilizing");
-          setDiceTestMessage(`Debug dice recognized. Stabilizing: ${stabilized.matching_frames}/${stabilized.required_matches}.`);
+          setDiceTestMessage(tr(`Debug dice recognized. Stabilizing: ${stabilized.matching_frames}/${stabilized.required_matches}.`, `Debug-Würfel erkannt. Stabilisierung: ${stabilized.matching_frames}/${stabilized.required_matches}.`));
           return;
         }
 
@@ -546,7 +563,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
         setDetectedDiceCount(stabilized.stable_dice.length);
         setEditableDetectedDice(stabilized.stable_dice.map((die) => die.value));
         setDiceStabilityStatus("stable");
-        setDiceTestMessage(`Stable debug result: ${stabilized.stable_dice.map((die) => `${die.type} zeigt ${die.value}`).join(", ")}.`);
+        setDiceTestMessage(tr(`Stable debug result: ${stabilized.stable_dice.map((die) => `${die.type} shows ${die.value}`).join(", ")}.`, `Stabiles Debug-Ergebnis: ${stabilized.stable_dice.map((die) => `${die.type} zeigt ${die.value}`).join(", ")}.`));
         return;
       }
 
@@ -557,7 +574,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
       for (let index = 0; index < 3; index += 1) {
         const imageDataURL = captureCurrentFrame();
         if (!imageDataURL) {
-          throw new Error("No live frame available yet. Wait for the preview and try again.");
+          throw new Error(tr("No live frame available yet. Wait for the preview and try again.", "Noch kein Live-Bild verfügbar. Warte auf die Vorschau und versuche es erneut."));
         }
 
         const detection = await detectDiceFromImage({
@@ -590,7 +607,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
         setDiceAnalysisSize(captureCanvasRef.current ? { width: captureCanvasRef.current.width, height: captureCanvasRef.current.height } : null);
         setDiceStabilityStatus("stabilizing");
         const fallbackNote = detectionNotes.find((note) => note && note.trim().length > 0);
-        setDiceTestMessage(fallbackNote || "No clear dice were recognized across the captured frames.");
+        setDiceTestMessage(fallbackNote || tr("No clear dice were recognized across the captured frames.", "In den aufgenommenen Bildern wurden keine Würfel eindeutig erkannt."));
         return;
       }
 
@@ -653,7 +670,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
         setEditableDetectedDice((representative.dice ?? []).map((die) => die.value));
         setDiceStabilityStatus("stabilizing");
         setDiceTestMessage(
-          `Dice were seen, but not yet stable enough. Matching frames: ${stabilized.matching_frames}/${stabilized.required_matches}. Try keeping the dice still and capture again.`
+          tr(`Dice were seen, but not yet stable enough. Matching frames: ${stabilized.matching_frames}/${stabilized.required_matches}. Keep the dice still and capture again.`, `Würfel wurden erkannt, sind aber noch nicht stabil genug. Übereinstimmende Bilder: ${stabilized.matching_frames}/${stabilized.required_matches}. Halte die Würfel still und nimm erneut auf.`)
         );
         return;
       }
@@ -679,27 +696,27 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
         const matched = nextDice.length;
         setDiceTestMessage(
           matched === activeGuidedRollStep.count
-            ? `Step erkannt: ${activeGuidedRollStep.count}${activeGuidedRollStep.type} fuer ${activeGuidedRollStep.label}. Pruefe die Werte und bestaetige sie.`
-            : `Teilweise erkannt: erwartet ${activeGuidedRollStep.count}${activeGuidedRollStep.type}, gelesen ${matched}. Bitte Werte pruefen oder korrigieren.`
+            ? tr(`Step detected: ${activeGuidedRollStep.count}${activeGuidedRollStep.type} for ${activeGuidedRollStep.label}. Check and confirm the values.`, `Schritt erkannt: ${activeGuidedRollStep.count}${activeGuidedRollStep.type} für ${activeGuidedRollStep.label}. Prüfe und bestätige die Werte.`)
+            : tr(`Partially detected: expected ${activeGuidedRollStep.count}${activeGuidedRollStep.type}, read ${matched}. Check or correct the values.`, `Teilweise erkannt: ${activeGuidedRollStep.count}${activeGuidedRollStep.type} erwartet, ${matched} gelesen. Bitte Werte prüfen oder korrigieren.`)
         );
       } else {
-        setDiceTestMessage(`Wurf erkannt: ${stableDice.map((die) => `${die.type} zeigt ${die.value}`).join(", ")}.`);
+        setDiceTestMessage(tr(`Roll detected: ${stableDice.map((die) => `${die.type} shows ${die.value}`).join(", ")}.`, `Wurf erkannt: ${stableDice.map((die) => `${die.type} zeigt ${die.value}`).join(", ")}.`));
       }
     } catch (error) {
       setDiceStabilityStatus("error");
-      setDiceTestMessage(error instanceof Error ? error.message : "Dice test failed.");
+      setDiceTestMessage(error instanceof Error ? error.message : tr("Dice test failed.", "Würfeltest fehlgeschlagen."));
     } finally {
       setIsCapturingDice(false);
     }
   }
 
   function startGuidedDiceTest() {
-    const plan = generateGuidedRollPlan();
+    const plan = generateGuidedRollPlan(locale);
     resetDiceTest();
     setIsDiceTestActive(true);
     setGuidedRollPlan(plan);
     const first = plan[0];
-    setDiceTestMessage(`Step 1/${plan.length}: Bitte wuerfle jetzt ${first.count}${first.type} fuer ${first.label}.`);
+    setDiceTestMessage(tr(`Step 1/${plan.length}: Roll ${first.count}${first.type} now for ${first.label}.`, `Schritt 1/${plan.length}: Würfle jetzt ${first.count}${first.type} für ${first.label}.`));
   }
 
   function updateEditableDetectedDie(index: number, value: number) {
@@ -715,7 +732,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     }
     if (editableDetectedDice.length !== activeGuidedRollStep.count || editableDetectedDice.some((value) => value <= 0)) {
       setDiceStabilityStatus("error");
-      setDiceTestMessage(`Bitte trage fuer ${activeGuidedRollStep.count}${activeGuidedRollStep.type} alle Werte ein, bevor du bestaetigst.`);
+      setDiceTestMessage(tr(`Enter all values for ${activeGuidedRollStep.count}${activeGuidedRollStep.type} before confirming.`, `Trage alle Werte für ${activeGuidedRollStep.count}${activeGuidedRollStep.type} ein, bevor du bestätigst.`));
       return;
     }
 
@@ -741,12 +758,12 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
       setDiceAnalysisSize(null);
       setDiceFrameHistory([]);
       setDiceStabilityStatus("idle");
-      setDiceTestMessage(`Naechster Schritt: Bitte wuerfle jetzt ${nextActive.count}${nextActive.type} fuer ${nextActive.label}.`);
+      setDiceTestMessage(tr(`Next step: Roll ${nextActive.count}${nextActive.type} now for ${nextActive.label}.`, `Nächster Schritt: Würfle jetzt ${nextActive.count}${nextActive.type} für ${nextActive.label}.`));
       return;
     }
 
     setDiceStabilityStatus("stable");
-    setDiceTestMessage("Guided dice test complete. All requested roll steps were confirmed.");
+    setDiceTestMessage(tr("Guided dice test complete. All requested roll steps were confirmed.", "Geführter Würfeltest abgeschlossen. Alle angeforderten Würfe wurden bestätigt."));
   }
 
   function handleSaveAudioSelection() {
@@ -756,7 +773,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     }
     setSavedMicrophoneId(selectedMicrophoneId);
     setSavedSpeakerId(selectedSpeakerId);
-    const message = `Saved audio settings: ${selectedMicrophoneLabel} / ${selectedSpeakerLabel}.`;
+    const message = tr(`Saved audio settings: ${selectedMicrophoneLabel} / ${selectedSpeakerLabel}.`, `Audioeinstellungen gespeichert: ${selectedMicrophoneLabel} / ${selectedSpeakerLabel}.`);
     setAudioMessage(message);
     setAudioSaveNotice(message);
     window.setTimeout(() => {
@@ -777,7 +794,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
         setLlmBaseUrl(saved.llm_base_url);
         setSavedLlmModel(saved.llm_model);
         setLlmModelInput(saved.llm_model);
-        const message = `LLM aktiv: ${saved.llm_model} @ ${saved.llm_base_url}`;
+        const message = tr(`LLM active: ${saved.llm_model} @ ${saved.llm_base_url}`, `LLM aktiv: ${saved.llm_model} @ ${saved.llm_base_url}`);
         setLlmSaveNotice(message);
         setLlmTestMessage(message);
         window.setTimeout(() => {
@@ -785,7 +802,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
           window.location.reload();
         }, 500);
       } catch (error) {
-        setLlmSaveNotice(error instanceof Error ? error.message : "LLM-Einstellungen konnten nicht gespeichert werden.");
+        setLlmSaveNotice(error instanceof Error ? error.message : tr("Could not save LLM settings.", "LLM-Einstellungen konnten nicht gespeichert werden."));
       }
     })();
   }
@@ -793,11 +810,11 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   async function handleFetchModels() {
     if (!llmBaseUrl.trim()) {
       setLlmTestStatus("error");
-      setLlmTestMessage("Enter a base URL before fetching models.");
+      setLlmTestMessage(tr("Enter a base URL before fetching models.", "Gib eine Basis-URL ein, bevor du Modelle abrufst."));
       return;
     }
     setLlmTestStatus("running");
-    setLlmTestMessage("Fetching available models...");
+    setLlmTestMessage(tr("Fetching available models...", "Verfügbare Modelle werden abgerufen …"));
     try {
       const data = await fetchLLMModels({ llm_base_url: llmBaseUrl.trim(), llm_model: llmModelInput.trim() });
       const models = data.models;
@@ -806,30 +823,30 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
         setLlmModelInput(models[0]);
       }
       setLlmTestStatus("success");
-      setLlmTestMessage(models.length > 0 ? `${models.length} models loaded.` : "Model endpoint responded, but no models were listed.");
+      setLlmTestMessage(models.length > 0 ? tr(`${models.length} models loaded.`, `${models.length} Modelle geladen.`) : tr("Model endpoint responded, but no models were listed.", "Der Modell-Endpunkt antwortete, listete aber keine Modelle auf."));
     } catch (error) {
       setLlmTestStatus("error");
-      setLlmTestMessage(error instanceof Error ? error.message : "Fetching models failed.");
+      setLlmTestMessage(error instanceof Error ? error.message : tr("Fetching models failed.", "Modelle konnten nicht abgerufen werden."));
     }
   }
 
   async function handleLlmConnectionTest() {
     if (!llmBaseUrl.trim() || !llmModelInput.trim()) {
       setLlmTestStatus("error");
-      setLlmTestMessage("Enter a base URL and choose a model before running the DM test.");
+      setLlmTestMessage(tr("Enter a base URL and choose a model before running the DM test.", "Gib eine Basis-URL ein und wähle ein Modell, bevor du den Spielleiter-Test startest."));
       return;
     }
 
     setLlmTestStatus("running");
-    setLlmTestMessage("Sending a short GM prompt through the secure API backend...");
+    setLlmTestMessage(tr("Sending a short GM prompt through the secure API backend...", "Ein kurzer Spielleiter-Prompt wird über das sichere API-Backend gesendet …"));
     try {
       const data = await testLLMConnection({ llm_base_url: llmBaseUrl.trim(), llm_model: llmModelInput.trim() });
       const content = data.content.trim();
       setLlmTestStatus("success");
-      setLlmTestMessage(content || `${data.model || llmModelInput} responded successfully.`);
+      setLlmTestMessage(content || tr(`${data.model || llmModelInput} responded successfully.`, `${data.model || llmModelInput} hat erfolgreich geantwortet.`));
     } catch (error) {
       setLlmTestStatus("error");
-      setLlmTestMessage(error instanceof Error ? error.message : "LLM test failed.");
+      setLlmTestMessage(error instanceof Error ? error.message : tr("LLM test failed.", "LLM-Test fehlgeschlagen."));
     }
   }
 
@@ -838,19 +855,18 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
       window.open("/player-screen", "_blank", "noopener,noreferrer");
     }
     setPlayerScreenTestStatus("success");
-    setPlayerScreenTestMessage("Player screen opened in a new tab. Verify the routed display or projector output.");
+    setPlayerScreenTestMessage(tr("Player screen opened in a new tab. Verify the display or projector output.", "Die Spieleransicht wurde in einem neuen Tab geöffnet. Prüfe die Anzeige oder Projektorausgabe."));
   }
 
   async function handleStartFungalCavernsDemo() {
     setDemoStatus("creating");
     setDemoError("");
     try {
-      const language = typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("de") ? "de" : "en";
-      const demo = await createFungalCavernsDemo(language);
+      const demo = await createFungalCavernsDemo(locale);
       window.location.assign(demo.gm_url);
     } catch (error) {
       setDemoStatus("error");
-      setDemoError(error instanceof Error ? error.message : "The demo could not be created.");
+      setDemoError(error instanceof Error ? error.message : tr("The demo could not be created.", "Die Demo konnte nicht erstellt werden."));
     }
   }
 
@@ -858,40 +874,40 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     cameraStatus === "ready" || cameraConfigured ? "ready" : cameraStatus === "unsupported" || cameraStatus === "error" ? "warning" : "info";
   const cameraDetail =
     cameraStatus === "unsupported"
-      ? "Browser security context is blocking camera APIs"
+      ? tr("Browser security context is blocking camera APIs", "Der Sicherheitskontext des Browsers blockiert Kamera-APIs")
       : cameraConfigured
-        ? `Configured: ${savedCameraLabel}`
-        : "Open settings to choose and test a camera";
+        ? tr(`Configured: ${savedCameraLabel}`, `Konfiguriert: ${savedCameraLabel}`)
+        : tr("Open settings to choose and test a camera", "Öffne die Einstellungen, um eine Kamera auszuwählen und zu testen");
   const audioTone: "default" | "ready" | "warning" | "live" | "info" =
     audioStatus === "ready" || audioConfigured ? "ready" : audioStatus === "unsupported" || audioStatus === "error" ? "warning" : "info";
   const audioDetail =
     audioStatus === "unsupported"
-      ? "Browser security context is blocking audio APIs"
-		: `${stt.provider || "audio"}: ${stt.model || "STT"} → ${tts.model || "TTS"}${audioConfigured ? ` · ${savedMicrophoneLabel} / ${savedSpeakerLabel}` : " · choose browser devices"}`;
+      ? tr("Browser security context is blocking audio APIs", "Der Sicherheitskontext des Browsers blockiert Audio-APIs")
+		: `${stt.provider || "audio"}: ${stt.model || "STT"} → ${tts.model || "TTS"}${audioConfigured ? ` · ${savedMicrophoneLabel} / ${savedSpeakerLabel}` : tr(" · choose browser devices", " · Browsergeräte auswählen")}`;
   const llmConfigured = savedLlmBaseUrl.trim().length > 0 && savedLlmModel.trim().length > 0;
   const llmTone: "default" | "ready" | "warning" | "live" | "info" =
     llmTestStatus === "success" || llmConfigured ? "ready" : llmTestStatus === "error" ? "warning" : "info";
   const llmDetail =
     llmConfigured
       ? `${savedLlmModel} @ ${savedLlmBaseUrl}`
-      : "Open settings to configure local model routing";
+      : tr("Open settings to configure model routing", "Öffne die Einstellungen, um das Modell-Routing zu konfigurieren");
 
   return (
     <div className="page-stack">
       <PageIntro
-        eyebrow="Control Center"
-        title="Session readiness before the AI takes over"
-        description="This is the operator surface. Devices, model reachability, player output paths, and live readiness stay visible here before you start a session."
+        eyebrow={tr("Control Center", "Kontrollzentrum")}
+        title={tr("Session readiness before the AI takes over", "Sitzungsbereitschaft, bevor die KI übernimmt")}
+        description={tr("Check devices, model access, player outputs, and live readiness before starting a session.", "Prüfe Geräte, Modellzugriff, Spielerausgaben und Live-Bereitschaft, bevor du eine Sitzung startest.")}
         actions={
           <div className="button-row">
             <button className="studio-button" disabled={demoStatus === "creating"} onClick={() => void handleStartFungalCavernsDemo()} type="button">
-              {demoStatus === "creating" ? "Preparing demo…" : "Start Fungal Caverns Demo"}
+              {demoStatus === "creating" ? tr("Preparing demo…", "Demo wird vorbereitet …") : tr("Start Fungal Caverns Demo", "Demo „Fungal Caverns“ starten")}
             </button>
             <Link className="studio-button studio-button--ghost" href="/player-screen">
-              Player Screen
+              {tr("Player Screen", "Spieleransicht")}
             </Link>
             <Link className="studio-button studio-button--ghost" href={liveSession ? `/sessions/${liveSession.id}` : "/sessions"}>
-              Open Live Session
+              {tr("Open Live Session", "Live-Sitzung öffnen")}
             </Link>
             {demoError ? <span className="error-copy">{demoError}</span> : null}
           </div>
@@ -900,10 +916,10 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
 
       <section className="hero-grid">
         <Panel
-          title="System Health"
-          description="A single place to confirm whether the local model, database, player outputs, and device chain are ready."
+          title={tr("System Health", "Systemzustand")}
+          description={tr("Confirm that the model, database, player outputs, and devices are ready.", "Prüfe, ob Modell, Datenbank, Spielerausgaben und Geräte bereit sind.")}
           className="hero-panel"
-          action={<StatusPill tone={readyTone}>{readyTone === "ready" ? "Ready" : "Needs Setup"}</StatusPill>}
+          action={<StatusPill tone={readyTone}>{readyTone === "ready" ? tr("Ready", "Bereit") : tr("Needs Setup", "Einrichtung nötig")}</StatusPill>}
         >
           <div className="status-grid">
             <button className="status-card status-card--interactive" onClick={handleOpenCameraModal} type="button">
@@ -912,8 +928,8 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               </div>
               <div>
                 <div className="status-card__head">
-                  <strong>Camera & Dice</strong>
-                  <StatusPill tone={cameraTone}>{cameraConfigured ? "Ready" : "Setup"}</StatusPill>
+                  <strong>{tr("Camera & Dice", "Kamera & Würfel")}</strong>
+                  <StatusPill tone={cameraTone}>{cameraConfigured ? tr("Ready", "Bereit") : tr("Setup", "Einrichten")}</StatusPill>
                 </div>
                 <p>{cameraDetail}</p>
               </div>
@@ -925,7 +941,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               <div>
                 <div className="status-card__head">
 				  <strong>Audio · {stt.model || "STT"} / {tts.model || "TTS"}</strong>
-                  <StatusPill tone={audioTone}>{audioConfigured ? "Ready" : "Setup"}</StatusPill>
+                  <StatusPill tone={audioTone}>{audioConfigured ? tr("Ready", "Bereit") : tr("Setup", "Einrichten")}</StatusPill>
                 </div>
                 <p>{audioDetail}</p>
               </div>
@@ -936,8 +952,8 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               </div>
               <div>
                 <div className="status-card__head">
-                  <strong>AI Model · Powered by {savedLlmModel || "GPT-5.6"}</strong>
-                  <StatusPill tone={llmTone}>{llmConfigured ? "Ready" : "Setup"}</StatusPill>
+                  <strong>{tr("AI Model", "KI-Modell")} · Powered by {savedLlmModel || "GPT-5.6"}</strong>
+                  <StatusPill tone={llmTone}>{llmConfigured ? tr("Ready", "Bereit") : tr("Setup", "Einrichten")}</StatusPill>
                 </div>
                 <p>{llmDetail}</p>
               </div>
@@ -952,7 +968,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                   <div>
                     <div className="status-card__head">
                       <strong>{item.name}</strong>
-                      <StatusPill tone={item.tone}>Ready</StatusPill>
+                      <StatusPill tone={item.tone}>{tr("Ready", "Bereit")}</StatusPill>
                     </div>
                     <p>{item.detail}</p>
                   </div>
@@ -964,78 +980,78 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
       </section>
 
       <section className="dashboard-grid">
-        <Panel title="Live Summary" description="Current content inventory and system footprint.">
+        <Panel title={tr("Live Summary", "Live-Zusammenfassung")} description={tr("Current content inventory and system footprint.", "Aktueller Inhaltsbestand und Systemumfang.")}>
           <div className="stat-grid">
-            <StatCard label="Online services" value={`${onlineServices}/${services.length}`} detail="API and database verified" />
-            <StatCard label="Campaigns" value={counts.campaigns ?? 0} />
-            <StatCard label="Sessions" value={counts.sessions ?? 0} />
-            <StatCard label="Documents" value={counts.documents ?? 0} />
-            <StatCard label="Assets" value={counts.assets ?? 0} />
-            <StatCard label="Characters" value={counts.characters ?? 0} />
-            <StatCard label="Chunks" value={counts.document_chunks ?? 0} />
+            <StatCard label={tr("Online services", "Online-Dienste")} value={`${onlineServices}/${services.length}`} detail={tr("API and database verified", "API und Datenbank geprüft")} />
+            <StatCard label={tr("Campaigns", "Kampagnen")} value={counts.campaigns ?? 0} />
+            <StatCard label={tr("Sessions", "Sitzungen")} value={counts.sessions ?? 0} />
+            <StatCard label={tr("Documents", "Dokumente")} value={counts.documents ?? 0} />
+            <StatCard label={tr("Assets", "Medien")} value={counts.assets ?? 0} />
+            <StatCard label={tr("Characters", "Charaktere")} value={counts.characters ?? 0} />
+            <StatCard label={tr("Chunks", "Abschnitte")} value={counts.document_chunks ?? 0} />
           </div>
         </Panel>
 
         {llmGateway ? (
-          <Panel title="LLM Gateway" description="Readonly runtime guard for concurrency, breaker, and archived session state.">
+          <Panel title="LLM Gateway" description={tr("Runtime status for concurrency, circuit breaker, and archived sessions.", "Laufzeitstatus für Parallelität, Schutzschaltung und archivierte Sitzungen.")}>
             <div className="stat-grid">
-              <StatCard label="Status" value={llmGateway.status} />
-              <StatCard label="In Flight" value={llmGateway.in_flight} />
-              <StatCard label="Max Concurrent" value={llmGateway.max_concurrent_requests} />
-              <StatCard label="Rejected" value={llmGateway.rejected_requests} />
-              <StatCard label="Timeouts" value={llmGateway.timeout_count} />
-              <StatCard label="Active Sessions" value={llmGateway.active_gateway_sessions} />
-              <StatCard label="Archived Sessions" value={llmGateway.archived_gateway_sessions} />
+              <StatCard label={tr("Status", "Status")} value={llmGateway.status} />
+              <StatCard label={tr("In Flight", "In Bearbeitung")} value={llmGateway.in_flight} />
+              <StatCard label={tr("Max Concurrent", "Maximal parallel")} value={llmGateway.max_concurrent_requests} />
+              <StatCard label={tr("Rejected", "Abgelehnt")} value={llmGateway.rejected_requests} />
+              <StatCard label={tr("Timeouts", "Zeitüberschreitungen")} value={llmGateway.timeout_count} />
+              <StatCard label={tr("Active Sessions", "Aktive Sitzungen")} value={llmGateway.active_gateway_sessions} />
+              <StatCard label={tr("Archived Sessions", "Archivierte Sitzungen")} value={llmGateway.archived_gateway_sessions} />
             </div>
             <div className="meta-chip-row">
               <StatusPill tone={llmGateway.circuit_breaker_open ? "warning" : "ready"}>
-                {llmGateway.circuit_breaker_open ? "Circuit Open" : "Circuit Closed"}
+                {llmGateway.circuit_breaker_open ? tr("Circuit Open", "Schutzschaltung offen") : tr("Circuit Closed", "Schutzschaltung geschlossen")}
               </StatusPill>
-              <StatusPill tone="default">Queue {llmGateway.queue_length}</StatusPill>
-              <StatusPill tone="default">Failures {llmGateway.consecutive_failures}</StatusPill>
+              <StatusPill tone="default">{tr("Queue", "Warteschlange")} {llmGateway.queue_length}</StatusPill>
+              <StatusPill tone="default">{tr("Failures", "Fehler")} {llmGateway.consecutive_failures}</StatusPill>
             </div>
             {llmGateway.last_error ? <p className="muted-copy">{llmGateway.last_error}</p> : null}
             <div className="builder-documents-grid">
               {llmGateway.profiles.map((profile) => (
                 <article className="builder-document-card" key={profile.name}>
                   <strong>{profile.name}</strong>
-                  <p>Input {profile.max_input_tokens} · Output {profile.max_output_tokens}</p>
-                  <p>Timeout {profile.timeout_seconds}s · Window {profile.live_turn_window}</p>
+                  <p>{tr("Input", "Eingabe")} {profile.max_input_tokens} · {tr("Output", "Ausgabe")} {profile.max_output_tokens}</p>
+                  <p>{tr("Timeout", "Zeitlimit")} {profile.timeout_seconds}s · {tr("Window", "Fenster")} {profile.live_turn_window}</p>
                 </article>
               ))}
             </div>
           </Panel>
         ) : null}
 
-        <Panel title="Session Readiness" description="Requirements for a live AI-led session.">
+        <Panel title={tr("Session Readiness", "Sitzungsbereitschaft")} description={tr("Requirements for a live AI-led session.", "Voraussetzungen für eine live von der KI geleitete Sitzung.")}>
           <div className="list-stack">
             <article className="list-row">
               <div className="list-row__icon">
                 <PlayCircle size={18} />
               </div>
               <div className="list-row__body">
-                <strong>{liveSession ? liveSession.current_scene || "Session selected" : "No session selected"}</strong>
-                <p>{liveSession ? `${liveSession.current_location || "No location"} · ${liveSession.status}` : "Create or start a session first."}</p>
+                <strong>{liveSession ? liveSession.current_scene || tr("Session selected", "Sitzung ausgewählt") : tr("No session selected", "Keine Sitzung ausgewählt")}</strong>
+                <p>{liveSession ? `${liveSession.current_location || tr("No location", "Kein Ort")} · ${liveSession.status}` : tr("Create or start a session first.", "Erstelle oder starte zuerst eine Sitzung.")}</p>
               </div>
-              <StatusPill tone={liveSession ? "live" : "warning"}>{liveSession ? liveSession.status : "missing"}</StatusPill>
+              <StatusPill tone={liveSession ? "live" : "warning"}>{statusLabel(liveSession ? liveSession.status : "missing")}</StatusPill>
             </article>
             <article className="list-row">
               <div className="list-row__icon">
                 <Wifi size={18} />
               </div>
               <div className="list-row__body">
-                <strong>Player portal join state</strong>
-                <p>{joinedPlayers} joined players · {playerLinks.length} total invite slots</p>
+                <strong>{tr("Player portal join state", "Beitrittsstatus im Spielerportal")}</strong>
+                <p>{joinedPlayers} {tr("joined players", "beigetretene Spieler")} · {playerLinks.length} {tr("invite slots", "Einladungsplätze")}</p>
               </div>
-              <StatusPill tone={playerLinks.length > 0 ? "ready" : "warning"}>{playerLinks.length > 0 ? "links ready" : "no links"}</StatusPill>
+              <StatusPill tone={playerLinks.length > 0 ? "ready" : "warning"}>{playerLinks.length > 0 ? tr("links ready", "Links bereit") : tr("no links", "keine Links")}</StatusPill>
             </article>
             <article className="list-row">
               <div className="list-row__icon">
                 <Radio size={18} />
               </div>
               <div className="list-row__body">
-                <strong>Content and model context</strong>
-                <p>{counts.documents ?? 0} documents, {counts.assets ?? 0} assets, local model {llm.model ? "configured" : "missing"}</p>
+                <strong>{tr("Content and model context", "Inhalts- und Modellkontext")}</strong>
+                <p>{counts.documents ?? 0} {tr("documents", "Dokumente")}, {counts.assets ?? 0} {tr("assets", "Medien")}, {tr("model", "Modell")} {llm.model ? tr("configured", "konfiguriert") : tr("missing", "fehlt")}</p>
               </div>
               <StatusPill tone={llm.model && (counts.documents ?? 0) > 0 ? "ready" : "warning"}>
                 {llm.model && (counts.documents ?? 0) > 0 ? "ready" : "incomplete"}
@@ -1056,13 +1072,13 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
           >
             <div className="modal-card__header">
               <div>
-                <p className="eyebrow">Camera Settings</p>
+                <p className="eyebrow">{tr("Camera Settings", "Kameraeinstellungen")}</p>
                 <h2 className="studio-panel__title" id="camera-settings-title">
-                  Configure camera and dice capture input
+                  {tr("Configure camera and dice capture input", "Kamera und Würfelerfassung konfigurieren")}
                 </h2>
-                <p className="studio-panel__description">Choose a preferred camera, test the live preview, then save that selection for future sessions.</p>
+                <p className="studio-panel__description">{tr("Choose a camera, test the live preview, and save it for future sessions.", "Wähle eine Kamera, teste die Live-Vorschau und speichere sie für zukünftige Sitzungen.")}</p>
               </div>
-              <button className="icon-button" aria-label="Close camera settings" onClick={handleCloseCameraModal} type="button">
+              <button className="icon-button" aria-label={tr("Close camera settings", "Kameraeinstellungen schließen")} onClick={handleCloseCameraModal} type="button">
                 <X size={18} />
               </button>
             </div>
@@ -1070,19 +1086,19 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
             <div className="camera-device-panel">
               <div className="form-grid">
                 <select onChange={(event) => setSelectedCameraId(event.target.value)} value={selectedCameraId}>
-                  <option value="">{cameraDevices.length === 0 ? "No camera devices detected" : "Default browser camera"}</option>
+                  <option value="">{cameraDevices.length === 0 ? tr("No camera devices detected", "Keine Kameras erkannt") : tr("Default browser camera", "Standard-Browserkamera")}</option>
                   {cameraDevices.map((device) => (
                     <option key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Camera ${device.deviceId.slice(0, 6)}`}
+                      {device.label || `${tr("Camera", "Kamera")} ${device.deviceId.slice(0, 6)}`}
                     </option>
                   ))}
                 </select>
                 <div className="button-row">
                   <button className="studio-button studio-button--ghost" onClick={() => void refreshCameraDevices()} type="button">
-                    Detect Cameras
+                    {tr("Detect Cameras", "Kameras erkennen")}
                   </button>
                   <button className="studio-button" disabled={isTestingCamera} onClick={() => void handleCameraTest()} type="button">
-                    {isTestingCamera ? "Testing..." : "Start Camera Test"}
+                    {isTestingCamera ? tr("Testing...", "Test läuft …") : tr("Start Camera Test", "Kameratest starten")}
                   </button>
                   <button
                     className="studio-button studio-button--ghost"
@@ -1091,7 +1107,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                     type="button"
                   >
                     <Square size={16} />
-                    Stop Test
+                    {tr("Stop Test", "Test beenden")}
                   </button>
                 </div>
                 <div className="list-stack">
@@ -1100,11 +1116,11 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                       <Camera size={18} />
                     </div>
                     <div className="list-row__body">
-                      <strong>Camera status</strong>
+                      <strong>{tr("Camera status", "Kamerastatus")}</strong>
                       <p>{cameraMessage}</p>
                     </div>
                     <StatusPill tone={cameraStatus === "ready" ? "ready" : cameraStatus === "unsupported" ? "warning" : "info"}>
-                      {cameraStatus}
+                      {statusLabel(cameraStatus)}
                     </StatusPill>
                   </article>
                   <article className="list-row">
@@ -1112,17 +1128,17 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                       <Radio size={18} />
                     </div>
                     <div className="list-row__body">
-                      <strong>Saved preference</strong>
-                      <p>{cameraConfigured ? savedCameraLabel : "No camera saved yet."}</p>
+                      <strong>{tr("Saved preference", "Gespeicherte Auswahl")}</strong>
+                      <p>{cameraConfigured ? savedCameraLabel : tr("No camera saved yet.", "Noch keine Kamera gespeichert.")}</p>
                     </div>
-                    <StatusPill tone={cameraConfigured ? "ready" : "warning"}>{cameraConfigured ? "saved" : "missing"}</StatusPill>
+                    <StatusPill tone={cameraConfigured ? "ready" : "warning"}>{statusLabel(cameraConfigured ? "saved" : "missing")}</StatusPill>
                   </article>
                 </div>
                 <div className="hint-box">
-                  <strong>Hint:</strong> Camera APIs usually work best on `https` or `http://localhost`. Use `Stop Test` to release the device after checking it.
+                  <strong>{tr("Hint:", "Hinweis:")}</strong> {tr("Camera APIs usually work best on HTTPS or localhost. Stop the test to release the device.", "Kamera-APIs funktionieren meist am besten über HTTPS oder localhost. Beende den Test, um das Gerät freizugeben.")}
                 </div>
                 <div className="hint-box">
-                  <strong>Dice Test:</strong> The current MVP is tuned for physical <code>d6</code> dice. Start the camera, roll the dice into the frame, then capture. Mixed number-d6 and pip-d6 should work better now than the broader all-dice experiment.
+                  <strong>{tr("Dice Test:", "Würfeltest:")}</strong> {tr("The current version is tuned for physical ", "Die aktuelle Version ist auf physische ")}<code>d6</code>{tr(" dice. Start the camera, place the dice in frame, and capture them.", "-Würfel abgestimmt. Starte die Kamera, lege die Würfel ins Bild und nimm sie auf.")}
                 </div>
                 {guidedRollPlan.length > 0 ? (
                   <div className="list-stack">
@@ -1133,16 +1149,16 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                         </div>
                         <div className="list-row__body">
                           <strong>
-                            Step {index + 1}: {step.count}
+                            {tr("Step", "Schritt")} {index + 1}: {step.count}
                             {step.type}
                           </strong>
                           <p>
                             {step.label}
-                            {step.confirmedValues.length > 0 ? ` • confirmed: ${step.confirmedValues.join(", ")}` : ""}
+                            {step.confirmedValues.length > 0 ? ` • ${tr("confirmed", "bestätigt")}: ${step.confirmedValues.join(", ")}` : ""}
                           </p>
                         </div>
                         <StatusPill tone={step.status === "confirmed" ? "ready" : step.status === "active" ? "info" : "warning"}>
-                          {step.status}
+                          {statusLabel(step.status)}
                         </StatusPill>
                       </article>
                     ))}
@@ -1154,12 +1170,12 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                 <canvas hidden ref={captureCanvasRef} />
                 {cameraStatus === "ready" ? (
                   <div className="camera-preview__badge">
-                    <StatusPill tone="ready">Live Preview</StatusPill>
+                    <StatusPill tone="ready">{tr("Live Preview", "Live-Vorschau")}</StatusPill>
                   </div>
                 ) : (
                   <div className="camera-placeholder">
                     <Camera size={28} />
-                    <span>{cameraStatus === "unsupported" ? "Camera unsupported" : "No live preview yet"}</span>
+                    <span>{cameraStatus === "unsupported" ? tr("Camera unsupported", "Kamera nicht unterstützt") : tr("No live preview yet", "Noch keine Live-Vorschau")}</span>
                   </div>
                 )}
               </div>
@@ -1171,11 +1187,11 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                   <Dices size={18} />
                 </div>
                 <div className="list-row__body">
-                  <strong>Dice test</strong>
+                  <strong>{tr("Dice test", "Würfeltest")}</strong>
                   <p>{diceTestMessage}</p>
                 </div>
                 <StatusPill tone={diceStabilityStatus === "stable" ? "ready" : diceStabilityStatus === "error" ? "warning" : "info"}>
-                  {diceStabilityStatus}
+                  {statusLabel(diceStabilityStatus)}
                 </StatusPill>
               </article>
             </div>
@@ -1191,7 +1207,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               >
                 <div className="camera-preview camera-preview--analysis">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img alt="Dice analysis snapshot" src={diceAnalysisImage} />
+                  <img alt={tr("Dice analysis snapshot", "Aufnahme der Würfelanalyse")} src={diceAnalysisImage} />
                   {detectedDiceBoxes.map((box, index) => (
                     <div
                       className="dice-box-overlay"
@@ -1206,7 +1222,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                   ))}
                 </div>
                 <div className="camera-preview__badge">
-                  <StatusPill tone="info">{detectedDiceBoxes.length} boxes</StatusPill>
+                  <StatusPill tone="info">{detectedDiceBoxes.length} {tr("boxes", "Rahmen")}</StatusPill>
                 </div>
               </div>
             ) : null}
@@ -1219,14 +1235,14 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                 }}
                 type="button"
               >
-                Start Guided Dice Test
+                {tr("Start Guided Dice Test", "Geführten Würfeltest starten")}
               </button>
               <button className="studio-button studio-button--ghost" disabled={!isDiceTestActive} onClick={resetDiceTest} type="button">
                 <RefreshCw size={16} />
-                Reset Dice Test
+                {tr("Reset Dice Test", "Würfeltest zurücksetzen")}
               </button>
               <button className="studio-button" disabled={!isDiceTestActive || cameraStatus !== "ready" || !activeGuidedRollStep} onClick={() => void handleCaptureDiceFrame()} type="button">
-                Capture Dice Frame
+                {tr("Capture Dice Frame", "Würfelbild aufnehmen")}
               </button>
               <button
                 className="studio-button studio-button--ghost"
@@ -1234,7 +1250,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                 onClick={confirmGuidedRollStep}
                 type="button"
               >
-                Confirm Step
+                {tr("Confirm Step", "Schritt bestätigen")}
               </button>
             </div>
 
@@ -1244,13 +1260,13 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                   <Dices size={18} />
                 </div>
                 <div className="list-row__body">
-                  <strong>Detected result</strong>
+                  <strong>{tr("Detected result", "Erkanntes Ergebnis")}</strong>
                   <p>
                     {activeGuidedRollStep
-                      ? `Expected: ${activeGuidedRollStep.count}${activeGuidedRollStep.type} for ${activeGuidedRollStep.label}.`
+                      ? tr(`Expected: ${activeGuidedRollStep.count}${activeGuidedRollStep.type} for ${activeGuidedRollStep.label}.`, `Erwartet: ${activeGuidedRollStep.count}${activeGuidedRollStep.type} für ${activeGuidedRollStep.label}.`)
                       : detectedDice.length > 0
-                      ? `${detectedDiceCount || detectedDice.length} dice found. Read values: ${detectedDice.map((die) => `${die.type} shows ${die.value}`).join(", ")}`
-                      : "No stable dice result yet."}
+                      ? tr(`${detectedDiceCount || detectedDice.length} dice found. Read values: ${detectedDice.map((die) => `${die.type} shows ${die.value}`).join(", ")}`, `${detectedDiceCount || detectedDice.length} Würfel gefunden. Gelesene Werte: ${detectedDice.map((die) => `${die.type} zeigt ${die.value}`).join(", ")}`)
+                      : tr("No stable dice result yet.", "Noch kein stabiles Würfelergebnis.")}
                   </p>
                 </div>
                 <StatusPill tone={detectedDice.length > 0 && diceStabilityStatus === "stable" ? "ready" : "info"}>
@@ -1289,14 +1305,14 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
 
             <div className="button-row">
               <button className="studio-button studio-button--ghost" onClick={() => setShowDiceDebugInput((current) => !current)} type="button">
-                {showDiceDebugInput ? "Hide Debug Input" : "Open Debug Input"}
+                {showDiceDebugInput ? tr("Hide Debug Input", "Debug-Eingabe ausblenden") : tr("Open Debug Input", "Debug-Eingabe öffnen")}
               </button>
             </div>
 
             {showDiceDebugInput ? (
               <div className="page-stack">
                 <div className="hint-box">
-                  <strong>Debug Input:</strong> This is only for backend stabilizer testing until automatic optical dice recognition is connected to the live camera frames.
+                  <strong>{tr("Debug Input:", "Debug-Eingabe:")}</strong> {tr("Use this only to test backend stabilization.", "Nur zum Testen der Backend-Stabilisierung verwenden.")}
                 </div>
                 <div className="ability-grid">
                   {diceFrameDraft.map((die, index) => (
@@ -1317,14 +1333,14 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                         value={die.value}
                       />
                       <button className="studio-button studio-button--ghost" onClick={() => removeDiceDraftRow(index)} type="button">
-                        Remove
+                        {tr("Remove", "Entfernen")}
                       </button>
                     </article>
                   ))}
                 </div>
                 <div className="button-row">
                   <button className="studio-button studio-button--ghost" onClick={addDiceDraftRow} type="button">
-                    Add Die
+                    {tr("Add Die", "Würfel hinzufügen")}
                   </button>
                 </div>
               </div>
@@ -1334,10 +1350,10 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               {cameraSaveNotice ? <p className="camera-save-notice">{cameraSaveNotice}</p> : <span className="modal-card__spacer" />}
               <div className="button-row modal-card__actions">
                 <button className="studio-button studio-button--ghost" onClick={handleCloseCameraModal} type="button">
-                  Cancel
+                  {tr("Cancel", "Abbrechen")}
                 </button>
                 <button className="studio-button" onClick={handleSaveCameraSelection} type="button">
-                  Save Camera Setting
+                  {tr("Save Camera Setting", "Kameraeinstellung speichern")}
                 </button>
               </div>
             </div>
@@ -1356,13 +1372,13 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
           >
             <div className="modal-card__header">
               <div>
-                <p className="eyebrow">Audio Settings</p>
+                <p className="eyebrow">{tr("Audio Settings", "Audioeinstellungen")}</p>
                 <h2 className="studio-panel__title" id="audio-settings-title">
-                  Configure sound and microphone input
+                  {tr("Configure sound and microphone input", "Tonausgabe und Mikrofoneingang konfigurieren")}
                 </h2>
-                <p className="studio-panel__description">Choose a preferred microphone and browser output, test both, then save that selection for future sessions.</p>
+                <p className="studio-panel__description">{tr("Choose and test a microphone and browser output, then save them for future sessions.", "Wähle und teste Mikrofon und Browserausgabe und speichere sie für zukünftige Sitzungen.")}</p>
               </div>
-              <button className="icon-button" aria-label="Close audio settings" onClick={handleCloseAudioModal} type="button">
+              <button className="icon-button" aria-label={tr("Close audio settings", "Audioeinstellungen schließen")} onClick={handleCloseAudioModal} type="button">
                 <X size={18} />
               </button>
             </div>
@@ -1370,34 +1386,34 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
             <div className="camera-device-panel">
               <div className="form-grid">
                 <select onChange={(event) => setSelectedMicrophoneId(event.target.value)} value={selectedMicrophoneId}>
-                  <option value="">{microphoneDevices.length === 0 ? "No microphones detected" : "Default microphone"}</option>
+                  <option value="">{microphoneDevices.length === 0 ? tr("No microphones detected", "Keine Mikrofone erkannt") : tr("Default microphone", "Standardmikrofon")}</option>
                   {microphoneDevices.map((device) => (
                     <option key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Microphone ${device.deviceId.slice(0, 6)}`}
+                      {device.label || `${tr("Microphone", "Mikrofon")} ${device.deviceId.slice(0, 6)}`}
                     </option>
                   ))}
                 </select>
                 <select onChange={(event) => setSelectedSpeakerId(event.target.value)} value={selectedSpeakerId}>
-                  <option value="">{speakerDevices.length === 0 ? "No speakers detected" : "Default browser output"}</option>
+                  <option value="">{speakerDevices.length === 0 ? tr("No speakers detected", "Keine Lautsprecher erkannt") : tr("Default browser output", "Standard-Browserausgabe")}</option>
                   {speakerDevices.map((device) => (
                     <option key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Speaker ${device.deviceId.slice(0, 6)}`}
+                      {device.label || `${tr("Speaker", "Lautsprecher")} ${device.deviceId.slice(0, 6)}`}
                     </option>
                   ))}
                 </select>
                 <div className="button-row">
                   <button className="studio-button studio-button--ghost" onClick={() => void refreshAudioDevices()} type="button">
-                    Detect Audio Devices
+                    {tr("Detect Audio Devices", "Audiogeräte erkennen")}
                   </button>
                   <button className="studio-button" disabled={isTestingMicrophone} onClick={() => void handleMicrophoneTest()} type="button">
-                    {isTestingMicrophone ? "Testing..." : "Start Microphone Test"}
+                    {isTestingMicrophone ? tr("Testing...", "Test läuft …") : tr("Start Microphone Test", "Mikrofontest starten")}
                   </button>
                   <button className="studio-button studio-button--ghost" onClick={() => void handleSpeakerTest()} type="button">
-                    Play Test Sound
+                    {tr("Play Test Sound", "Testton abspielen")}
                   </button>
                   <button className="studio-button studio-button--ghost" disabled={audioStatus !== "ready"} onClick={stopMicrophoneTest} type="button">
                     <Square size={16} />
-                    Stop Test
+                    {tr("Stop Test", "Test beenden")}
                   </button>
                 </div>
                 <div className="list-stack">
@@ -1406,7 +1422,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                       <Mic size={18} />
                     </div>
                     <div className="list-row__body">
-                      <strong>Audio status</strong>
+                      <strong>{tr("Audio status", "Audiostatus")}</strong>
                       <p>{audioMessage}</p>
                     </div>
                     <StatusPill tone={audioStatus === "ready" ? "ready" : audioStatus === "unsupported" ? "warning" : "info"}>
@@ -1418,25 +1434,25 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                       <Volume2 size={18} />
                     </div>
                     <div className="list-row__body">
-                      <strong>Saved preference</strong>
+                      <strong>{tr("Saved preference", "Gespeicherte Auswahl")}</strong>
                       <p>{savedMicrophoneLabel} / {savedSpeakerLabel}</p>
                     </div>
-                    <StatusPill tone={audioConfigured ? "ready" : "warning"}>{audioConfigured ? "saved" : "missing"}</StatusPill>
+                    <StatusPill tone={audioConfigured ? "ready" : "warning"}>{statusLabel(audioConfigured ? "saved" : "missing")}</StatusPill>
                   </article>
                 </div>
                 <div className="hint-box">
-                  <strong>Hint:</strong> Browser speaker routing support depends on `setSinkId`. If not supported, the test sound will use the browser default output.
+                  <strong>{tr("Hint:", "Hinweis:")}</strong> {tr("Speaker routing depends on browser support. Otherwise the test uses the default output.", "Die Lautsprecherzuordnung hängt vom Browser ab. Andernfalls nutzt der Test die Standardausgabe.")}
                 </div>
               </div>
               <div className="audio-meter-card">
                 <div className="audio-meter-card__head">
-                  <strong>Microphone level</strong>
+                  <strong>{tr("Microphone level", "Mikrofonpegel")}</strong>
                   <StatusPill tone={audioStatus === "ready" ? "ready" : "info"}>{Math.round(micLevel)}%</StatusPill>
                 </div>
                 <div className="audio-meter">
                   <div className="audio-meter__fill" style={{ width: `${micLevel}%` }} />
                 </div>
-                <p className="studio-panel__description">Use this as a quick browser-level signal check before dice or voice capture.</p>
+                <p className="studio-panel__description">{tr("Use this to check the browser signal before voice capture.", "Prüfe damit das Browsersignal vor einer Sprachaufnahme.")}</p>
               </div>
             </div>
 
@@ -1444,10 +1460,10 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               {audioSaveNotice ? <p className="camera-save-notice">{audioSaveNotice}</p> : <span className="modal-card__spacer" />}
               <div className="button-row modal-card__actions">
                 <button className="studio-button studio-button--ghost" onClick={handleCloseAudioModal} type="button">
-                  Cancel
+                  {tr("Cancel", "Abbrechen")}
                 </button>
                 <button className="studio-button" onClick={handleSaveAudioSelection} type="button">
-                  Save Audio Settings
+                  {tr("Save Audio Settings", "Audioeinstellungen speichern")}
                 </button>
               </div>
             </div>
@@ -1466,13 +1482,13 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
           >
             <div className="modal-card__header">
               <div>
-                <p className="eyebrow">AI Model Settings</p>
+                <p className="eyebrow">{tr("AI Model Settings", "KI-Modelleinstellungen")}</p>
                 <h2 className="studio-panel__title" id="llm-settings-title">
-                  Configure AI model routing
+                  {tr("Configure AI model routing", "KI-Modell-Routing konfigurieren")}
                 </h2>
-                <p className="studio-panel__description">Configure OpenAI GPT-5.6 or an optional OpenAI-compatible local provider, then run a server-side GM response test.</p>
+                <p className="studio-panel__description">{tr("Configure OpenAI GPT-5.6 or an OpenAI-compatible provider, then run a server-side DM test.", "Konfiguriere OpenAI GPT-5.6 oder einen OpenAI-kompatiblen Anbieter und starte anschließend einen serverseitigen Spielleiter-Test.")}</p>
               </div>
-              <button className="icon-button" aria-label="Close AI model settings" onClick={handleCloseLlmModal} type="button">
+              <button className="icon-button" aria-label={tr("Close AI model settings", "KI-Modelleinstellungen schließen")} onClick={handleCloseLlmModal} type="button">
                 <X size={18} />
               </button>
             </div>
@@ -1487,17 +1503,17 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                 />
                 <div className="button-row">
                   <button className="studio-button studio-button--ghost" onClick={() => void handleFetchModels()} type="button">
-                    Fetch Models
+                    {tr("Fetch Models", "Modelle abrufen")}
                   </button>
                   <button className="studio-button studio-button--ghost" disabled={llmTestStatus === "running"} onClick={() => void handleLlmConnectionTest()} type="button">
-                    {llmTestStatus === "running" ? "Testing LLM..." : "Run DM Test"}
+                    {llmTestStatus === "running" ? tr("Testing LLM...", "LLM wird getestet …") : tr("Run DM Test", "Spielleiter-Test starten")}
                   </button>
                   <button className="studio-button studio-button--ghost" onClick={handlePlayerScreenTest} type="button">
-                    Player Screen Test
+                    {tr("Player Screen Test", "Spieleransicht testen")}
                   </button>
                 </div>
                 <select onChange={(event) => setLlmModelInput(event.target.value)} value={llmModelInput}>
-                  <option value="">{availableModels.length === 0 ? "No fetched models yet" : "Choose a model"}</option>
+                  <option value="">{availableModels.length === 0 ? tr("No fetched models yet", "Noch keine Modelle abgerufen") : tr("Choose a model", "Modell auswählen")}</option>
                   {llmModelInput && !availableModels.includes(llmModelInput) ? <option value={llmModelInput}>{llmModelInput}</option> : null}
                   {availableModels.map((model) => (
                     <option key={model} value={model}>
@@ -1511,21 +1527,21 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                       <Brain size={18} />
                     </div>
                     <div className="list-row__body">
-                      <strong>Current routing</strong>
-                      <p>{savedLlmModel || "No saved model"} @ {savedLlmBaseUrl || "No saved base URL"}</p>
+                      <strong>{tr("Current routing", "Aktuelles Routing")}</strong>
+                      <p>{savedLlmModel || tr("No saved model", "Kein Modell gespeichert")} @ {savedLlmBaseUrl || tr("No saved base URL", "Keine Basis-URL gespeichert")}</p>
                     </div>
-                    <StatusPill tone={llmConfigured ? "ready" : "warning"}>{llmConfigured ? "saved" : "missing"}</StatusPill>
+                    <StatusPill tone={llmConfigured ? "ready" : "warning"}>{statusLabel(llmConfigured ? "saved" : "missing")}</StatusPill>
                   </article>
                   <article className="list-row">
                     <div className="list-row__icon">
                       <PlayCircle size={18} />
                     </div>
                     <div className="list-row__body">
-                      <strong>DM test result</strong>
+                      <strong>{tr("DM test result", "Ergebnis des Spielleiter-Tests")}</strong>
                       <p>{llmTestMessage}</p>
                     </div>
                     <StatusPill tone={llmTestStatus === "success" ? "ready" : llmTestStatus === "error" ? "warning" : "info"}>
-                      {llmTestStatus === "running" ? "running" : llmTestStatus}
+                      {statusLabel(llmTestStatus === "running" ? "running" : llmTestStatus)}
                     </StatusPill>
                   </article>
                   <article className="list-row">
@@ -1533,10 +1549,10 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                       <Monitor size={18} />
                     </div>
                     <div className="list-row__body">
-                      <strong>Player screen test result</strong>
+                      <strong>{tr("Player screen test result", "Testergebnis der Spieleransicht")}</strong>
                       <p>{playerScreenTestMessage}</p>
                     </div>
-                    <StatusPill tone={playerScreenTestStatus === "success" ? "ready" : "info"}>{playerScreenTestStatus}</StatusPill>
+                    <StatusPill tone={playerScreenTestStatus === "success" ? "ready" : "info"}>{statusLabel(playerScreenTestStatus)}</StatusPill>
                   </article>
                 </div>
               </div>
@@ -1546,10 +1562,10 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               {llmSaveNotice ? <p className="camera-save-notice">{llmSaveNotice}</p> : <span className="modal-card__spacer" />}
               <div className="button-row modal-card__actions">
                 <button className="studio-button studio-button--ghost" onClick={handleCloseLlmModal} type="button">
-                  Cancel
+                  {tr("Cancel", "Abbrechen")}
                 </button>
                 <button className="studio-button" onClick={handleSaveLlmSettings} type="button">
-                  Save LLM Settings
+                  {tr("Save LLM Settings", "LLM-Einstellungen speichern")}
                 </button>
               </div>
             </div>

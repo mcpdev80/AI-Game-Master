@@ -79,11 +79,11 @@ type ActiveSessionScreenProps = {
 
 type SessionSheetTab = "overview" | "abilities" | "combat" | "magic" | "personality" | "gear";
 
-function summarizeEvent(event: SessionEvent): { title: string; body: string } {
+function summarizeEvent(event: SessionEvent, locale: "en" | "de"): { title: string; body: string } {
   if (event.type === "gm_response") {
-    const playerInput = typeof event.payload.player_input === "string" ? event.payload.player_input : "No player input";
+    const playerInput = typeof event.payload.player_input === "string" ? event.payload.player_input : locale === "de" ? "Keine Spielereingabe" : "No player input";
     const response = event.payload.response as Record<string, unknown> | undefined;
-    const narration = typeof response?.narration === "string" ? response.narration : "No narration captured";
+    const narration = typeof response?.narration === "string" ? response.narration : locale === "de" ? "Keine Erzählung erfasst" : "No narration captured";
     return {
       title: playerInput,
       body: narration,
@@ -98,6 +98,9 @@ function summarizeEvent(event: SessionEvent): { title: string; body: string } {
 
 export function ActiveSessionScreen({ session, events, playerLinks, adventures, documents, assets, characters }: ActiveSessionScreenProps) {
   const { locale, tr } = useI18n();
+  const sessionStatusLabel = (status: string) => ({
+    live: tr("LIVE", "LIVE"), paused: tr("PAUSED", "PAUSIERT"), ready_to_start: tr("READY", "BEREIT"), ended: tr("ENDED", "BEENDET"), draft: tr("DRAFT", "ENTWURF"),
+  }[status] ?? status.toUpperCase());
   const recentEvents = events.slice(0, 8);
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -281,15 +284,15 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
         </div>
         <header className="sheet-canvas__header">
           <div className="sheet-canvas__name">
-            <span>CHARAKTERNAME</span>
+            <span>{tr("CHARACTER NAME", "CHARAKTERNAME")}</span>
             <strong>{character.name || "—"}</strong>
           </div>
           <div className="sheet-canvas__identity">
-            <article><span>Klasse & Stufe</span><strong>{character.class_and_level || "—"}</strong></article>
-            <article><span>Volk</span><strong>{character.race || "—"}</strong></article>
-            <article><span>Hintergrund</span><strong>{character.background || "—"}</strong></article>
-            <article><span>Gesinnung</span><strong>{character.alignment || "—"}</strong></article>
-            <article><span>Spieler</span><strong>{character.player_name || "—"}</strong></article>
+            <article><span>{tr("Class & Level", "Klasse & Stufe")}</span><strong>{character.class_and_level || "—"}</strong></article>
+            <article><span>{tr("Ancestry", "Volk")}</span><strong>{character.race || "—"}</strong></article>
+            <article><span>{tr("Background", "Hintergrund")}</span><strong>{character.background || "—"}</strong></article>
+            <article><span>{tr("Alignment", "Gesinnung")}</span><strong>{character.alignment || "—"}</strong></article>
+            <article><span>{tr("Player", "Spieler")}</span><strong>{character.player_name || "—"}</strong></article>
           </div>
         </header>
 
@@ -298,22 +301,22 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             <div className="sheet-tab-grid sheet-tab-grid--overview">
               <section className="sheet-box sheet-box--story">
                 <div className="sheet-box__title-row">
-                  <strong>Konzept & Geschichte</strong>
-                  <span>aktueller Sheet-Stand</span>
+                  <strong>{tr("Concept & Story", "Konzept & Geschichte")}</strong>
+                  <span>{tr("current sheet state", "aktueller Bogenstand")}</span>
                 </div>
-                <p>{concept || "Noch kein Konzept eingetragen."}</p>
-                <p>{backstory || "Noch keine Hintergrundgeschichte hinterlegt."}</p>
+                <p>{concept || tr("No concept entered yet.", "Noch kein Konzept eingetragen.")}</p>
+                <p>{backstory || tr("No backstory entered yet.", "Noch keine Hintergrundgeschichte hinterlegt.")}</p>
               </section>
               <section className="sheet-box">
-                <strong>Grunddaten</strong>
+                <strong>{tr("Basic Details", "Grunddaten")}</strong>
                 <dl className="sheet-detail-list">
-                  <div><dt>Spieler</dt><dd>{character.player_name || "—"}</dd></div>
-                  <div><dt>Alter</dt><dd>{age}</dd></div>
-                  <div><dt>Größe</dt><dd>{size}</dd></div>
-                  <div><dt>Gewicht</dt><dd>{weight}</dd></div>
-                  <div><dt>Augen</dt><dd>{eyes}</dd></div>
-                  <div><dt>Haut</dt><dd>{skin}</dd></div>
-                  <div><dt>Haare</dt><dd>{hair}</dd></div>
+                  <div><dt>{tr("Player", "Spieler")}</dt><dd>{character.player_name || "—"}</dd></div>
+                  <div><dt>{tr("Age", "Alter")}</dt><dd>{age}</dd></div>
+                  <div><dt>{tr("Size", "Größe")}</dt><dd>{size}</dd></div>
+                  <div><dt>{tr("Weight", "Gewicht")}</dt><dd>{weight}</dd></div>
+                  <div><dt>{tr("Eyes", "Augen")}</dt><dd>{eyes}</dd></div>
+                  <div><dt>{tr("Skin", "Haut")}</dt><dd>{skin}</dd></div>
+                  <div><dt>{tr("Hair", "Haare")}</dt><dd>{hair}</dd></div>
                 </dl>
               </section>
             </div>
@@ -332,22 +335,22 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             </div>
             <div className="sheet-tab-grid sheet-tab-grid--ability-status">
               <section className="sheet-box">
-                <strong>Fertigkeiten</strong>
+                <strong>{tr("Skills", "Fertigkeiten")}</strong>
                 <dl className="sheet-detail-list">
-                  <div><dt>Geübt</dt><dd>{skillProficiencies.join(", ") || "—"}</dd></div>
-                  <div><dt>Rettungswürfe</dt><dd>{savingThrowProficiencies.join(", ") || "—"}</dd></div>
-                  <div><dt>Sprachen</dt><dd>{character.languages.join(", ") || "—"}</dd></div>
+                  <div><dt>{tr("Proficient", "Geübt")}</dt><dd>{skillProficiencies.join(", ") || "—"}</dd></div>
+                  <div><dt>{tr("Saving Throws", "Rettungswürfe")}</dt><dd>{savingThrowProficiencies.join(", ") || "—"}</dd></div>
+                  <div><dt>{tr("Languages", "Sprachen")}</dt><dd>{character.languages.join(", ") || "—"}</dd></div>
                 </dl>
               </section>
               <section className="sheet-box">
-                <strong>Abgeleitete Werte</strong>
+                <strong>{tr("Derived Stats", "Abgeleitete Werte")}</strong>
                 <dl className="sheet-detail-list">
-                  <div><dt>Rüstungsklasse</dt><dd>{character.armor_class ?? "—"}</dd></div>
-                  <div><dt>Bewegung</dt><dd>{character.speed || "—"}</dd></div>
-                  <div><dt>TP max</dt><dd>{character.hit_point_max ?? "—"}</dd></div>
-                  <div><dt>Aktuelle TP</dt><dd>{currentHitPoints}</dd></div>
-                  <div><dt>Temp. TP</dt><dd>{temporaryHitPoints}</dd></div>
-                  <div><dt>Übungsbonus</dt><dd>{character.proficiency_bonus || "—"}</dd></div>
+                  <div><dt>{tr("Armor Class", "Rüstungsklasse")}</dt><dd>{character.armor_class ?? "—"}</dd></div>
+                  <div><dt>{tr("Speed", "Bewegung")}</dt><dd>{character.speed || "—"}</dd></div>
+                  <div><dt>{tr("Max HP", "TP max")}</dt><dd>{character.hit_point_max ?? "—"}</dd></div>
+                  <div><dt>{tr("Current HP", "Aktuelle TP")}</dt><dd>{currentHitPoints}</dd></div>
+                  <div><dt>{tr("Temp. HP", "Temp. TP")}</dt><dd>{temporaryHitPoints}</dd></div>
+                  <div><dt>{tr("Proficiency Bonus", "Übungsbonus")}</dt><dd>{character.proficiency_bonus || "—"}</dd></div>
                 </dl>
               </section>
             </div>
@@ -357,26 +360,26 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
         {selectedCharacterTab === "combat" ? (
           <div className="sheet-tab-panel">
             <section className="sheet-box sheet-box--combat">
-              <article><span>Rüstungsklasse</span><strong>{character.armor_class ?? "—"}</strong></article>
-              <article><span>Bewegung</span><strong>{character.speed || "—"}</strong></article>
-              <article><span>TP max</span><strong>{character.hit_point_max ?? "—"}</strong></article>
-              <article><span>Aktuelle TP</span><strong>{currentHitPoints}</strong></article>
-              <article><span>Temp. TP</span><strong>{temporaryHitPoints}</strong></article>
-              <article><span>Übungsbonus</span><strong>{character.proficiency_bonus || "—"}</strong></article>
+              <article><span>{tr("Armor Class", "Rüstungsklasse")}</span><strong>{character.armor_class ?? "—"}</strong></article>
+              <article><span>{tr("Speed", "Bewegung")}</span><strong>{character.speed || "—"}</strong></article>
+              <article><span>{tr("Max HP", "TP max")}</span><strong>{character.hit_point_max ?? "—"}</strong></article>
+              <article><span>{tr("Current HP", "Aktuelle TP")}</span><strong>{currentHitPoints}</strong></article>
+              <article><span>{tr("Temp. HP", "Temp. TP")}</span><strong>{temporaryHitPoints}</strong></article>
+              <article><span>{tr("Proficiency Bonus", "Übungsbonus")}</span><strong>{character.proficiency_bonus || "—"}</strong></article>
             </section>
             <section className="sheet-box">
               <div className="sheet-box__title-row">
-                <strong>Kampfübersicht</strong>
-                <span>Kampfnotizen und Angriffe</span>
+                <strong>{tr("Combat Overview", "Kampfübersicht")}</strong>
+                <span>{tr("combat notes and attacks", "Kampfnotizen und Angriffe")}</span>
               </div>
-              <p>{combatOverview || "Keine Kampfübersicht hinterlegt."}</p>
+              <p>{combatOverview || tr("No combat overview available.", "Keine Kampfübersicht hinterlegt.")}</p>
             </section>
             <section className="sheet-box">
               <div className="sheet-box__title-row">
-                <strong>Angriffe</strong>
-                <span>roher Tabellen-/Sheet-Inhalt</span>
+                <strong>{tr("Attacks", "Angriffe")}</strong>
+                <span>{tr("raw table/sheet content", "roher Tabellen-/Bogeninhalt")}</span>
               </div>
-              <p style={{ whiteSpace: "pre-wrap" }}>{combatAttacks || "Keine Angriffe hinterlegt."}</p>
+              <p style={{ whiteSpace: "pre-wrap" }}>{combatAttacks || tr("No attacks available.", "Keine Angriffe hinterlegt.")}</p>
             </section>
           </div>
         ) : null}
@@ -385,13 +388,13 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
           <div className="sheet-tab-panel">
             <section className="sheet-box">
               <div className="sheet-box__title-row">
-                <strong>Zauber</strong>
-                <span>Magie und Notizen</span>
+                <strong>{tr("Spells", "Zauber")}</strong>
+                <span>{tr("magic and notes", "Magie und Notizen")}</span>
               </div>
               <dl className="sheet-detail-list">
-                <div><dt>Zauber</dt><dd>{spells.join(", ") || "—"}</dd></div>
-                <div><dt>Zauber-Notizen</dt><dd>{spellNotes || "—"}</dd></div>
-                <div><dt>Zauberangriffe</dt><dd style={{ whiteSpace: "pre-wrap" }}>{spellAttacks || "—"}</dd></div>
+                <div><dt>{tr("Spells", "Zauber")}</dt><dd>{spells.join(", ") || "—"}</dd></div>
+                <div><dt>{tr("Spell Notes", "Zaubernotizen")}</dt><dd>{spellNotes || "—"}</dd></div>
+                <div><dt>{tr("Spell Attacks", "Zauberangriffe")}</dt><dd style={{ whiteSpace: "pre-wrap" }}>{spellAttacks || "—"}</dd></div>
               </dl>
             </section>
           </div>
@@ -401,21 +404,21 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
           <div className="sheet-tab-panel">
             <div className="sheet-tab-grid sheet-tab-grid--overview">
               <section className="sheet-box">
-                <strong>Persönlichkeit</strong>
+                <strong>{tr("Personality", "Persönlichkeit")}</strong>
                 <dl className="sheet-detail-list">
-                  <div><dt>Merkmale</dt><dd>{personalityTraits || "—"}</dd></div>
-                  <div><dt>Ideale</dt><dd>{ideals || "—"}</dd></div>
-                  <div><dt>Bindungen</dt><dd>{bonds || "—"}</dd></div>
-                  <div><dt>Makel</dt><dd>{flaws || "—"}</dd></div>
+                  <div><dt>{tr("Traits", "Merkmale")}</dt><dd>{personalityTraits || "—"}</dd></div>
+                  <div><dt>{tr("Ideals", "Ideale")}</dt><dd>{ideals || "—"}</dd></div>
+                  <div><dt>{tr("Bonds", "Bindungen")}</dt><dd>{bonds || "—"}</dd></div>
+                  <div><dt>{tr("Flaws", "Makel")}</dt><dd>{flaws || "—"}</dd></div>
                 </dl>
               </section>
               <section className="sheet-box">
-                <strong>Auftreten & Kontakte</strong>
+                <strong>{tr("Appearance & Contacts", "Auftreten & Kontakte")}</strong>
                 <dl className="sheet-detail-list">
-                  <div><dt>Sprachen</dt><dd>{character.languages.join(", ") || "—"}</dd></div>
-                  <div><dt>Sinne</dt><dd>{senses || "—"}</dd></div>
-                  <div><dt>Verbündete</dt><dd>{allies || "—"}</dd></div>
-                  <div><dt>Features</dt><dd>{character.features.join(", ") || "—"}</dd></div>
+                  <div><dt>{tr("Languages", "Sprachen")}</dt><dd>{character.languages.join(", ") || "—"}</dd></div>
+                  <div><dt>{tr("Senses", "Sinne")}</dt><dd>{senses || "—"}</dd></div>
+                  <div><dt>{tr("Allies", "Verbündete")}</dt><dd>{allies || "—"}</dd></div>
+                  <div><dt>{tr("Features", "Merkmale")}</dt><dd>{character.features.join(", ") || "—"}</dd></div>
                 </dl>
               </section>
             </div>
@@ -425,15 +428,15 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
         {selectedCharacterTab === "gear" ? (
           <div className="sheet-tab-panel">
             <section className="sheet-box">
-              <strong>Ausrüstung</strong>
+              <strong>{tr("Equipment", "Ausrüstung")}</strong>
               <dl className="sheet-detail-list">
-                <div><dt>Startausrüstung</dt><dd>{startingEquipment.join(", ") || "—"}</dd></div>
-                <div><dt>Aktuelles Geld</dt><dd>{currentMoney}</dd></div>
-                <div><dt>Aktuelles Inventar</dt><dd>{currentInventory.join(", ") || "—"}</dd></div>
-                <div><dt>Werkzeuge</dt><dd>{tools.join(", ") || "—"}</dd></div>
-                <div><dt>Waffen-Notizen</dt><dd>{weaponNotes.join(", ") || "—"}</dd></div>
-                <div><dt>EP</dt><dd>{experiencePoints}</dd></div>
-                <div><dt>Level-Up bereit</dt><dd>{levelUpAvailable}</dd></div>
+                <div><dt>{tr("Starting Equipment", "Startausrüstung")}</dt><dd>{startingEquipment.join(", ") || "—"}</dd></div>
+                <div><dt>{tr("Current Money", "Aktuelles Geld")}</dt><dd>{currentMoney}</dd></div>
+                <div><dt>{tr("Current Inventory", "Aktuelles Inventar")}</dt><dd>{currentInventory.join(", ") || "—"}</dd></div>
+                <div><dt>{tr("Tools", "Werkzeuge")}</dt><dd>{tools.join(", ") || "—"}</dd></div>
+                <div><dt>{tr("Weapon Notes", "Waffennotizen")}</dt><dd>{weaponNotes.join(", ") || "—"}</dd></div>
+                <div><dt>{tr("XP", "EP")}</dt><dd>{experiencePoints}</dd></div>
+                <div><dt>{tr("Level-up Available", "Stufenaufstieg bereit")}</dt><dd>{levelUpAvailable}</dd></div>
               </dl>
             </section>
           </div>
@@ -503,7 +506,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
       <header className="active-session__topbar">
         <div className="active-session__identity">
           <StatusPill tone={session.status === "live" ? "live" : session.status === "paused" ? "warning" : "ready"}>
-            {session.status.toUpperCase()}
+            {sessionStatusLabel(session.status)}
           </StatusPill>
           <div className="active-session__ai">
             <Brain size={16} />
@@ -590,11 +593,11 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
 
           <Panel title={tr("AI Prompt Setup", "KI-Prompt-Einrichtung")} description={tr("Configure the AI DM's style and focus for this session.", "Stil und Fokus des KI-Spielleiters für diese Sitzung anpassen.")}>
             <div className="form-grid">
-              <input onChange={(event) => setGMStyle(event.target.value)} placeholder="GM Style" value={gmStyle} />
-              <input onChange={(event) => setIntroStyle(event.target.value)} placeholder="Intro Style" value={introStyle} />
-              <input onChange={(event) => setAdventureFocus(event.target.value)} placeholder="Adventure Focus" value={adventureFocus} />
-              <input onChange={(event) => setRulesStrictness(event.target.value)} placeholder="Rules Strictness" value={rulesStrictness} />
-              <input onChange={(event) => setPlayerAgencyStyle(event.target.value)} placeholder="Player Agency Style" value={playerAgencyStyle} />
+              <input onChange={(event) => setGMStyle(event.target.value)} placeholder={tr("DM Style", "Spielleiterstil")} value={gmStyle} />
+              <input onChange={(event) => setIntroStyle(event.target.value)} placeholder={tr("Intro Style", "Einleitungsstil")} value={introStyle} />
+              <input onChange={(event) => setAdventureFocus(event.target.value)} placeholder={tr("Adventure Focus", "Abenteuerfokus")} value={adventureFocus} />
+              <input onChange={(event) => setRulesStrictness(event.target.value)} placeholder={tr("Rules Strictness", "Regeltreue")} value={rulesStrictness} />
+              <input onChange={(event) => setPlayerAgencyStyle(event.target.value)} placeholder={tr("Player Agency Style", "Spielerfreiheitsstil")} value={playerAgencyStyle} />
               <textarea className="studio-textarea" onChange={(event) => setPromptOverride(event.target.value)} placeholder={tr("Additional session prompt override", "Zusätzliche Sitzungs-Prompt-Anweisung")} rows={5} value={promptOverride} />
             </div>
           </Panel>
@@ -658,7 +661,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             ) : null}
 
             {recentEvents.map((event) => {
-              const summary = summarizeEvent(event);
+              const summary = summarizeEvent(event, locale);
               return (
                 <article className="narrative-card" key={event.id}>
                   <div className="narrative-card__meta">
@@ -863,7 +866,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
               <div className="output-list__item">
                 <Monitor size={16} />
                 <div>
-                  <strong>AI DM Visual Board</strong>
+                  <strong>{tr("AI DM Visual Board", "Visuelles Board des KI-Spielleiters")}</strong>
                   <p>{session.state.visual_mode || "pause_or_recap"} · {tr("current shared output", "aktuelle gemeinsame Ausgabe")}</p>
                 </div>
               </div>

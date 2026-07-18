@@ -42,6 +42,7 @@ test("complete browser golden path from demo and character builder to dice resol
   await page.getByRole("button", { name: "Start Builder" }).click();
   const startResponse = await startResponsePromise;
   expect(startResponse.ok()).toBeTruthy();
+  expect(startResponse.request().postDataJSON()).toMatchObject({ language: "en" });
   const started = (await startResponse.json()) as { character: { id: string } };
   const characterId = started.character.id;
   await expect(page.getByRole("heading", { name: "AI-guided Character Draft" })).toBeVisible();
@@ -101,18 +102,20 @@ test("complete browser golden path from demo and character builder to dice resol
   );
   const rollResponsePromise = page.waitForResponse((response) => response.url().includes("/api/gm/respond") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Send to AI" }).click();
-  expect((await rollResponsePromise).ok()).toBeTruthy();
+  const rollResponse = await rollResponsePromise;
+  expect(rollResponse.ok()).toBeTruthy();
+  expect(rollResponse.request().postDataJSON()).toMatchObject({ language: "en" });
   await expect.poll(async () => {
     const value = await jsonRequest<{ state: { visual_mode: string } }>(request, "get", `/api/sessions/${session.id}`);
     return value.state.visual_mode;
   }).toBe("dice_capture");
 
   await page.goto("/player-screen");
-  await page.getByRole("button", { name: "Board aktivieren" }).click();
+  await page.getByRole("button", { name: "Activate Board" }).click();
   await expect(page.getByText("Find the safe passage", { exact: true }).first()).toBeVisible();
   await page.locator(".roll-die-input input").fill("17");
   const resolutionPromise = page.waitForResponse((response) => response.url().includes("/api/gm/respond") && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Wurf bestätigen" }).click();
+  await page.getByRole("button", { name: "Confirm Roll" }).click();
   expect((await resolutionPromise).ok()).toBeTruthy();
   await expect(page.getByRole("img", { name: demo.map_asset.name })).toBeVisible();
 

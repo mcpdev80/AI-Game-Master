@@ -177,6 +177,21 @@ const abilityLabels: Record<AbilityKey, string> = {
   wisdom: "WEISHEIT",
   charisma: "CHARISMA",
 };
+const englishAbilityLabels: Record<AbilityKey, string> = {
+  strength: "STRENGTH",
+  dexterity: "DEXTERITY",
+  constitution: "CONSTITUTION",
+  intelligence: "INTELLIGENCE",
+  wisdom: "WISDOM",
+  charisma: "CHARISMA",
+};
+const englishSkillLabels: Record<string, string> = {
+  acrobatics: "Acrobatics", arcana: "Arcana", athletics: "Athletics", performance: "Performance",
+  intimidation: "Intimidation", sleight_of_hand: "Sleight of Hand", history: "History", medicine: "Medicine",
+  stealth: "Stealth", animal_handling: "Animal Handling", insight: "Insight", investigation: "Investigation",
+  nature: "Nature", religion: "Religion", deception: "Deception", survival: "Survival",
+  persuasion: "Persuasion", perception: "Perception",
+};
 
 function deriveRuleset(metadata: Record<string, unknown>) {
   const work = String(metadata.ruleset_work ?? "");
@@ -694,7 +709,7 @@ function CharacterSheetCanvas({
   saveDisabled,
   onToggleEditMode,
 }: CharacterSheetCanvasProps) {
-  const { tr } = useI18n();
+  const { locale, tr } = useI18n();
   const proficiency = parseNumericText(sheetForm.proficiency_bonus) ?? deriveProficiencyBonus(sheetForm.class_and_level);
   const passivePerception = 10 + abilityModifier(assignment.wisdom || 10) + (builderSkillKeys.has("perception") ? proficiency : 0);
   const derivedArmorClass = deriveArmorClassValue(sheetForm, assignment);
@@ -813,13 +828,13 @@ function CharacterSheetCanvas({
             <section className="sheet-box">
               <strong>{tr("Basic Details", "Grunddaten")}</strong>
               <dl className="sheet-detail-list">
-                <div><dt>Spieler</dt><dd>{renderInlineField("player_name")}</dd></div>
-                <div><dt>Alter</dt><dd>{renderInlineField("age")}</dd></div>
-                <div><dt>Größe</dt><dd>{renderInlineField("size")}</dd></div>
-                <div><dt>Gewicht</dt><dd>{renderInlineField("weight")}</dd></div>
-                <div><dt>Augen</dt><dd>{renderInlineField("eyes")}</dd></div>
-                <div><dt>Haut</dt><dd>{renderInlineField("skin")}</dd></div>
-                <div><dt>Haare</dt><dd>{renderInlineField("hair")}</dd></div>
+                <div><dt>{tr("Player", "Spieler")}</dt><dd>{renderInlineField("player_name")}</dd></div>
+                <div><dt>{tr("Age", "Alter")}</dt><dd>{renderInlineField("age")}</dd></div>
+                <div><dt>{tr("Size", "Größe")}</dt><dd>{renderInlineField("size")}</dd></div>
+                <div><dt>{tr("Weight", "Gewicht")}</dt><dd>{renderInlineField("weight")}</dd></div>
+                <div><dt>{tr("Eyes", "Augen")}</dt><dd>{renderInlineField("eyes")}</dd></div>
+                <div><dt>{tr("Skin", "Haut")}</dt><dd>{renderInlineField("skin")}</dd></div>
+                <div><dt>{tr("Hair", "Haare")}</dt><dd>{renderInlineField("hair")}</dd></div>
               </dl>
             </section>
           </div>
@@ -833,7 +848,7 @@ function CharacterSheetCanvas({
               const score = assignment[ability] || 0;
               return (
                 <article className="sheet-ability" key={`canvas-${ability}`}>
-                  <span>{abilityLabels[ability]}</span>
+                  <span>{locale === "de" ? abilityLabels[ability] : englishAbilityLabels[ability]}</span>
                   <strong>{score || "—"}</strong>
                   <em>{score ? formatModifier(abilityModifier(score)) : "—"}</em>
                 </article>
@@ -843,29 +858,29 @@ function CharacterSheetCanvas({
 
           <div className="sheet-tab-grid sheet-tab-grid--ability-status">
             <section className="sheet-box">
-              <strong>Attribut-Status</strong>
+              <strong>{tr("Ability Status", "Attributstatus")}</strong>
               <dl className="sheet-detail-list">
-                <div><dt>Übungsbonus</dt><dd>{formatModifier(proficiency)}</dd></div>
-                <div><dt>Inspiration</dt><dd>{renderInlineField("inspiration")}</dd></div>
-                <div><dt>Passive Wahrnehmung</dt><dd>{passivePerception}</dd></div>
-                <div><dt>Rettungswurf-Profizienzen</dt><dd>{derivedSavingThrows}</dd></div>
+                <div><dt>{tr("Proficiency Bonus", "Übungsbonus")}</dt><dd>{formatModifier(proficiency)}</dd></div>
+                <div><dt>{tr("Inspiration", "Inspiration")}</dt><dd>{renderInlineField("inspiration")}</dd></div>
+                <div><dt>{tr("Passive Perception", "Passive Wahrnehmung")}</dt><dd>{passivePerception}</dd></div>
+                <div><dt>{tr("Saving Throw Proficiencies", "Rettungswurf-Profizienzen")}</dt><dd>{derivedSavingThrows}</dd></div>
               </dl>
             </section>
             <section className="sheet-box">
-              <strong>Abgeleitete Werte</strong>
+              <strong>{tr("Derived Stats", "Abgeleitete Werte")}</strong>
               <dl className="sheet-detail-list">
-                <div><dt>Rüstungsklasse</dt><dd>{derivedArmorClass}</dd></div>
-                <div><dt>Initiative</dt><dd>{assignment.dexterity ? formatModifier(abilityModifier(assignment.dexterity)) : "—"}</dd></div>
-                <div><dt>Bewegungsrate</dt><dd>{derivedSpeed}</dd></div>
-                <div><dt>Trefferwürfel</dt><dd>{derivedHitDie}</dd></div>
+                <div><dt>{tr("Armor Class", "Rüstungsklasse")}</dt><dd>{derivedArmorClass}</dd></div>
+                <div><dt>{tr("Initiative", "Initiative")}</dt><dd>{assignment.dexterity ? formatModifier(abilityModifier(assignment.dexterity)) : "—"}</dd></div>
+                <div><dt>{tr("Speed", "Bewegungsrate")}</dt><dd>{derivedSpeed}</dd></div>
+                <div><dt>{tr("Hit Dice", "Trefferwürfel")}</dt><dd>{derivedHitDie}</dd></div>
               </dl>
             </section>
           </div>
 
           <section className="sheet-box">
             <div className="sheet-box__title-row">
-              <strong>Fertigkeiten</strong>
-              <span>darunter die Skills mit berechneten Modifikatoren</span>
+              <strong>{tr("Skills", "Fertigkeiten")}</strong>
+              <span>{tr("including calculated modifiers", "einschließlich berechneter Modifikatoren")}</span>
             </div>
             <div className="sheet-skills">
               {skillDefinitions.map((skill) => {
@@ -875,7 +890,7 @@ function CharacterSheetCanvas({
                 return (
                   <div className={`sheet-skill${isProficient ? " is-proficient" : ""}`} key={`canvas-skill-${skill.key}`}>
                     <div className="sheet-skill__label">
-                      <span>{skill.label}</span>
+                      <span>{locale === "de" ? skill.label : englishSkillLabels[skill.key]}</span>
                     </div>
                     <em>{skill.ability.slice(0, 3).toUpperCase()}</em>
                     <strong>{formatModifier(total)}</strong>
@@ -891,50 +906,50 @@ function CharacterSheetCanvas({
         <div className="sheet-tab-panel">
           <section className="sheet-box sheet-box--combat">
             <article>
-              <span>Rüstungsklasse</span>
+              <span>{tr("Armor Class", "Rüstungsklasse")}</span>
               <strong>{renderInlineField("armor_class")}</strong>
             </article>
             <article>
-              <span>Initiative</span>
+              <span>{tr("Initiative", "Initiative")}</span>
               <strong>{assignment.dexterity ? formatModifier(abilityModifier(assignment.dexterity)) : "—"}</strong>
             </article>
             <article>
-              <span>Bewegung</span>
+              <span>{tr("Speed", "Bewegung")}</span>
               <strong>{renderInlineField("speed", { displayFallback: derivedSpeed })}</strong>
             </article>
             <article>
-              <span>TP max</span>
+              <span>{tr("Max HP", "TP max")}</span>
               <strong>{renderInlineField("hit_point_max")}</strong>
             </article>
             <article>
-              <span>Aktuelle TP</span>
+              <span>{tr("Current HP", "Aktuelle TP")}</span>
               <strong>{renderInlineField("current_hit_points", { displayFallback: sheetForm.hit_point_max || "—" })}</strong>
             </article>
             <article>
-              <span>Temp. TP</span>
+              <span>{tr("Temp. HP", "Temp. TP")}</span>
               <strong>{renderInlineField("temporary_hit_points", { displayFallback: "0" })}</strong>
             </article>
             <article>
-              <span>Trefferwürfel</span>
+              <span>{tr("Hit Dice", "Trefferwürfel")}</span>
               <strong>{renderInlineField("hit_dice", { displayFallback: derivedHitDie })}</strong>
             </article>
             <article>
-              <span>Übungsbonus</span>
+              <span>{tr("Proficiency Bonus", "Übungsbonus")}</span>
               <strong>{formatModifier(proficiency)}</strong>
             </article>
             <article>
-              <span>Inspiration</span>
+              <span>{tr("Inspiration", "Inspiration")}</span>
               <strong>{sheetForm.inspiration || "—"}</strong>
             </article>
             <article>
-              <span>Passive Wahrnehmung</span>
+              <span>{tr("Passive Perception", "Passive Wahrnehmung")}</span>
               <strong>{passivePerception}</strong>
             </article>
           </section>
           <section className="sheet-box">
             <div className="sheet-box__title-row">
-              <strong>Kampfausrüstung</strong>
-              <span>was im Kampf direkt relevant ist</span>
+              <strong>{tr("Combat Equipment", "Kampfausrüstung")}</strong>
+              <span>{tr("items directly relevant in combat", "im Kampf direkt relevante Gegenstände")}</span>
             </div>
             {renderInlineField("combat_overview", {
               multiline: true,
@@ -943,8 +958,8 @@ function CharacterSheetCanvas({
           </section>
           <section className="sheet-box">
             <div className="sheet-box__title-row">
-              <strong>Angriffe</strong>
-              <span>ANGRIFF · ÜB · ATTR. · REICHWEITE · BONUS · SCHADEN · SCHADENTYP</span>
+              <strong>{tr("Attacks", "Angriffe")}</strong>
+              <span>{tr("ATTACK · PROF. · ABILITY · RANGE · BONUS · DAMAGE · DAMAGE TYPE", "ANGRIFF · ÜB · ATTR. · REICHWEITE · BONUS · SCHADEN · SCHADENTYP")}</span>
             </div>
             <div className="sheet-table-card">
               {isEditMode ? (
@@ -952,19 +967,19 @@ function CharacterSheetCanvas({
                   {renderInlineField("combat_attacks", {
                     multiline: true,
                     inputPlaceholder:
-                      "Beispiel:\nLangbogen | +2 | GES | 150/600 ft | +5 | 1d8+3 | Stich\nBeschreibung: Standard-Fernkampfwaffe.",
+                      tr("Example:\nLongbow | +2 | DEX | 150/600 ft | +5 | 1d8+3 | Piercing\nDescription: Standard ranged weapon.", "Beispiel:\nLangbogen | +2 | GES | 150/600 ft | +5 | 1d8+3 | Stich\nBeschreibung: Standard-Fernkampfwaffe."),
                   })}
                 </div>
               ) : combatRows.length > 0 ? (
                 <div className="sheet-table-list">
                   <div className="sheet-table sheet-table--combat">
-                    <div className="sheet-table__head">Angriff</div>
-                    <div className="sheet-table__head">ÜB</div>
-                    <div className="sheet-table__head">Attr.</div>
-                    <div className="sheet-table__head">Reichweite</div>
-                    <div className="sheet-table__head">Bonus</div>
-                    <div className="sheet-table__head">Schaden</div>
-                    <div className="sheet-table__head">Schadentyp</div>
+                    <div className="sheet-table__head">{tr("Attack", "Angriff")}</div>
+                    <div className="sheet-table__head">{tr("Prof.", "ÜB")}</div>
+                    <div className="sheet-table__head">{tr("Ability", "Attr.")}</div>
+                    <div className="sheet-table__head">{tr("Range", "Reichweite")}</div>
+                    <div className="sheet-table__head">{tr("Bonus", "Bonus")}</div>
+                    <div className="sheet-table__head">{tr("Damage", "Schaden")}</div>
+                    <div className="sheet-table__head">{tr("Damage Type", "Schadentyp")}</div>
                   </div>
                   {combatRows.map((row, index) => (
                     <div className="sheet-table-entry" key={`combat-row-${index}`}>
@@ -974,7 +989,7 @@ function CharacterSheetCanvas({
                         ))}
                       </div>
                       <div className="sheet-table-entry__description">
-                        <span>Beschreibung</span>
+                        <span>{tr("Description", "Beschreibung")}</span>
                         <p>{row.description || "—"}</p>
                       </div>
                     </div>
@@ -982,7 +997,7 @@ function CharacterSheetCanvas({
                 </div>
               ) : (
                 <div className="sheet-table__body-copy">
-                  <p className="muted-copy">Noch keine Angriffe eingetragen.</p>
+                  <p className="muted-copy">{tr("No attacks entered yet.", "Noch keine Angriffe eingetragen.")}</p>
                 </div>
               )}
             </div>
@@ -994,23 +1009,23 @@ function CharacterSheetCanvas({
         <div className="sheet-tab-panel">
           <section className="sheet-box">
             <div className="sheet-box__title-row">
-              <strong>Magie-Status</strong>
-              <span>Sp, SG und Zauberangriffsbonus</span>
+              <strong>{tr("Magic Status", "Magiestatus")}</strong>
+              <span>{tr("spell slots, DC, and spell attack bonus", "Zauberplätze, SG und Zauberangriffsbonus")}</span>
             </div>
             <div className="sheet-tab-grid sheet-tab-grid--ability-status">
               <dl className="sheet-detail-list">
-                <div><dt>Sp</dt><dd>{renderInlineField("spells", { multiline: true, inputPlaceholder: "Zauberplätze, Slots oder verfügbare Magie." })}</dd></div>
+                <div><dt>{tr("Spells", "Zauber")}</dt><dd>{renderInlineField("spells", { multiline: true, inputPlaceholder: tr("Spell slots or available magic.", "Zauberplätze oder verfügbare Magie.") })}</dd></div>
               </dl>
               <dl className="sheet-detail-list">
-                <div><dt>Zauberrettungswurf-SG</dt><dd>{renderInlineField("spell_save_dc", { displayFallback: derivedSpellSaveDC })}</dd></div>
-                <div><dt>Zauberangriffsbonus</dt><dd>{renderInlineField("spell_attack_bonus", { displayFallback: derivedSpellAttackBonus })}</dd></div>
+                <div><dt>{tr("Spell Save DC", "Zauberrettungswurf-SG")}</dt><dd>{renderInlineField("spell_save_dc", { displayFallback: derivedSpellSaveDC })}</dd></div>
+                <div><dt>{tr("Spell Attack Bonus", "Zauberangriffsbonus")}</dt><dd>{renderInlineField("spell_attack_bonus", { displayFallback: derivedSpellAttackBonus })}</dd></div>
               </dl>
             </div>
           </section>
           <section className="sheet-box">
             <div className="sheet-box__title-row">
-              <strong>Zauberangriffe</strong>
-              <span>Stufe · Angriff · Attr. · Reichweite · Bonus · Schaden · Schadentyp</span>
+              <strong>{tr("Spell Attacks", "Zauberangriffe")}</strong>
+              <span>{tr("LEVEL · ATTACK · ABILITY · RANGE · BONUS · DAMAGE · DAMAGE TYPE", "STUFE · ANGRIFF · ATTR. · REICHWEITE · BONUS · SCHADEN · SCHADENTYP")}</span>
             </div>
             <div className="sheet-table-card">
               {isEditMode ? (
@@ -1018,19 +1033,19 @@ function CharacterSheetCanvas({
                   {renderInlineField("spell_attacks", {
                     multiline: true,
                     inputPlaceholder:
-                      "Beispiel:\nZaubertrick | Feuerstrahl | CHA | 120 ft | +5 | 1d10 | Feuer\nBeschreibung: Fernzauberangriff.",
+                      tr("Example:\nCantrip | Fire Bolt | CHA | 120 ft | +5 | 1d10 | Fire\nDescription: Ranged spell attack.", "Beispiel:\nZaubertrick | Feuerstrahl | CHA | 120 ft | +5 | 1d10 | Feuer\nBeschreibung: Fernzauberangriff."),
                   })}
                 </div>
               ) : spellAttackRows.length > 0 ? (
                 <div className="sheet-table-list">
                   <div className="sheet-table sheet-table--combat">
-                    <div className="sheet-table__head">Stufe</div>
-                    <div className="sheet-table__head">Angriff</div>
-                    <div className="sheet-table__head">Attr.</div>
-                    <div className="sheet-table__head">Reichweite</div>
-                    <div className="sheet-table__head">Bonus</div>
-                    <div className="sheet-table__head">Schaden</div>
-                    <div className="sheet-table__head">Schadentyp</div>
+                    <div className="sheet-table__head">{tr("Level", "Stufe")}</div>
+                    <div className="sheet-table__head">{tr("Attack", "Angriff")}</div>
+                    <div className="sheet-table__head">{tr("Ability", "Attr.")}</div>
+                    <div className="sheet-table__head">{tr("Range", "Reichweite")}</div>
+                    <div className="sheet-table__head">{tr("Bonus", "Bonus")}</div>
+                    <div className="sheet-table__head">{tr("Damage", "Schaden")}</div>
+                    <div className="sheet-table__head">{tr("Damage Type", "Schadentyp")}</div>
                   </div>
                   {spellAttackRows.map((row, index) => (
                     <div className="sheet-table-entry" key={`spell-row-${index}`}>
@@ -1040,7 +1055,7 @@ function CharacterSheetCanvas({
                         ))}
                       </div>
                       <div className="sheet-table-entry__description">
-                        <span>Beschreibung</span>
+                        <span>{tr("Description", "Beschreibung")}</span>
                         <p>{row.description || "—"}</p>
                       </div>
                     </div>
@@ -1048,15 +1063,15 @@ function CharacterSheetCanvas({
                 </div>
               ) : (
                 <div className="sheet-table__body-copy">
-                  <p className="muted-copy">Noch keine Zauberangriffe eingetragen.</p>
+                  <p className="muted-copy">{tr("No spell attacks entered yet.", "Noch keine Zauberangriffe eingetragen.")}</p>
                 </div>
               )}
             </div>
           </section>
           <section className="sheet-box">
             <div className="sheet-box__title-row">
-              <strong>Weitere Zauber</strong>
-              <span>kleine Beschreibung für andere Zauber</span>
+              <strong>{tr("Additional Spells", "Weitere Zauber")}</strong>
+              <span>{tr("short descriptions for other spells", "Kurzbeschreibungen für andere Zauber")}</span>
             </div>
             {renderInlineField("spell_notes", {
               multiline: true,
@@ -1070,25 +1085,25 @@ function CharacterSheetCanvas({
         <div className="sheet-tab-panel">
           <div className="sheet-tab-grid sheet-tab-grid--overview">
             <section className="sheet-box">
-              <strong>Persönlichkeit</strong>
+              <strong>{tr("Personality", "Persönlichkeit")}</strong>
               <dl className="sheet-detail-list">
-                <div><dt>Merkmale</dt><dd>{renderInlineField("personality_traits", { multiline: true })}</dd></div>
-                <div><dt>Ideale</dt><dd>{renderInlineField("ideals", { multiline: true })}</dd></div>
-                <div><dt>Bindungen</dt><dd>{renderInlineField("bonds", { multiline: true })}</dd></div>
-                <div><dt>Makel</dt><dd>{renderInlineField("flaws", { multiline: true })}</dd></div>
+                <div><dt>{tr("Traits", "Merkmale")}</dt><dd>{renderInlineField("personality_traits", { multiline: true })}</dd></div>
+                <div><dt>{tr("Ideals", "Ideale")}</dt><dd>{renderInlineField("ideals", { multiline: true })}</dd></div>
+                <div><dt>{tr("Bonds", "Bindungen")}</dt><dd>{renderInlineField("bonds", { multiline: true })}</dd></div>
+                <div><dt>{tr("Flaws", "Makel")}</dt><dd>{renderInlineField("flaws", { multiline: true })}</dd></div>
               </dl>
             </section>
             <section className="sheet-box">
-              <strong>Körper & Auftreten</strong>
+              <strong>{tr("Body & Appearance", "Körper & Auftreten")}</strong>
               <dl className="sheet-detail-list">
-                <div><dt>Alter</dt><dd>{renderInlineField("age")}</dd></div>
-                <div><dt>Größe</dt><dd>{renderInlineField("size")}</dd></div>
-                <div><dt>Gewicht</dt><dd>{renderInlineField("weight")}</dd></div>
-                <div><dt>Augen</dt><dd>{renderInlineField("eyes")}</dd></div>
-                <div><dt>Haut</dt><dd>{renderInlineField("skin")}</dd></div>
-                <div><dt>Haare</dt><dd>{renderInlineField("hair")}</dd></div>
-                <div><dt>Sprachen</dt><dd>{renderInlineField("languages", { multiline: true, displayFallback: "—" })}</dd></div>
-                <div><dt>Sinne</dt><dd>{renderInlineField("senses")}</dd></div>
+                <div><dt>{tr("Age", "Alter")}</dt><dd>{renderInlineField("age")}</dd></div>
+                <div><dt>{tr("Size", "Größe")}</dt><dd>{renderInlineField("size")}</dd></div>
+                <div><dt>{tr("Weight", "Gewicht")}</dt><dd>{renderInlineField("weight")}</dd></div>
+                <div><dt>{tr("Eyes", "Augen")}</dt><dd>{renderInlineField("eyes")}</dd></div>
+                <div><dt>{tr("Skin", "Haut")}</dt><dd>{renderInlineField("skin")}</dd></div>
+                <div><dt>{tr("Hair", "Haare")}</dt><dd>{renderInlineField("hair")}</dd></div>
+                <div><dt>{tr("Languages", "Sprachen")}</dt><dd>{renderInlineField("languages", { multiline: true, displayFallback: "—" })}</dd></div>
+                <div><dt>{tr("Senses", "Sinne")}</dt><dd>{renderInlineField("senses")}</dd></div>
               </dl>
             </section>
           </div>
@@ -1098,17 +1113,17 @@ function CharacterSheetCanvas({
       {activeTab === "gear" ? (
         <div className="sheet-tab-panel">
           <section className="sheet-box">
-            <strong>Ausrüstung</strong>
+            <strong>{tr("Equipment", "Ausrüstung")}</strong>
             <dl className="sheet-detail-list">
-              <div><dt>Startausrüstung</dt><dd>{renderInlineField("starting_equipment", { multiline: true })}</dd></div>
-              <div><dt>Geld</dt><dd>{renderInlineField("starting_money", { inputPlaceholder: "z. B. 15 gp, 7 sp" })}</dd></div>
-              <div><dt>Aktuelles Geld</dt><dd>{renderInlineField("current_money", { inputPlaceholder: "z. B. 22 gp, 4 sp" })}</dd></div>
-              <div><dt>Aktuelles Inventar</dt><dd>{renderInlineField("current_inventory", { multiline: true, inputPlaceholder: "Gefundene, gekaufte oder gehandelte Gegenstände." })}</dd></div>
-              <div><dt>Level-Up bereit</dt><dd>{renderInlineField("level_up_available")}</dd></div>
-              <div><dt>Werkzeuge</dt><dd>{renderInlineField("tools_and_proficiencies", { multiline: true })}</dd></div>
-              <div><dt>Waffen-Notizen</dt><dd>{renderInlineField("weapon_notes", { multiline: true })}</dd></div>
-              <div><dt>Verbündete</dt><dd>{renderInlineField("allies", { multiline: true })}</dd></div>
-              <div><dt>EP</dt><dd>{renderInlineField("experience_points")}</dd></div>
+              <div><dt>{tr("Starting Equipment", "Startausrüstung")}</dt><dd>{renderInlineField("starting_equipment", { multiline: true })}</dd></div>
+              <div><dt>{tr("Money", "Geld")}</dt><dd>{renderInlineField("starting_money", { inputPlaceholder: tr("e.g. 15 gp, 7 sp", "z. B. 15 GM, 7 SM") })}</dd></div>
+              <div><dt>{tr("Current Money", "Aktuelles Geld")}</dt><dd>{renderInlineField("current_money", { inputPlaceholder: tr("e.g. 22 gp, 4 sp", "z. B. 22 GM, 4 SM") })}</dd></div>
+              <div><dt>{tr("Current Inventory", "Aktuelles Inventar")}</dt><dd>{renderInlineField("current_inventory", { multiline: true, inputPlaceholder: tr("Found, purchased, or traded items.", "Gefundene, gekaufte oder gehandelte Gegenstände.") })}</dd></div>
+              <div><dt>{tr("Level-up Available", "Stufenaufstieg bereit")}</dt><dd>{renderInlineField("level_up_available")}</dd></div>
+              <div><dt>{tr("Tools", "Werkzeuge")}</dt><dd>{renderInlineField("tools_and_proficiencies", { multiline: true })}</dd></div>
+              <div><dt>{tr("Weapon Notes", "Waffennotizen")}</dt><dd>{renderInlineField("weapon_notes", { multiline: true })}</dd></div>
+              <div><dt>{tr("Allies", "Verbündete")}</dt><dd>{renderInlineField("allies", { multiline: true })}</dd></div>
+              <div><dt>{tr("XP", "EP")}</dt><dd>{renderInlineField("experience_points")}</dd></div>
             </dl>
           </section>
         </div>
@@ -1121,6 +1136,10 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   const router = useRouter();
   const { locale, tr } = useI18n();
   const { notify } = useNotifications();
+  const statusLabel = (status: string) => ({
+    draft: tr("draft", "Entwurf"), ready: tr("ready", "bereit"), assigned: tr("assigned", "zugeordnet"),
+    idle: tr("idle", "bereit"), error: tr("error", "Fehler"), unsupported: tr("unsupported", "nicht unterstützt"),
+  }[status] ?? status);
   const [rulesetFilter, setRulesetFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -1298,6 +1317,12 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     () => new Set(splitMetadataList(sheetForm.skill_proficiencies).map(normalizeSkillToken)),
     [sheetForm.skill_proficiencies]
   );
+
+  useEffect(() => {
+    if (rollCameraStatus === "idle") {
+      setRollCameraMessage(tr("Camera not started yet.", "Kamera noch nicht gestartet."));
+    }
+  }, [locale, rollCameraStatus, tr]);
 
   useEffect(() => {
     if (!selectedRulesetKey && rulesetGroups[0]) {
@@ -1594,7 +1619,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       return;
     }
     setIsRollCapturing(true);
-    setRollCameraMessage(`Werte für Wurf ${currentRollIndex + 1} werden ausgewertet...`);
+    setRollCameraMessage(tr(`Evaluating values for roll ${currentRollIndex + 1}...`, `Werte für Wurf ${currentRollIndex + 1} werden ausgewertet …`));
     try {
       const response = await detectDiceFromImage({ image_data_url: imageDataUrl, language: locale });
       const detected = response.dice
@@ -1614,7 +1639,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       setRolledSetsText(sets.map((set) => set.join(", ")).join("\n"));
       setConfirmedRolls((current) => current.map((value, index) => (index === currentRollIndex ? false : value)));
       setRollCameraMessage(
-        `Wurf ${currentRollIndex + 1} erkannt: ${detected.join(", ")}. Bitte kurz prüfen und bei Bedarf korrigieren.`
+        tr(`Roll ${currentRollIndex + 1} detected: ${detected.join(", ")}. Check and correct the values if needed.`, `Wurf ${currentRollIndex + 1} erkannt: ${detected.join(", ")}. Bitte kurz prüfen und bei Bedarf korrigieren.`)
       );
     } catch (error) {
       setRollCameraMessage(error instanceof Error ? error.message : tr("Camera evaluation failed.", "Kameraauswertung fehlgeschlagen."));
@@ -1646,7 +1671,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         setAssignment(normalizeAssignment(resolved.assignment));
         setRuleSummary(resolved.rule_summary);
         setAssignmentConfirmed(false);
-        setValidationMessage("Die sechs Würfe wurden übernommen. Die KI geht jetzt mit dir den nächsten Schritt durch.");
+        setValidationMessage(tr("The six rolls were applied. The AI will guide you through the next step.", "Die sechs Würfe wurden übernommen. Die KI führt dich jetzt durch den nächsten Schritt."));
 
         const updatedDraft = await applyCharacterBuilderPatch(builderCharacter.id, {
           patch: {
@@ -1681,7 +1706,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         setResolvedValues(resolved.values);
         setCurrentRollIndex(0);
         setConfirmedRolls(Array.from({ length: guidedRollCount }, () => false));
-        notify({ title: "Dice Step", message: "Alle sieben Würfe wurden verarbeitet und die besten sechs an den Builder übergeben.", tone: "success" });
+        notify({ title: tr("Dice Step", "Würfelschritt"), message: tr("All seven rolls were processed and the best six passed to the builder.", "Alle sieben Würfe wurden verarbeitet und die besten sechs an den Builder übergeben."), tone: "success" });
         router.refresh();
       } catch (error) {
         notify({
@@ -1710,7 +1735,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       return;
     }
     setCurrentRollIndex(nextIndex);
-    setRollCameraMessage(`Wurf ${currentRollIndex + 1} bestätigt. Jetzt bitte Wurf ${nextIndex + 1} mit 4d6 machen.`);
+    setRollCameraMessage(tr(`Roll ${currentRollIndex + 1} confirmed. Now make roll ${nextIndex + 1} with 4d6.`, `Wurf ${currentRollIndex + 1} bestätigt. Würfle jetzt Wurf ${nextIndex + 1} mit 4d6.`));
   }
 
   function handleStartBuilder() {
@@ -1733,11 +1758,11 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         setBuilderMessages(response.messages);
         syncSheetForm(response.character);
         setBuilderStep("chat");
-        notify({ title: "Character Draft", message: "Neuer Draft wurde gestartet.", tone: "success" });
+        notify({ title: tr("Character Draft", "Charakterentwurf"), message: tr("A new draft was started.", "Ein neuer Entwurf wurde gestartet."), tone: "success" });
       } catch (error) {
         notify({
           title: "Character Builder",
-          message: error instanceof Error ? error.message : "Builder konnte nicht gestartet werden.",
+          message: error instanceof Error ? error.message : tr("Could not start builder.", "Builder konnte nicht gestartet werden."),
           tone: "error",
         });
       }
@@ -1790,13 +1815,13 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         } else if (safeString(response.character.metadata.creation_method) === "standard") {
           setAbilityMethod("standard");
         }
-        notify({ title: "Builder", message: "Draft wurde mit der KI aktualisiert.", tone: "success" });
+        notify({ title: "Builder", message: tr("The AI updated the draft.", "Die KI hat den Entwurf aktualisiert."), tone: "success" });
       } catch (error) {
         setBuilderMessages((current) => current.filter((message) => message !== optimisticUserMessage));
         setBuilderInput(outgoingMessage);
         notify({
           title: "Builder",
-          message: error instanceof Error ? error.message : "Nachricht konnte nicht verarbeitet werden.",
+          message: error instanceof Error ? error.message : tr("Could not process message.", "Nachricht konnte nicht verarbeitet werden."),
           tone: "error",
         });
       } finally {
@@ -1841,7 +1866,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       setBuilderSpeechActiveKey(speechKey);
       const audio = builderSpeechAudioRef.current;
       if (!audio) {
-        throw new Error("Audioelement nicht bereit.");
+        throw new Error(tr("Audio element is not ready.", "Audioelement ist nicht bereit."));
       }
       audio.src = objectUrl;
       audio.currentTime = 0;
@@ -1857,7 +1882,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     } catch (error) {
       setBuilderSpeechActiveKey(speechKey);
       setBuilderSpeechUrl("");
-      setBuilderSpeechError(error instanceof Error && error.message ? error.message : "Sprachausgabe konnte nicht abgespielt werden.");
+      setBuilderSpeechError(error instanceof Error && error.message ? error.message : tr("Could not play speech output.", "Sprachausgabe konnte nicht abgespielt werden."));
     } finally {
       setBuilderSpeechLoadingKey("");
     }
@@ -1869,9 +1894,9 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       return;
     }
     setBuilderSTTError(null);
-    setBuilderSTTStatus("Mikrofon wird gestartet...");
+    setBuilderSTTStatus(tr("Starting microphone...", "Mikrofon wird gestartet …"));
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      setBuilderSTTError("Mikrofonzugriff benötigt HTTPS. Öffne die App über eine sichere HTTPS-Adresse oder erlaube die LAN-Adresse ausdrücklich im Browser.");
+      setBuilderSTTError(tr("Microphone access requires HTTPS. Open the app over HTTPS or explicitly allow the LAN address in your browser.", "Mikrofonzugriff benötigt HTTPS. Öffne die App über eine sichere HTTPS-Adresse oder erlaube die LAN-Adresse ausdrücklich im Browser."));
       setBuilderSTTStatus("");
       return;
     }
@@ -1905,7 +1930,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           window.clearTimeout(builderStopTimerRef.current);
           builderStopTimerRef.current = null;
         }
-        setBuilderSTTError("Sprachaufnahme konnte nicht gestartet werden.");
+        setBuilderSTTError(tr("Could not start voice recording.", "Sprachaufnahme konnte nicht gestartet werden."));
         setBuilderSTTStatus("");
         setIsBuilderRecording(false);
       };
@@ -1934,7 +1959,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
             throw new Error(tr("No speech detected.", "Keine Sprache erkannt."));
           }
           setBuilderInput((current) => (current.trim() ? `${current.trim()} ${transcript}` : transcript));
-          setBuilderSTTStatus("Transkript übernommen.");
+          setBuilderSTTStatus(tr("Transcript applied.", "Transkript übernommen."));
         } catch (error) {
           setBuilderSTTError(error instanceof Error && error.message ? error.message : tr("Speech recognition failed.", "Spracherkennung fehlgeschlagen."));
           setBuilderSTTStatus("");
@@ -1945,7 +1970,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       builderRecorderRef.current = recorder;
       recorder.start();
     } catch (error) {
-      setBuilderSTTError(error instanceof Error && error.message ? error.message : "Mikrofon konnte nicht geöffnet werden.");
+      setBuilderSTTError(error instanceof Error && error.message ? error.message : tr("Could not open microphone.", "Mikrofon konnte nicht geöffnet werden."));
       setBuilderSTTStatus("");
     }
   }
@@ -2019,12 +2044,12 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         setBuilderCharacter(updated);
         syncSheetForm(updated);
         setIsSheetEditMode(false);
-        notify({ title: "Character Sheet", message: "Sheet-Aenderungen wurden gespeichert.", tone: "success" });
+        notify({ title: tr("Character Sheet", "Charakterbogen"), message: tr("Sheet changes were saved.", "Änderungen am Bogen wurden gespeichert."), tone: "success" });
         router.refresh();
       } catch (error) {
         notify({
           title: "Character Sheet",
-          message: error instanceof Error ? error.message : "Sheet konnte nicht gespeichert werden.",
+          message: error instanceof Error ? error.message : tr("Could not save sheet.", "Bogen konnte nicht gespeichert werden."),
           tone: "error",
         });
       }
@@ -2061,7 +2086,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       } catch (error) {
         notify({
           title: "Ability Scores",
-          message: error instanceof Error ? error.message : "Werte konnten nicht aufgeloest werden.",
+          message: error instanceof Error ? error.message : tr("Could not resolve values.", "Werte konnten nicht aufgelöst werden."),
           tone: "error",
         });
       }
@@ -2079,13 +2104,13 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         setAssignmentConfirmed(response.valid);
         setValidationMessage(
           response.valid
-            ? "Zuordnung bestaetigt. Die Werte koennen jetzt in den Draft uebernommen werden."
+            ? tr("Assignment confirmed. The values can now be applied to the draft.", "Zuordnung bestätigt. Die Werte können jetzt in den Entwurf übernommen werden.")
             : `Zuordnung muss korrigiert werden. Missing: ${response.missing_abilities.join(", ") || "none"}`
         );
       } catch (error) {
         notify({
           title: "Ability Validation",
-          message: error instanceof Error ? error.message : "Zuordnung konnte nicht geprueft werden.",
+          message: error instanceof Error ? error.message : tr("Could not validate assignment.", "Zuordnung konnte nicht geprüft werden."),
           tone: "error",
         });
       }
@@ -2094,7 +2119,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
 
   function handleApplyAbilities() {
     if (!builderCharacter || !assignmentConfirmed) {
-      notify({ title: "Ability Scores", message: "Bitte zuerst die Zuordnung bestaetigen.", tone: "warning" });
+      notify({ title: tr("Ability Scores", "Attributwerte"), message: tr("Confirm the assignment first.", "Bestätige zuerst die Zuordnung."), tone: "warning" });
       return;
     }
     startTransition(async () => {
@@ -2119,12 +2144,12 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         setBuilderMessages(followUp.messages);
         syncSheetForm(followUp.character);
         setIsRollModalOpen(false);
-        notify({ title: "Ability Scores", message: "Werte wurden in den Draft uebernommen.", tone: "success" });
+        notify({ title: tr("Ability Scores", "Attributwerte"), message: tr("Values were applied to the draft.", "Werte wurden in den Entwurf übernommen."), tone: "success" });
         router.refresh();
       } catch (error) {
         notify({
           title: "Ability Scores",
-          message: error instanceof Error ? error.message : "Werte konnten nicht gespeichert werden.",
+          message: error instanceof Error ? error.message : tr("Could not save values.", "Werte konnten nicht gespeichert werden."),
           tone: "error",
         });
       }
@@ -2142,7 +2167,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         if (initialBuilderSeed?.playerSlotId) {
           await updatePlayerSlotCharacter(initialBuilderSeed.playerSlotId, { character_id: updated.id });
         }
-        notify({ title: "Character Ready", message: "Der Charakter ist jetzt als ready markiert.", tone: "success" });
+        notify({ title: tr("Character Ready", "Charakter bereit"), message: tr("The character is now marked as ready.", "Der Charakter ist jetzt als bereit markiert."), tone: "success" });
         if (initialBuilderSeed?.returnPath) {
           router.push(initialBuilderSeed.returnPath);
           return;
@@ -2151,8 +2176,8 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         closeBuilder();
       } catch (error) {
         notify({
-          title: "Character Ready",
-          message: error instanceof Error ? error.message : "Builder konnte nicht abgeschlossen werden.",
+          title: tr("Character Ready", "Charakter bereit"),
+          message: error instanceof Error ? error.message : tr("Could not finish builder.", "Builder konnte nicht abgeschlossen werden."),
           tone: "error",
         });
       }
@@ -2256,7 +2281,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
             </div>
           </div>
           <div className="library-toolbar__group">
-            <span className="library-toolbar__label">Status</span>
+            <span className="library-toolbar__label">{tr("Status", "Status")}</span>
             <div className="meta-chip-row">
               {["all", "draft", "ready", "assigned"].map((option) => (
                 <button
@@ -2285,7 +2310,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   <div className="meta-chip-row">
                     <StatusPill tone="info">{character.rulesetLabel}</StatusPill>
                     <StatusPill tone={character.statusLabel === "draft" ? "warning" : character.statusLabel === "assigned" ? "ready" : "default"}>
-                      {character.statusLabel}
+                      {statusLabel(character.statusLabel)}
                     </StatusPill>
                   </div>
                 </div>
@@ -2293,7 +2318,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                 <div className="character-roster-abilities">
                   {abilityOrder.map((ability) => (
                     <div className="character-roster-ability" key={`${character.id}-${ability}`}>
-                      <span>{abilityLabels[ability].slice(0, 3)}</span>
+                      <span>{(locale === "de" ? abilityLabels[ability] : englishAbilityLabels[ability]).slice(0, 3)}</span>
                       <strong>{character.abilities[ability] || "—"}</strong>
                     </div>
                   ))}
@@ -2408,8 +2433,8 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     {selectedRulesetGroup?.work === "5E" && selectedRulesetGroup?.version === "2014" ? (
                       <>
                         <StatusPill tone="ready">{tr("Built-in example", "Integriertes Beispiel")}</StatusPill>
-                        <StatusPill tone="info">Character Builder Guide</StatusPill>
-                        <StatusPill tone="default">Level-Up Guide</StatusPill>
+                        <StatusPill tone="info">{tr("Character Builder Guide", "Leitfaden zur Charaktererstellung")}</StatusPill>
+                        <StatusPill tone="default">{tr("Level-Up Guide", "Leitfaden zum Stufenaufstieg")}</StatusPill>
                       </>
                     ) : (
                       <StatusPill tone="default">{tr("No built-in example guide for this ruleset", "Kein integrierter Beispiel-Guide für dieses Regelwerk")}</StatusPill>
@@ -2549,7 +2574,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                       </div>
                       {builderCharacter ? (
                         <StatusPill tone={safeString(builderCharacter.metadata.builder_status) === "draft" ? "warning" : "ready"}>
-                          {safeString(builderCharacter.metadata.builder_status) || "draft"}
+                          {statusLabel(safeString(builderCharacter.metadata.builder_status) || "draft")}
                         </StatusPill>
                       ) : null}
                     </div>
@@ -2655,7 +2680,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     <p>{tr("Place only the four d6 for this roll in the camera view.", "Lege nur die vier d6 für diesen Wurf in das Kamerabild.")}</p>
                   </div>
                   <StatusPill tone={rollCameraStatus === "ready" ? "ready" : rollCameraStatus === "error" ? "warning" : "info"}>
-                    {rollCameraStatus}
+                    {statusLabel(rollCameraStatus)}
                   </StatusPill>
                 </div>
                 <div className="meta-chip-row">
