@@ -2,6 +2,7 @@
 
 import { Bell, CheckCircle2, Info, TriangleAlert, XCircle } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createClientId } from "../lib/client-id";
 
 type NotificationTone = "success" | "info" | "warning" | "error";
 
@@ -28,7 +29,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const notify = useCallback((item: Omit<NotificationItem, "id" | "createdAt">) => {
     const next: NotificationItem = {
       ...item,
-      id: crypto.randomUUID(),
+      id: createClientId("notification"),
       createdAt: Date.now(),
     };
     setActiveItems((current) => [next, ...current].slice(0, 8));

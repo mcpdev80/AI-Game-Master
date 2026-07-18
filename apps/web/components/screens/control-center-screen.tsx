@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Camera, Database, Dices, Mic, Monitor, Network, PlayCircle, Radio, RefreshCw, Square, Volume2, Wifi, X } from "lucide-react";
 import { PageIntro, Panel, StatCard, StatusPill } from "../studio-primitives";
 import { createFungalCavernsDemo, detectDiceFromImage, fetchLLMModels, stabilizeDiceFrames, testLLMConnection, updateSystemConfig, type DiceBox, type DiceDetection, type DiceDetectionFrame, type LLMGatewayStatus } from "../../lib/api";
+import { createClientId } from "../../lib/client-id";
 import type { PlayerLinkSlot, Session } from "../../lib/api";
 
 type ControlCenterScreenProps = {
@@ -77,7 +78,7 @@ function generateGuidedRollPlan(): GuidedRollStep[] {
     const type = types[randomInt(0, types.length - 1)];
     const count = type === "d20" ? randomInt(1, 2) : type === "d100" ? 1 : randomInt(1, 4);
     steps.push({
-      id: crypto.randomUUID(),
+      id: createClientId("guided-roll"),
       type,
       count,
       label: labels[randomInt(0, labels.length - 1)],
@@ -518,7 +519,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     try {
       if (showDiceDebugInput && diceFrameDraft.length > 0) {
         const nextFrame: DiceDetectionFrame = {
-          frame_id: crypto.randomUUID(),
+          frame_id: createClientId("dice-frame"),
           dice: diceFrameDraft,
           confidence: 0.95,
           timestamp: new Date().toISOString(),
@@ -565,7 +566,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
         detectionImages.push(imageDataURL);
         detectionBoxes.push(detection.boxes);
         capturedFrames.push({
-          frame_id: crypto.randomUUID(),
+          frame_id: createClientId("dice-frame"),
           dice: detection.dice,
           confidence: detection.confidence || 0.8,
           timestamp: new Date().toISOString(),

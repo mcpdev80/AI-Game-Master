@@ -1855,6 +1855,11 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     }
     setBuilderSTTError(null);
     setBuilderSTTStatus("Mikrofon wird gestartet...");
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setBuilderSTTError("Mikrofonzugriff benötigt HTTPS. Öffne die App über eine sichere HTTPS-Adresse oder erlaube die LAN-Adresse ausdrücklich im Browser.");
+      setBuilderSTTStatus("");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       builderAudioStreamRef.current?.getTracks().forEach((track) => track.stop());

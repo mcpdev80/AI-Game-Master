@@ -18,6 +18,9 @@ async function waitForOpening(request: APIRequestContext, sessionId: string) {
 }
 
 test("complete browser golden path from demo and character builder to dice resolution", async ({ page, request, context }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis.crypto, "randomUUID", { configurable: true, value: undefined });
+  });
   await context.grantPermissions(["camera", "microphone"], { origin: "http://localhost:13005" });
 
   await page.goto("/control-center");
