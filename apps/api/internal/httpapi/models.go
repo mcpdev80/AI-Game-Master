@@ -418,6 +418,7 @@ type StartCharacterBuilderRequest struct {
 	RulesetVersion      string   `json:"ruleset_version" binding:"required,min=1,max=120"`
 	SelectedDocumentIDs []string `json:"selected_document_ids" binding:"required,min=1"`
 	PlayerName          string   `json:"player_name"`
+	Language            string   `json:"language" binding:"omitempty,oneof=en de"`
 }
 
 type StartCharacterBuilderResponse struct {
@@ -426,7 +427,8 @@ type StartCharacterBuilderResponse struct {
 }
 
 type CharacterBuilderMessageRequest struct {
-	Message string `json:"message" binding:"required,min=1,max=4000"`
+	Message  string `json:"message" binding:"required,min=1,max=4000"`
+	Language string `json:"language" binding:"omitempty,oneof=en de"`
 }
 
 type CharacterBuilderMessageResponse struct {

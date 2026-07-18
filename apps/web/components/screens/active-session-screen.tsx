@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Brain, Camera, Check, Copy, FileText, ImageIcon, Map as MapIcon, Monitor, Pause, Send, Users, X } from "lucide-react";
 import { Panel, StatusPill } from "../studio-primitives";
+import { useI18n } from "../../lib/i18n";
 import {
   apiPost,
   pauseSession,
@@ -96,6 +97,7 @@ function summarizeEvent(event: SessionEvent): { title: string; body: string } {
 }
 
 export function ActiveSessionScreen({ session, events, playerLinks, adventures, documents, assets, characters }: ActiveSessionScreenProps) {
+  const { locale, tr } = useI18n();
   const recentEvents = events.slice(0, 8);
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -142,7 +144,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
     const response = await apiPost<GMResponse>("/api/gm/respond", {
       session_id: session.id,
       player_input: nextPrompt,
-      language: session.language,
+      language: locale,
     });
     setLocalResponse(response);
   }
@@ -158,23 +160,23 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
         await sendPrompt(prompt.trim());
         setPrompt("");
       } catch (sendError) {
-        setError(sendError instanceof Error ? sendError.message : "Could not send prompt to AI");
+        setError(sendError instanceof Error ? sendError.message : tr("Could not send prompt to AI", "Prompt konnte nicht an die KI gesendet werden"));
       }
     });
   }
 
   function handleRulesQuery() {
     if (!prompt.trim()) {
-      setError("Enter a rule or monster question first.");
+      setError(tr("Enter a rule or monster question first.", "Gib zuerst eine Regel- oder Monsterfrage ein."));
       return;
     }
     setError(null);
     setPushMessage(null);
     startTransition(async () => {
       try {
-        await sendPrompt(`Rules query: ${prompt.trim()}`);
+        await sendPrompt(`${tr("Rules query", "Regelfrage")}: ${prompt.trim()}`);
       } catch (sendError) {
-        setError(sendError instanceof Error ? sendError.message : "Could not query rules");
+        setError(sendError instanceof Error ? sendError.message : tr("Could not query rules", "Regeln konnten nicht abgefragt werden"));
       }
     });
   }
@@ -188,13 +190,16 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
         setJoinUrlCopied(true);
         window.setTimeout(() => setJoinUrlCopied(false), 1600);
       } catch (copyError) {
-        setError(copyError instanceof Error ? copyError.message : "Join-URL konnte nicht kopiert werden");
+        setError(copyError instanceof Error ? copyError.message : tr("Could not copy join URL", "Join-URL konnte nicht kopiert werden"));
       }
     });
   }
 
   const displayedNarration =
-    localResponse?.narration || session.state.last_narration || "The AI DM is ready to describe the next scene once the session is started.";
+    localResponse?.narration || session.state.last_narration || tr(
+      "The AI DM is ready to describe the next scene once the session is started.",
+      "Der KI-Spielleiter beschreibt die nächste Szene, sobald die Sitzung gestartet ist."
+    );
   const displayedNotes = localResponse?.dm_notes ?? session.state.last_dm_notes ?? [];
   const displayedCue = localResponse?.scene_events?.[0]?.name || session.state.active_media_cue;
 
@@ -222,12 +227,12 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
 
   function renderCharacterSheet(character: Character) {
     const tabLabels: Array<[SessionSheetTab, string]> = [
-      ["overview", "Überblick"],
-      ["abilities", "Attribute & Fertigkeiten"],
-      ["combat", "Kampf"],
-      ["magic", "Magie"],
-      ["personality", "Persönlichkeit"],
-      ["gear", "Ausrüstung & Magie"],
+      ["overview", tr("Overview", "Überblick")],
+      ["abilities", tr("Abilities & Skills", "Attribute & Fertigkeiten")],
+      ["combat", tr("Combat", "Kampf")],
+      ["magic", tr("Magic", "Magie")],
+      ["personality", tr("Personality", "Persönlichkeit")],
+      ["gear", tr("Equipment & Magic", "Ausrüstung & Magie")],
     ];
     const currentInventory = splitLines(characterMetaValue(character, "current_inventory"));
     const startingEquipment = splitLines(characterMetaValue(character, "starting_equipment"));
@@ -450,7 +455,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
         }
         router.refresh();
       } catch (lifecycleError) {
-        setError(lifecycleError instanceof Error ? lifecycleError.message : "Could not update session status");
+        setError(lifecycleError instanceof Error ? lifecycleError.message : tr("Could not update session status", "Sitzungsstatus konnte nicht aktualisiert werden"));
       }
     });
   }
@@ -469,7 +474,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
           target_player_count: Number(sessionTargetPlayers) || 4,
           current_scene: session.current_scene,
           current_location: session.current_location,
-          language: session.language,
+          language: locale,
           default_voice_profile_id: session.default_voice_profile_id,
           selected_rulebook_ids: selectedRulebookIDs,
           prompt_config: {
@@ -488,7 +493,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
         });
         router.refresh();
       } catch (saveError) {
-        setError(saveError instanceof Error ? saveError.message : "Session konnte nicht gespeichert werden");
+        setError(saveError instanceof Error ? saveError.message : tr("Could not save session", "Sitzung konnte nicht gespeichert werden"));
       }
     });
   }
@@ -502,9 +507,9 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
           </StatusPill>
           <div className="active-session__ai">
             <Brain size={16} />
-            <span>AI DM narrating the session</span>
+            <span>{tr("AI DM narrating the session", "KI-Spielleiter erzählt die Sitzung")}</span>
           </div>
-          <h1>{session.name || session.current_scene || "Active Session"}</h1>
+          <h1>{session.name || session.current_scene || tr("Active Session", "Aktive Sitzung")}</h1>
         </div>
         <div className="button-row">
           <button
@@ -514,21 +519,21 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             type="button"
           >
             <Pause size={16} />
-            {session.status === "live" ? "Pause Session" : "Start Session"}
+            {session.status === "live" ? tr("Pause Session", "Sitzung pausieren") : tr("Start Session", "Sitzung starten")}
           </button>
           <button className="studio-button studio-button--danger" disabled={isPending} onClick={() => handleLifecycle("stop")} type="button">
-            End Session
+            {tr("End Session", "Sitzung beenden")}
           </button>
         </div>
       </header>
 
       <div className="active-session__grid">
         <aside className="active-session__rail">
-          <Panel title="Session Settings" description="Regelwerk, Abenteuer und Session-Rahmen bearbeiten.">
+          <Panel title={tr("Session Settings", "Sitzungseinstellungen")} description={tr("Edit rules, adventure, and session framework.", "Regelwerk, Abenteuer und Sitzungsrahmen bearbeiten.")}>
             <div className="form-grid">
               <input onChange={(event) => setSessionName(event.target.value)} value={sessionName} />
               <select onChange={(event) => setSessionRulesetKey(event.target.value)} value={sessionRulesetKey}>
-                <option value="">Regelwerk wählen</option>
+                <option value="">{tr("Select ruleset", "Regelwerk wählen")}</option>
                 {availableRulesets.map((ruleset) => (
                   <option key={ruleset.key} value={ruleset.key}>
                     {ruleset.label}
@@ -536,7 +541,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 ))}
               </select>
               <select onChange={(event) => setSessionAdventureId(event.target.value)} value={sessionAdventureId}>
-                <option value="">Adventure wählen</option>
+                <option value="">{tr("Select adventure", "Abenteuer wählen")}</option>
                 {adventures
                   .filter((adventure) => !adventure.campaign_id || adventure.campaign_id === session.campaign_id)
                   .map((adventure) => (
@@ -548,16 +553,16 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
               <input min={1} onChange={(event) => setSessionTargetPlayers(event.target.value)} type="number" value={sessionTargetPlayers} />
             </div>
             <p className="muted-copy">
-              Passende Rulebooks in der Library: {matchingRulebooks.length}. Das primäre Regelwerk der Session wird hier direkt umgestellt.
+              {tr("Matching rulebooks in the library", "Passende Regelbücher in der Bibliothek")}: {matchingRulebooks.length}. {tr("The session's primary ruleset is changed here.", "Das primäre Regelwerk der Sitzung wird hier direkt umgestellt.")}
             </p>
             <div className="button-row">
               <button className="studio-button" disabled={isPending} onClick={handleSaveSettings} type="button">
-                Save Session
+                {tr("Save Session", "Sitzung speichern")}
               </button>
             </div>
           </Panel>
 
-          <Panel title="Rulebooks in Scope" description="Nur diese Regelbücher sollen für diese Session gelten.">
+          <Panel title={tr("Rulebooks in Scope", "Verwendete Regelbücher")} description={tr("Only these rulebooks apply to this session.", "Nur diese Regelbücher gelten für diese Sitzung.")}>
             <div className="list-stack">
               {matchingRulebooks.map((document) => {
                 const checked = selectedRulebookIDs.includes(document.id);
@@ -579,51 +584,51 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                   </label>
                 );
               })}
-              {matchingRulebooks.length === 0 ? <p className="muted-copy">Keine passenden Regelbücher für das gewählte Regelwerk gefunden.</p> : null}
+              {matchingRulebooks.length === 0 ? <p className="muted-copy">{tr("No matching rulebooks found for the selected ruleset.", "Keine passenden Regelbücher für das gewählte Regelwerk gefunden.")}</p> : null}
             </div>
           </Panel>
 
-          <Panel title="AI Prompt Setup" description="Der AI DM bekommt pro Session einen anpassbaren Stil- und Fokusrahmen.">
+          <Panel title={tr("AI Prompt Setup", "KI-Prompt-Einrichtung")} description={tr("Configure the AI DM's style and focus for this session.", "Stil und Fokus des KI-Spielleiters für diese Sitzung anpassen.")}>
             <div className="form-grid">
               <input onChange={(event) => setGMStyle(event.target.value)} placeholder="GM Style" value={gmStyle} />
               <input onChange={(event) => setIntroStyle(event.target.value)} placeholder="Intro Style" value={introStyle} />
               <input onChange={(event) => setAdventureFocus(event.target.value)} placeholder="Adventure Focus" value={adventureFocus} />
               <input onChange={(event) => setRulesStrictness(event.target.value)} placeholder="Rules Strictness" value={rulesStrictness} />
               <input onChange={(event) => setPlayerAgencyStyle(event.target.value)} placeholder="Player Agency Style" value={playerAgencyStyle} />
-              <textarea className="studio-textarea" onChange={(event) => setPromptOverride(event.target.value)} placeholder="Zusätzlicher Session-Prompt-Override" rows={5} value={promptOverride} />
+              <textarea className="studio-textarea" onChange={(event) => setPromptOverride(event.target.value)} placeholder={tr("Additional session prompt override", "Zusätzliche Sitzungs-Prompt-Anweisung")} rows={5} value={promptOverride} />
             </div>
           </Panel>
 
-          <Panel title="Scene Context" description="What the AI currently believes about the scene.">
+          <Panel title={tr("Scene Context", "Szenenkontext")} description={tr("What the AI currently knows about the scene.", "Was die KI aktuell über die Szene weiß.")}>
             <dl className="meta-list">
               <div>
-                <dt>Location</dt>
-                <dd>{session.current_location || "Unknown"}</dd>
+                <dt>{tr("Location", "Ort")}</dt>
+                <dd>{session.current_location || tr("Unknown", "Unbekannt")}</dd>
               </div>
               <div>
-                <dt>Scene</dt>
-                <dd>{session.current_scene || "Not set"}</dd>
+                <dt>{tr("Scene", "Szene")}</dt>
+                <dd>{session.current_scene || tr("Not set", "Nicht festgelegt")}</dd>
               </div>
               <div>
-                <dt>Active cue</dt>
-                <dd>{displayedCue || "No active media cue"}</dd>
+                <dt>{tr("Active cue", "Aktiver Hinweis")}</dt>
+                <dd>{displayedCue || tr("No active media cue", "Kein aktiver Medienhinweis")}</dd>
               </div>
               <div>
-                <dt>Board mode</dt>
+                <dt>{tr("Board mode", "Anzeigemodus")}</dt>
                 <dd>{session.state.visual_mode || "pause_or_recap"}</dd>
               </div>
               <div>
-                <dt>Ambient</dt>
-                <dd>{session.state.ambient_cue_id || "None"}</dd>
+                <dt>{tr("Ambient", "Umgebung")}</dt>
+                <dd>{session.state.ambient_cue_id || tr("None", "Keine")}</dd>
               </div>
             </dl>
           </Panel>
 
-          <Panel title="Camera Feed" description="Dice and table recognition feed.">
+          <Panel title={tr("Camera Feed", "Kamerabild")} description={tr("Dice and table recognition feed.", "Erkennung von Würfeln und Spieltisch.")}>
             <div className="camera-box">
               <Camera size={32} />
             </div>
-            <p className="muted-copy">Dice recognition is part of the live operator workflow and character generation path.</p>
+            <p className="muted-copy">{tr("Dice recognition is part of the live operator workflow and character creation.", "Die Würfelerkennung gehört zum Live-Ablauf und zur Charaktererstellung.")}</p>
           </Panel>
         </aside>
 
@@ -631,7 +636,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
           <section className="narrative-stage">
             <article className="narrative-card narrative-card--ai">
               <div className="narrative-card__meta">
-                <StatusPill tone="info">AI Output</StatusPill>
+                <StatusPill tone="info">{tr("AI Output", "KI-Ausgabe")}</StatusPill>
               </div>
               <p>{displayedNarration}</p>
             </article>
@@ -639,7 +644,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             {localResponse?.context_chunks?.length ? (
               <article className="narrative-card">
                 <div className="narrative-card__meta">
-                  <StatusPill tone="warning">Rules Context</StatusPill>
+                  <StatusPill tone="warning">{tr("Rules Context", "Regelkontext")}</StatusPill>
                 </div>
                 <div className="list-stack">
                   {localResponse.context_chunks.slice(0, 3).map((chunk, index) => (
@@ -669,10 +674,10 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
           <section className="admin-composer">
             <div className="admin-composer__head">
               <div>
-                <strong>Admin Input</strong>
-                <p>This is operator guidance for the AI DM, not direct player-facing text.</p>
+                <strong>{tr("Admin Input", "Spielleiter-Eingabe")}</strong>
+                <p>{tr("This guides the AI DM and is not shown directly to players.", "Diese Anweisung steuert den KI-Spielleiter und wird Spielern nicht direkt angezeigt.")}</p>
               </div>
-              <StatusPill tone="warning">Operator only</StatusPill>
+              <StatusPill tone="warning">{tr("Operator only", "Nur Spielleitung")}</StatusPill>
             </div>
             <div className="button-row">
               <button
@@ -688,21 +693,21 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                         visual_mode: "rules_reference",
                         visual_payload: {
                           document_id: selectedHandoutId,
-                          document_name: selectedDocument?.name || "Dokument",
+                          document_name: selectedDocument?.name || tr("Document", "Dokument"),
                           popup: true,
                         },
                       });
-                      setPushMessage("Dokument-Popup wurde auf dem Player-Screen angezeigt.");
+                      setPushMessage(tr("Document popup is now shown on the player screen.", "Dokument-Popup wird jetzt in der Spieleransicht angezeigt."));
                       router.refresh();
                     } catch (pushError) {
-                      setError(pushError instanceof Error ? pushError.message : "Dokument konnte nicht angezeigt werden");
+                      setError(pushError instanceof Error ? pushError.message : tr("Could not display document", "Dokument konnte nicht angezeigt werden"));
                     }
                   });
                 }}
                 type="button"
               >
                 <FileText size={16} />
-                Regelwerk/Handout als Popup
+                {tr("Show rules/handout popup", "Regelwerk/Handout als Popup")}
               </button>
               <button
                 className="studio-button studio-button--ghost"
@@ -719,17 +724,17 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                           popup: true,
                         },
                       });
-                      setPushMessage("Bild-Popup wurde auf dem Player-Screen angezeigt.");
+                      setPushMessage(tr("Image popup is now shown on the player screen.", "Bild-Popup wird jetzt in der Spieleransicht angezeigt."));
                       router.refresh();
                     } catch (pushError) {
-                      setError(pushError instanceof Error ? pushError.message : "Bild konnte nicht angezeigt werden");
+                      setError(pushError instanceof Error ? pushError.message : tr("Could not display image", "Bild konnte nicht angezeigt werden"));
                     }
                   });
                 }}
                 type="button"
               >
                 <ImageIcon size={16} />
-                Bild als Popup
+                {tr("Show image popup", "Bild als Popup")}
               </button>
               <button
                 className="studio-button studio-button--ghost"
@@ -742,22 +747,22 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                         visual_mode: "scene",
                         visual_payload: { dismiss_popup: true, auto_close: false },
                       });
-                      setPushMessage("Popup wurde vom Player-Screen entfernt.");
+                      setPushMessage(tr("Popup was removed from the player screen.", "Popup wurde aus der Spieleransicht entfernt."));
                       router.refresh();
                     } catch (pushError) {
-                      setError(pushError instanceof Error ? pushError.message : "Popup konnte nicht geschlossen werden");
+                      setError(pushError instanceof Error ? pushError.message : tr("Could not close popup", "Popup konnte nicht geschlossen werden"));
                     }
                   });
                 }}
                 type="button"
               >
                 <Monitor size={16} />
-                Popup schließen
+                {tr("Close popup", "Popup schließen")}
               </button>
             </div>
             <div className="form-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
               <select onChange={(event) => setSelectedHandoutId(event.target.value)} value={selectedHandoutId}>
-                <option value="">Regelwerk/Handout wählen</option>
+                <option value="">{tr("Select rules/handout", "Regelwerk/Handout wählen")}</option>
                 {releasedHandouts.map((document) => (
                   <option key={document.id} value={document.id}>
                     {document.name}
@@ -765,7 +770,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 ))}
               </select>
               <select onChange={(event) => setSelectedAssetId(event.target.value)} value={selectedAssetId}>
-                <option value="">Bild/Asset wählen</option>
+                <option value="">{tr("Select image/asset", "Bild/Asset wählen")}</option>
                 {releasedAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
                     {asset.name}
@@ -776,7 +781,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             <textarea
               className="studio-textarea"
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Guide the AI, pass in player actions, or ask a rule/monster question..."
+              placeholder={tr("Guide the AI, pass in player actions, or ask a rule/monster question...", "Steuere die KI, übergib Spieleraktionen oder stelle eine Regel-/Monsterfrage …")}
               value={prompt}
             />
             {error ? <p className="error-copy">{error}</p> : null}
@@ -784,27 +789,27 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             <div className="button-row">
               <button className="studio-button studio-button--ghost" disabled={isPending || !prompt.trim()} onClick={handleRulesQuery} type="button">
                 <MapIcon size={16} />
-                Query Rules
+                {tr("Query Rules", "Regeln abfragen")}
               </button>
               <button className="studio-button" disabled={isPending || !prompt.trim()} onClick={handleSend} type="button">
                 <Send size={16} />
-                {isPending ? "Sending..." : "Send to AI"}
+                {isPending ? tr("Sending...", "Wird gesendet …") : tr("Send to AI", "An KI senden")}
               </button>
             </div>
           </section>
         </main>
 
         <aside className="active-session__rail">
-          <Panel title="Session Header" description="Adventure, Join-Link und Spielerstatus für diese Runde.">
+          <Panel title={tr("Session Overview", "Sitzungsübersicht")} description={tr("Adventure, join link, and player status for this game.", "Abenteuer, Beitrittslink und Spielerstatus für diese Runde.")}>
             <div className="list-stack">
               <article className="list-row">
                 <Users size={16} />
                 <div className="list-row__body">
-                  <strong>Join-Link</strong>
-                  <p>Per Klick vollständige URL kopieren und direkt an Spieler weitergeben.</p>
+                  <strong>{tr("Join link", "Beitrittslink")}</strong>
+                  <p>{tr("Copy the full URL and share it with players.", "Vollständige URL kopieren und direkt an Spieler weitergeben.")}</p>
                 </div>
                 <button
-                  aria-label="Join-Link kopieren"
+                  aria-label={tr("Copy join link", "Beitrittslink kopieren")}
                   className="studio-button studio-button--ghost studio-button--inline"
                   onClick={handleCopyJoinUrl}
                   type="button"
@@ -815,8 +820,8 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
               <article className="list-row">
                 <MapIcon size={16} />
                 <div className="list-row__body">
-                  <strong>{selectedAdventure?.name || "Kein Abenteuer ausgewählt"}</strong>
-                  <p>{selectedAdventure?.description || "Für diese Session ist noch kein Abenteuer hinterlegt."}</p>
+                  <strong>{selectedAdventure?.name || tr("No adventure selected", "Kein Abenteuer ausgewählt")}</strong>
+                  <p>{selectedAdventure?.description || tr("No adventure has been assigned to this session.", "Für diese Sitzung ist noch kein Abenteuer hinterlegt.")}</p>
                 </div>
               </article>
             </div>
@@ -837,7 +842,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                     <Users size={16} />
                     <div className="list-row__body">
                       <strong>{slot.player_slot.display_name}</strong>
-                      <p>{character ? `${character.name} · ${character.class_and_level}` : "Noch kein Charakter gewählt"} · {slot.player_slot.status}</p>
+                      <p>{character ? `${character.name} · ${character.class_and_level}` : tr("No character selected", "Noch kein Charakter gewählt")} · {slot.player_slot.status}</p>
                     </div>
                   </button>
                 );
@@ -845,44 +850,44 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             </div>
           </Panel>
 
-          <Panel title="Group Inventory" description="Geteilte Gruppenbeute, Gold und Notizen für diese Session.">
+          <Panel title={tr("Group Inventory", "Gruppeninventar")} description={tr("Shared loot, gold, and notes for this session.", "Geteilte Beute, Gold und Notizen für diese Sitzung.")}>
             <div className="form-grid">
               <input min={0} onChange={(event) => setGroupGold(event.target.value)} placeholder="Gold" type="number" value={groupGold} />
-              <textarea className="studio-textarea" onChange={(event) => setGroupItems(event.target.value)} placeholder="Items, ein Eintrag pro Zeile" rows={6} value={groupItems} />
-              <textarea className="studio-textarea" onChange={(event) => setGroupNotes(event.target.value)} placeholder="Notizen zum Gruppeninventar" rows={4} value={groupNotes} />
+              <textarea className="studio-textarea" onChange={(event) => setGroupItems(event.target.value)} placeholder={tr("Items, one per line", "Gegenstände, ein Eintrag pro Zeile")} rows={6} value={groupItems} />
+              <textarea className="studio-textarea" onChange={(event) => setGroupNotes(event.target.value)} placeholder={tr("Group inventory notes", "Notizen zum Gruppeninventar")} rows={4} value={groupNotes} />
             </div>
           </Panel>
 
-          <Panel title="Output Routing" description="What the AI can show to players and where.">
+          <Panel title={tr("Output Routing", "Ausgabesteuerung")} description={tr("What the AI can show to players and where.", "Was die KI den Spielern wo anzeigen kann.")}>
             <div className="output-list">
               <div className="output-list__item">
                 <Monitor size={16} />
                 <div>
                   <strong>AI DM Visual Board</strong>
-                  <p>{session.state.visual_mode || "pause_or_recap"} · current shared output</p>
+                  <p>{session.state.visual_mode || "pause_or_recap"} · {tr("current shared output", "aktuelle gemeinsame Ausgabe")}</p>
                 </div>
               </div>
               <div className="output-list__item">
                 <Users size={16} />
                 <div>
-                  <strong>Player Portals</strong>
-                  <p>Character stats, session feed, and released handouts</p>
+                  <strong>{tr("Player Portals", "Spielerportale")}</strong>
+                  <p>{tr("Character stats, session feed, and released handouts", "Charakterwerte, Sitzungsverlauf und freigegebene Handouts")}</p>
                 </div>
               </div>
               <div className="output-list__item">
                 <Brain size={16} />
                 <div>
-                  <strong>Voice & Ambient</strong>
+                  <strong>{tr("Voice & Ambient", "Stimme & Atmosphäre")}</strong>
                   <p>{session.state.active_voice_profile_id || "narrator-default"} · {session.state.ambient_cue_id || "silence"}</p>
                 </div>
               </div>
             </div>
           </Panel>
 
-          <Panel title="DM Notes" description="Internal notes stored in session state or returned by the last prompt.">
+          <Panel title={tr("DM Notes", "Spielleiter-Notizen")} description={tr("Internal notes stored in the session or returned by the last prompt.", "Interne Notizen aus der Sitzung oder der letzten KI-Antwort.")}>
             <div className="list-stack">
               {displayedNotes.length === 0 ? (
-                <p className="empty-copy">No DM notes yet.</p>
+                <p className="empty-copy">{tr("No DM notes yet.", "Noch keine Spielleiter-Notizen.")}</p>
               ) : (
                 displayedNotes.map((note) => <p className="note-chip" key={note}>{note}</p>)
               )}
@@ -896,12 +901,12 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
           <section className="modal-card modal-card--builder" onClick={(event) => event.stopPropagation()} role="dialog">
             <div className="modal-card__header">
               <div>
-                <p className="eyebrow">Character Sheet</p>
+                <p className="eyebrow">{tr("Character Sheet", "Charakterbogen")}</p>
                 <h2 className="studio-panel__title">{selectedCharacter.name}</h2>
               </div>
               <button className="studio-button studio-button--ghost studio-button--inline" onClick={() => setSelectedCharacter(null)} type="button">
                 <X size={16} />
-                Schließen
+                {tr("Close", "Schließen")}
               </button>
             </div>
             {renderCharacterSheet(selectedCharacter)}

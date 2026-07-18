@@ -9,6 +9,7 @@ import {
   type SessionEvent,
 } from "../lib/api";
 import { MediaPanel } from "./media-panel";
+import { useI18n } from "../lib/i18n";
 
 type Props = {
   sessions: Session[];
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function GMConsole({ sessions, initialEvents }: Props) {
+  const { locale } = useI18n();
   const [selectedSessionId, setSelectedSessionId] = useState(sessions[0]?.id ?? "");
   const [playerInput, setPlayerInput] = useState("");
   const [diceType, setDiceType] = useState("d20");
@@ -81,7 +83,7 @@ export function GMConsole({ sessions, initialEvents }: Props) {
               const response = await apiPost<GMResponse>("/api/gm/respond", {
                 session_id: session.id,
                 player_input: playerInput,
-                language: session.language,
+                language: locale,
                 dice_roll: diceRoll,
               });
               setResult(response);

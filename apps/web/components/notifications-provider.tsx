@@ -3,6 +3,7 @@
 import { Bell, CheckCircle2, Info, TriangleAlert, XCircle } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { createClientId } from "../lib/client-id";
+import { useI18n } from "../lib/i18n";
 
 type NotificationTone = "success" | "info" | "warning" | "error";
 
@@ -21,6 +22,7 @@ type NotificationContextValue = {
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
+  const { tr } = useI18n();
   const [activeItems, setActiveItems] = useState<NotificationItem[]>([]);
   const [historyItems, setHistoryItems] = useState<NotificationItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -66,7 +68,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         {isOpen ? (
           <div className="notification-panel">
             <div className="notification-panel__head">
-              <strong>Notifications</strong>
+              <strong>{tr("Notifications", "Benachrichtigungen")}</strong>
               <button
                 className="studio-button studio-button--ghost studio-button--inline"
                 onClick={() => {
@@ -75,11 +77,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
                 }}
                 type="button"
               >
-                Clear
+                {tr("Clear", "Leeren")}
               </button>
             </div>
             <div className="notification-panel__list">
-              {historyItems.length === 0 ? <p className="empty-copy">No notifications yet.</p> : null}
+              {historyItems.length === 0 ? <p className="empty-copy">{tr("No notifications yet.", "Noch keine Benachrichtigungen.")}</p> : null}
               {historyItems.map((item) => (
                 <article className={`notification-entry notification-entry--${item.tone}`} key={item.id}>
                   <div className="notification-toast__icon">{iconForTone(item.tone)}</div>

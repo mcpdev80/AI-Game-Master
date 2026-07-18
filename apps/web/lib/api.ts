@@ -604,13 +604,14 @@ export async function startCharacterBuilder(payload: {
   ruleset_version: string;
   selected_document_ids: string[];
   player_name?: string;
+  language: "en" | "de";
 }): Promise<{ character: Character; messages: CharacterBuilderMessage[] }> {
   return apiPost<{ character: Character; messages: CharacterBuilderMessage[] }>("/api/characters/builder/start", payload);
 }
 
 export async function sendCharacterBuilderMessage(
   characterId: string,
-  payload: { message: string }
+  payload: { message: string; language: "en" | "de" }
 ): Promise<{
   character: Character;
   messages: CharacterBuilderMessage[];

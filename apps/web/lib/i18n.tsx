@@ -44,6 +44,7 @@ type I18nContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: (key: MessageKey) => string;
+  tr: (english: string, german: string) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -52,18 +53,21 @@ function isLocale(value: string | null): value is Locale {
   return value === "en" || value === "de";
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
+export function I18nProvider({ children, initialLocale = DEFAULT_LOCALE }: { children: ReactNode; initialLocale?: Locale }) {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
 
   useEffect(() => {
     const savedLocale = window.localStorage.getItem(STORAGE_KEY);
-    if (isLocale(savedLocale)) {
+    const hasLocaleCookie = document.cookie.split(";").some((entry) => entry.trim().startsWith("locale="));
+    if (!hasLocaleCookie && isLocale(savedLocale)) {
       setLocaleState(savedLocale);
+      document.cookie = `locale=${savedLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
       document.documentElement.lang = savedLocale;
       return;
     }
-    document.documentElement.lang = DEFAULT_LOCALE;
-  }, []);
+    window.localStorage.setItem(STORAGE_KEY, initialLocale);
+    document.documentElement.lang = initialLocale;
+  }, [initialLocale]);
 
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);
@@ -73,7 +77,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const t = useCallback((key: MessageKey) => messages[locale][key] ?? messages.en[key], [locale]);
-  const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
+  const tr = useCallback((english: string, german: string) => (locale === "de" ? german : english), [locale]);
+  const value = useMemo(() => ({ locale, setLocale, t, tr }), [locale, setLocale, t, tr]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

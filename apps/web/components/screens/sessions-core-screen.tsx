@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { PageIntro, StatCard, StatusPill } from "../studio-primitives";
 import { useNotifications } from "../notifications-provider";
+import { useI18n } from "../../lib/i18n";
 import {
   apiPost,
   deleteSession,
@@ -79,6 +80,7 @@ function sessionAdventure(session: Session, adventures: Adventure[]) {
 
 export function SessionsCoreScreen({ sessions, campaigns, characters, adventures, documents }: Props) {
   const router = useRouter();
+  const { locale, tr } = useI18n();
   const { notify } = useNotifications();
   const [isPending, startTransition] = useTransition();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -125,7 +127,7 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
     const adventure = adventures.find((item) => item.id === adventureId) ?? null;
     const campaignId = adventure?.campaign_id ?? campaigns[0]?.id ?? "";
     if (!name.trim() || !rulesetWork || !rulesetVersion || !adventureId || !campaignId) {
-      setError("Bitte Session-Name, Regelwerk und Adventure auswaehlen.");
+      setError(tr("Choose a session name, ruleset, and adventure.", "Bitte Session-Name, Regelwerk und Abenteuer auswählen."));
       return;
     }
     setError(null);
@@ -138,27 +140,28 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
           ruleset_work: rulesetWork,
           ruleset_version: rulesetVersion,
           target_player_count: Number(targetPlayers) || 4,
+          language: locale,
         });
-        notify({ title: "Session erstellt", message: `${created.name} ist bereit fuer den Join-Flow.`, tone: "success" });
+        notify({ title: tr("Session created", "Session erstellt"), message: tr(`${created.name} is ready for players to join.`, `${created.name} ist für den Spielerbeitritt bereit.`), tone: "success" });
         setIsCreateOpen(false);
         router.refresh();
       } catch (createError) {
-        setError(createError instanceof Error ? createError.message : "Session konnte nicht erstellt werden.");
+        setError(createError instanceof Error ? createError.message : tr("Could not create session.", "Session konnte nicht erstellt werden."));
       }
     });
   }
 
   function handleDelete(session: Session) {
-    if (!window.confirm(`Session "${session.name}" wirklich loeschen?`)) {
+    if (!window.confirm(tr(`Delete session "${session.name}"?`, `Session „${session.name}“ wirklich löschen?`))) {
       return;
     }
     startTransition(async () => {
       try {
         await deleteSession(session.id);
-        notify({ title: "Session geloescht", message: `${session.name} wurde entfernt.`, tone: "success" });
+        notify({ title: tr("Session deleted", "Session gelöscht"), message: tr(`${session.name} was removed.`, `${session.name} wurde entfernt.`), tone: "success" });
         router.refresh();
       } catch (deleteError) {
-        notify({ title: "Session", message: deleteError instanceof Error ? deleteError.message : "Loeschen fehlgeschlagen.", tone: "error" });
+        notify({ title: "Session", message: deleteError instanceof Error ? deleteError.message : tr("Delete failed.", "Löschen fehlgeschlagen."), tone: "error" });
       }
     });
   }
@@ -166,13 +169,13 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
   return (
     <div className="page-stack">
       <PageIntro
-        eyebrow="Sessions"
-        title="AI DM Sessions"
-        description="Sessions verbinden Adventure, Regelwerk, Spieler-Join, den gemeinsamen Visual Board Screen sowie Voice-, Ambient- und Würfelfluss."
+        eyebrow={tr("Sessions", "Sessions")}
+        title={tr("AI GM Sessions", "KI-Spielleiter-Sessions")}
+        description={tr("Sessions connect the adventure, ruleset, player join flow, shared visual board, voice, ambience, and dice.", "Sessions verbinden Abenteuer, Regelwerk, Spielerbeitritt, gemeinsames Visual Board, Sprache, Atmosphäre und Würfel.")}
         actions={
           <div className="page-actions">
             <button className="studio-button" onClick={openCreateModal} type="button">
-              Add Session
+              {tr("Add Session", "Session hinzufügen")}
             </button>
           </div>
         }
@@ -181,9 +184,9 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
       <div className="stat-grid">
         <StatCard label="Sessions" value={sessions.length} />
         <StatCard label="Live" value={sessions.filter((session) => session.status === "live").length} />
-        <StatCard label="Adventures" value={adventures.length} />
-        <StatCard label="Rulebooks" value={documents.filter((document) => document.type === "rules").length} />
-        <StatCard label="Characters" value={characters.length} />
+        <StatCard label={tr("Adventures", "Abenteuer")} value={adventures.length} />
+        <StatCard label={tr("Rulebooks", "Regelbücher")} value={documents.filter((document) => document.type === "rules").length} />
+        <StatCard label={tr("Characters", "Charaktere")} value={characters.length} />
       </div>
 
       <div className="session-card-grid">
@@ -195,18 +198,18 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
                 <StatusPill tone={statusTone(session.status)}>{session.status}</StatusPill>
               </div>
               <strong>{session.name}</strong>
-              <p>{session.ruleset_work} {session.ruleset_version} · {adventure?.name || "Kein Adventure"}</p>
-              <p className="muted-copy">Geplant fuer {session.target_player_count} Spieler</p>
+              <p>{session.ruleset_work} {session.ruleset_version} · {adventure?.name || tr("No adventure", "Kein Abenteuer")}</p>
+              <p className="muted-copy">{tr(`Planned for ${session.target_player_count} players`, `Geplant für ${session.target_player_count} Spieler`)}</p>
               <div className="button-row">
                 <Link className="studio-button studio-button--ghost studio-button--inline" href={`/sessions/${session.id}`}>
-                  Open Session
+                  {tr("Open Session", "Session öffnen")}
                 </Link>
                 <Link className="studio-button studio-button--ghost studio-button--inline" href={`/session-join/${session.join_token}`}>
-                  Join-Link
+                  {tr("Join link", "Beitrittslink")}
                 </Link>
                 <button className="studio-button studio-button--danger studio-button--inline" onClick={() => handleDelete(session)} type="button">
                   <Trash2 size={16} />
-                  Delete
+                  {tr("Delete", "Löschen")}
                 </button>
               </div>
             </article>
@@ -219,46 +222,46 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
           <section aria-modal="true" className="modal-card" onClick={(event) => event.stopPropagation()} role="dialog">
             <div className="modal-card__header">
               <div>
-                <h2 className="studio-panel__title">Add Session</h2>
-                <p className="studio-panel__description">Name, Regelwerk, Adventure und geplante Spielerzahl definieren den Startpunkt der Runde.</p>
+                <h2 className="studio-panel__title">{tr("Add Session", "Session hinzufügen")}</h2>
+                <p className="studio-panel__description">{tr("Name, ruleset, adventure, and planned player count define the starting point.", "Name, Regelwerk, Abenteuer und geplante Spielerzahl definieren den Startpunkt der Runde.")}</p>
               </div>
               <button className="studio-button studio-button--ghost studio-button--inline" onClick={() => setIsCreateOpen(false)} type="button">
-                Close
+                {tr("Close", "Schließen")}
               </button>
             </div>
 
             <div className="form-grid">
-              <input onChange={(event) => setName(event.target.value)} placeholder="Session-Name" value={name} />
+              <input onChange={(event) => setName(event.target.value)} placeholder={tr("Session name", "Session-Name")} value={name} />
               <select onChange={(event) => setRulesetKey(event.target.value)} value={rulesetKey}>
-                <option value="">Regelwerk waehlen</option>
+                <option value="">{tr("Choose ruleset", "Regelwerk wählen")}</option>
                 {availableRulesets.map((group) => (
                   <option key={`${group.work}:${group.version}`} value={`${group.work}:${group.version}`}>
                     {group.label}
                   </option>
                 ))}
               </select>
-              <p className="muted-copy">Gefundene Regelwerke: {availableRulesets.length}</p>
+              <p className="muted-copy">{tr("Rulesets found", "Gefundene Regelwerke")}: {availableRulesets.length}</p>
               <select onChange={(event) => setAdventureId(event.target.value)} value={adventureId}>
-                <option value="">Adventure waehlen</option>
+                <option value="">{tr("Choose adventure", "Abenteuer wählen")}</option>
                 {rulesetAdventures.map((adventure) => (
                   <option key={adventure.id} value={adventure.id}>
                     {adventure.name}
                   </option>
                 ))}
               </select>
-              <input min={1} onChange={(event) => setTargetPlayers(event.target.value)} placeholder="Geplante Spielerzahl" type="number" value={targetPlayers} />
+              <input min={1} onChange={(event) => setTargetPlayers(event.target.value)} placeholder={tr("Planned player count", "Geplante Spielerzahl")} type="number" value={targetPlayers} />
             </div>
 
             {error ? <p className="error-copy">{error}</p> : null}
 
             <div className="modal-card__footer">
-              <span className="modal-card__spacer">{isPending ? "Creating..." : ""}</span>
+              <span className="modal-card__spacer">{isPending ? tr("Creating...", "Wird erstellt...") : ""}</span>
               <div className="button-row modal-card__actions">
                 <button className="studio-button studio-button--ghost" disabled={isPending} onClick={() => setIsCreateOpen(false)} type="button">
-                  Cancel
+                  {tr("Cancel", "Abbrechen")}
                 </button>
                 <button className="studio-button" disabled={isPending} onClick={handleCreate} type="button">
-                  Create Session
+                  {tr("Create Session", "Session erstellen")}
                 </button>
               </div>
             </div>

@@ -1,10 +1,12 @@
 "use client";
 
 import { Languages } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useI18n, type Locale } from "../lib/i18n";
 
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale, t } = useI18n();
+  const router = useRouter();
   const options: { locale: Locale; shortLabel: string }[] = [
     { locale: "en", shortLabel: "EN" },
     { locale: "de", shortLabel: "DE" },
@@ -20,7 +22,10 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
           aria-pressed={locale === option.locale}
           className={locale === option.locale ? "is-active" : ""}
           key={option.locale}
-          onClick={() => setLocale(option.locale)}
+          onClick={() => {
+            setLocale(option.locale);
+            router.refresh();
+          }}
           type="button"
         >
           {option.shortLabel}

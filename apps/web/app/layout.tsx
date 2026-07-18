@@ -1,22 +1,25 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import "./globals.css";
 import { NotificationsProvider } from "../components/notifications-provider";
-import { I18nProvider } from "../lib/i18n";
+import { I18nProvider, type Locale } from "../lib/i18n";
 
 export const metadata: Metadata = {
   title: "AI Game Master",
   description: "AI-led game mastering with operator control, player portals, and cinematic session surfaces.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const initialLocale: Locale = cookieStore.get("locale")?.value === "de" ? "de" : "en";
   return (
-    <html lang="en">
+    <html lang={initialLocale}>
       <body>
-        <I18nProvider>
+        <I18nProvider initialLocale={initialLocale}>
           <NotificationsProvider>{children}</NotificationsProvider>
         </I18nProvider>
       </body>

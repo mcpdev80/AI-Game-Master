@@ -823,7 +823,11 @@ func (h *Handler) gmRespond(c *gin.Context) {
 	if response.RollRequest != nil && req.DiceRoll == nil {
 		response.Narration = buildRollRequestNarration(response.Language, response.RollRequest)
 		if strings.TrimSpace(response.Narration) == "" {
-			response.Narration = "Bevor ich die Szene auflöse, brauche ich erst deinen Wurf."
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(response.Language)), "de") {
+				response.Narration = "Bevor ich die Szene auflöse, brauche ich erst deinen Wurf."
+			} else {
+				response.Narration = "Before I resolve the scene, I need your roll."
+			}
 		}
 	}
 	activeLLMSession.MessageHistory = appendLLMMessage(activeLLMSession.MessageHistory, "assistant", response.Narration, time.Now().UTC())
@@ -1243,12 +1247,24 @@ func hasMeaningfulSessionProgress(session Session) bool {
 
 func fallbackGMResponse(session Session, req GMRespondRequest, llmErr error) GMResponse {
 	language := chooseLanguage(req.Language, session.Language)
-	narration := "Einen Moment lang stockt die Szene, doch die Situation bleibt angespannt."
-	if req.DiceRoll != nil && len(req.DiceRoll.Dice) > 0 {
-		narration = "Der Wurf fällt, und für einen Herzschlag hält die Szene den Atem an."
-	}
-	if req.DiceRoll == nil {
-		narration += " Deine Aktion steht im Raum, und die Welt reagiert noch nicht sauber darauf. Beschreibe den Schritt noch einmal kurz oder präzisiere dein Ziel."
+	narration := "For a moment the scene falters, but the situation remains tense."
+	dmNote := "LLM fallback active"
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+		narration = "Einen Moment lang stockt die Szene, doch die Situation bleibt angespannt."
+		dmNote = "LLM-Fallback aktiv"
+		if req.DiceRoll != nil && len(req.DiceRoll.Dice) > 0 {
+			narration = "Der Wurf fällt, und für einen Herzschlag hält die Szene den Atem an."
+		}
+		if req.DiceRoll == nil {
+			narration += " Deine Aktion steht im Raum, und die Welt reagiert noch nicht sauber darauf. Beschreibe den Schritt noch einmal kurz oder präzisiere dein Ziel."
+		}
+	} else {
+		if req.DiceRoll != nil && len(req.DiceRoll.Dice) > 0 {
+			narration = "The dice fall, and for a heartbeat the scene holds its breath."
+		}
+		if req.DiceRoll == nil {
+			narration += " Your action hangs in the air, but the world has not responded clearly. Briefly describe the action again or clarify your goal."
+		}
 	}
 
 	return GMResponse{
@@ -1260,7 +1276,7 @@ func fallbackGMResponse(session Session, req GMRespondRequest, llmErr error) GMR
 			{EntityID: "session", Field: "scene_summary", Value: narration},
 		},
 		SceneEvents:  []SceneEvent{},
-		DMNotes:      []string{"LLM fallback aktiv", llmErr.Error()},
+		DMNotes:      []string{dmNote, llmErr.Error()},
 		PromptSource: "fallback",
 		RawModel:     "fallback",
 		CreatedAt:    time.Now().UTC(),

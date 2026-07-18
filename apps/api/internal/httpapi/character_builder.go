@@ -135,13 +135,17 @@ func (h *Handler) startCharacterBuilder(c *gin.Context) {
 		errorResponse(c, 400, "start character builder", fmt.Errorf("at least one rules document is required"))
 		return
 	}
+	language := strings.ToLower(strings.TrimSpace(req.Language))
+	if language != "de" {
+		language = "en"
+	}
 
-	intro := fmt.Sprintf(
-		"Du moechtest also einen neuen Charakter fuer %s %s erstellen. Wir orientieren uns primaer an %s. Erzaehl mir zuerst, was fuer eine Figur du spielen moechtest: Stimmung, Rolle, Klasse oder eine grobe Fantasy-Idee reichen fuer den Start.",
-		req.RulesetWork,
-		req.RulesetVersion,
-		strings.Join(selectedNames, ", "),
-	)
+	intro := fmt.Sprintf("You are creating a new character for %s %s. We will primarily use %s. First, describe the kind of character you want to play: a mood, role, class, or rough fantasy concept is enough to begin.", req.RulesetWork, req.RulesetVersion, strings.Join(selectedNames, ", "))
+	characterName := "New Character"
+	if language == "de" {
+		intro = fmt.Sprintf("Du möchtest einen neuen Charakter für %s %s erstellen. Wir orientieren uns primär an %s. Erzähl mir zuerst, was für eine Figur du spielen möchtest: Stimmung, Rolle, Klasse oder eine grobe Fantasy-Idee reichen für den Start.", req.RulesetWork, req.RulesetVersion, strings.Join(selectedNames, ", "))
+		characterName = "Neuer Charakter"
+	}
 	now := time.Now().UTC()
 	messages := []CharacterBuilderMessage{
 		{
@@ -153,7 +157,7 @@ func (h *Handler) startCharacterBuilder(c *gin.Context) {
 
 	character := Character{
 		CampaignID: req.CampaignID,
-		Name:       "Neuer Charakter",
+		Name:       characterName,
 		PlayerName: strings.TrimSpace(req.PlayerName),
 		Abilities:  map[string]int{},
 		Languages:  []string{},
@@ -161,6 +165,7 @@ func (h *Handler) startCharacterBuilder(c *gin.Context) {
 		Metadata: map[string]any{
 			"ruleset_work":            strings.TrimSpace(req.RulesetWork),
 			"ruleset_version":         strings.TrimSpace(req.RulesetVersion),
+			"language":                language,
 			"builder_status":          "draft",
 			"builder_mode":            "ai_chat",
 			"builder_stage":           "concept",
@@ -251,6 +256,12 @@ func (h *Handler) characterBuilderMessage(c *gin.Context) {
 		}
 		errorResponse(c, 500, "load character", err)
 		return
+	}
+	if req.Language == "en" || req.Language == "de" {
+		if character.Metadata == nil {
+			character.Metadata = map[string]any{}
+		}
+		character.Metadata["language"] = req.Language
 	}
 
 	documents, err := h.loadSelectedBuilderDocuments(c.Request.Context(), stringListFromAny(character.Metadata["selected_document_ids"]))
@@ -533,18 +544,27 @@ func (h *Handler) completeCharacterBuilder(ctx context.Context, character *Chara
 	latestUserMessage := latestBuilderUserMessage(transcript)
 	previousAssistant := latestBuilderAssistantReply(transcript)
 	latestStoryOptions := latestBuilderStoryOptions(transcript)
+	language := builderCharacterLanguage(character)
 
-	if storyCompletion, ok := builderDeterministicStorySelectionCompletion(character, latestUserMessage, latestStoryOptions); ok {
-		return storyCompletion, nil
+	if language == "de" {
+		if storyCompletion, ok := builderDeterministicStorySelectionCompletion(character, latestUserMessage, latestStoryOptions); ok {
+			return storyCompletion, nil
+		}
+		if guidedCompletion, ok := builderDeterministicGuidedChoiceCompletion(character, builderStage, latestUserMessage); ok {
+			return guidedCompletion, nil
+		}
 	}
-	if guidedCompletion, ok := builderDeterministicGuidedChoiceCompletion(character, builderStage, latestUserMessage); ok {
-		return guidedCompletion, nil
+	systemPrompt := mustFormatEmbeddedPrompt("prompts/character_builder_system_prompt.md", guideSummary, levelUpSummary)
+	if language == "en" {
+		systemPrompt += "\n\nMANDATORY OUTPUT LANGUAGE: English. Every user-facing reply, option, label, explanation, error, and follow-up question must be entirely in English. Never mix German into the reply. Preserve exact proper names only when necessary. JSON keys remain unchanged."
+	} else {
+		systemPrompt += "\n\nVERBINDLICHE AUSGABESPRACHE: Deutsch. Alle sichtbaren Antworten, Optionen, Erklärungen und Rückfragen müssen vollständig auf Deutsch sein. Mische kein Englisch in den reply, außer unveränderte Eigennamen erfordern es. JSON-Schlüssel bleiben unverändert."
 	}
 
 	llmMessages := []map[string]string{
 		{
 			"role":    "system",
-			"content": mustFormatEmbeddedPrompt("prompts/character_builder_system_prompt.md", guideSummary, levelUpSummary),
+			"content": systemPrompt,
 		},
 		{
 			"role": "user",
@@ -564,21 +584,23 @@ func (h *Handler) completeCharacterBuilder(ctx context.Context, character *Chara
 
 	content, _, err := h.llmClient.chatCompletion(ctx, llmMessages, true, 1200)
 	if err != nil {
-		return characterBuilderCompletion{Reply: builderFallbackReply(builderStage, character), Patch: CharacterBuilderPatch{}}, nil
+		return characterBuilderCompletion{Reply: builderFallbackReply(builderStage, character, language), Patch: CharacterBuilderPatch{}}, nil
 	}
 
 	parsed, err := h.parseCharacterBuilderResponse(ctx, content)
 	if err != nil {
-		return characterBuilderCompletion{Reply: builderFallbackReply(builderStage, character), Patch: CharacterBuilderPatch{}}, nil
+		return characterBuilderCompletion{Reply: builderFallbackReply(builderStage, character, language), Patch: CharacterBuilderPatch{}}, nil
 	}
-	if len(retrievalEvidence) == 0 {
-		if directReply, ok := builderDirectRaceReferenceReply(latestBuilderUserMessage(transcript), raceReference); ok && strings.TrimSpace(directReply) != "" {
-			parsed.Reply = directReply
+	if language == "de" {
+		if len(retrievalEvidence) == 0 {
+			if directReply, ok := builderDirectRaceReferenceReply(latestBuilderUserMessage(transcript), raceReference); ok && strings.TrimSpace(directReply) != "" {
+				parsed.Reply = directReply
+			}
+		} else if adjustedReply, adjusted := h.verifyBuilderEvidence(ctx, latestBuilderUserMessage(transcript), retrievalEvidence, parsed.Reply); adjusted && strings.TrimSpace(adjustedReply) != "" {
+			parsed.Reply = adjustedReply
 		}
-	} else if adjustedReply, adjusted := h.verifyBuilderEvidence(ctx, latestBuilderUserMessage(transcript), retrievalEvidence, parsed.Reply); adjusted && strings.TrimSpace(adjustedReply) != "" {
-		parsed.Reply = adjustedReply
 	}
-	if builderNeedsStoryRetry(latestBuilderUserMessage(transcript), parsed) {
+	if language == "de" && builderNeedsStoryRetry(latestBuilderUserMessage(transcript), parsed) {
 		retryMessages := append([]map[string]string{}, llmMessages...)
 		retryMessages = append(retryMessages, map[string]string{
 			"role":    "user",
@@ -593,10 +615,10 @@ func (h *Handler) completeCharacterBuilder(ctx context.Context, character *Chara
 		}
 	}
 	if strings.TrimSpace(parsed.Reply) == "" {
-		return characterBuilderCompletion{Reply: builderFallbackReply(builderStage, character), Patch: CharacterBuilderPatch{}}, nil
+		return characterBuilderCompletion{Reply: builderFallbackReply(builderStage, character, language), Patch: CharacterBuilderPatch{}}, nil
 	}
 
-	if builderStoryDraftRequested(latestUserMessage) || builderStoryTransferRequested(latestUserMessage) {
+	if language == "de" && (builderStoryDraftRequested(latestUserMessage) || builderStoryTransferRequested(latestUserMessage)) {
 		switch {
 		case builderStoryTransferRequested(latestUserMessage) && !builderReplyLooksLikeStoryDraft(previousAssistant):
 			parsed.Reply = builderStoryProposalFallback(character)
@@ -2622,7 +2644,55 @@ func sanitizeCharacterBuilderPatchForStage(patch *CharacterBuilderPatch, stage s
 	}
 }
 
-func builderFallbackReply(stage string, character *Character) string {
+func builderCharacterLanguage(character *Character) string {
+	if character != nil {
+		language := strings.ToLower(strings.TrimSpace(fmt.Sprint(character.Metadata["language"])))
+		if language == "en" || language == "de" {
+			return language
+		}
+	}
+	return "de"
+}
+
+func builderFallbackReply(stage string, character *Character, language string) string {
+	if language != "de" {
+		switch normalizeBuilderStage(stage) {
+		case "concept":
+			return "Briefly describe the character you want to play. A role, feeling, or image is enough for the next step."
+		case "race":
+			return "Which ancestry should the character have? I will then apply the appropriate starting traits."
+		case "class_and_level":
+			return "Which class and starting level should the character have?"
+		case "background_and_alignment":
+			return "Choose the rules background and alignment. Under SRD 5.1 you may use Acolyte or create a custom background with two skills and a total of two languages or tool proficiencies."
+		case "ability_method":
+			return "Choose the ability-score method: standard array, point buy, or rolling."
+		case "ability_scores":
+			return "Complete the ability scores and any remaining ancestry bonus choices."
+		case "class_proficiencies_and_choices":
+			return "Next, choose the available class proficiencies and starting options."
+		case "hit_points_hit_dice_and_movement":
+			return "I will derive hit points, Hit Dice, and speed from the class, ancestry, and abilities."
+		case "languages_senses_and_body":
+			return "Now choose any remaining languages, senses, and physical details."
+		case "personality":
+			return "Now define personality traits, ideals, bonds, and flaws."
+		case "equipment_and_money":
+			return "Now record starting equipment and money."
+		case "class_features_not_spells":
+			return "Now record the class features available at this level."
+		case "spellcasting_if_available":
+			return "If this character can cast spells at this level, choose the available magic now."
+		case "derived_stats":
+			return "I will now verify and calculate the derived statistics."
+		case "combat":
+			return "Finally, record attacks and combat details."
+		case "review":
+			return "The character is almost complete. Review the sheet for any missing choices."
+		default:
+			return "Tell me the next clear choice for this character."
+		}
+	}
 	switch normalizeBuilderStage(stage) {
 	case "concept":
 		return "Erzähl mir kurz, was für eine Figur du spielen möchtest: eine Rolle, ein Gefühl oder ein Bild reichen für den nächsten Schritt."

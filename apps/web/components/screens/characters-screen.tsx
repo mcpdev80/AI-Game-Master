@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bot, Check, Copy, MessageSquare, Mic, MicOff, PenSquare, Plus, Trash2, User, Volume2 } from "lucide-react";
 import { PageIntro, Panel, StatCard, StatusPill } from "../studio-primitives";
 import { useNotifications } from "../notifications-provider";
+import { useI18n } from "../../lib/i18n";
 import {
   apiDelete,
   apiUploadRaw,
@@ -693,6 +694,7 @@ function CharacterSheetCanvas({
   saveDisabled,
   onToggleEditMode,
 }: CharacterSheetCanvasProps) {
+  const { tr } = useI18n();
   const proficiency = parseNumericText(sheetForm.proficiency_bonus) ?? deriveProficiencyBonus(sheetForm.class_and_level);
   const passivePerception = 10 + abilityModifier(assignment.wisdom || 10) + (builderSkillKeys.has("perception") ? proficiency : 0);
   const derivedArmorClass = deriveArmorClassValue(sheetForm, assignment);
@@ -739,12 +741,12 @@ function CharacterSheetCanvas({
     <section className="sheet-canvas">
       <div className="sheet-tabs">
         {([
-          ["overview", "Überblick"],
-          ["abilities", "Attribute & Fertigkeiten"],
-          ["combat", "Kampf"],
-          ["magic", "Magie"],
-          ["personality", "Persönlichkeit"],
-          ["gear", "Ausrüstung & Magie"],
+          ["overview", tr("Overview", "Überblick")],
+          ["abilities", tr("Abilities & Skills", "Attribute & Fertigkeiten")],
+          ["combat", tr("Combat", "Kampf")],
+          ["magic", tr("Magic", "Magie")],
+          ["personality", tr("Personality", "Persönlichkeit")],
+          ["gear", tr("Equipment & Magic", "Ausrüstung & Magie")],
         ] as Array<[SheetTab, string]>).map(([tab, label]) => (
           <button
             className={`sheet-tab${activeTab === tab ? " is-active" : ""}`}
@@ -759,39 +761,39 @@ function CharacterSheetCanvas({
       <div className="sheet-canvas__toolbar">
         <button className={`studio-button ${isEditMode ? "studio-button--primary" : "studio-button--ghost"}`} onClick={onToggleEditMode} type="button">
           <PenSquare size={16} />
-          {isEditMode ? "Bearbeitung beenden" : "Bearbeiten"}
+          {isEditMode ? tr("Finish Editing", "Bearbeitung beenden") : tr("Edit", "Bearbeiten")}
         </button>
         {isEditMode ? (
           <button className="studio-button studio-button--ghost" disabled={saveDisabled} onClick={onSave} type="button">
             <Check size={16} />
-            Speichern
+            {tr("Save", "Speichern")}
           </button>
         ) : null}
       </div>
       <header className="sheet-canvas__header">
         <div className="sheet-canvas__name">
-          <span>CHARAKTERNAME</span>
-          <strong>{renderInlineField("name", { displayFallback: "Neuer Charakter" })}</strong>
+          <span>{tr("CHARACTER NAME", "CHARAKTERNAME")}</span>
+          <strong>{renderInlineField("name", { displayFallback: tr("New Character", "Neuer Charakter") })}</strong>
         </div>
         <div className="sheet-canvas__identity">
           <article>
-            <span>Klasse & Stufe</span>
+            <span>{tr("Class & Level", "Klasse & Stufe")}</span>
             <strong>{renderInlineField("class_and_level")}</strong>
           </article>
           <article>
-            <span>Volk</span>
+            <span>{tr("Ancestry", "Volk")}</span>
             <strong>{renderInlineField("race")}</strong>
           </article>
           <article>
-            <span>Hintergrund</span>
+            <span>{tr("Background", "Hintergrund")}</span>
             <strong>{renderInlineField("background")}</strong>
           </article>
           <article>
-            <span>Gesinnung</span>
+            <span>{tr("Alignment", "Gesinnung")}</span>
             <strong>{renderInlineField("alignment")}</strong>
           </article>
           <article>
-            <span>Spieler</span>
+            <span>{tr("Player", "Spieler")}</span>
             <strong>{renderInlineField("player_name")}</strong>
           </article>
         </div>
@@ -802,14 +804,14 @@ function CharacterSheetCanvas({
           <div className="sheet-tab-grid sheet-tab-grid--overview">
             <section className="sheet-box sheet-box--story">
               <div className="sheet-box__title-row">
-                <strong>Konzept & Geschichte</strong>
-                <span>der aktuelle Stand aus dem Builder</span>
+                <strong>{tr("Concept & Story", "Konzept & Geschichte")}</strong>
+                <span>{tr("current builder state", "aktueller Stand aus dem Builder")}</span>
               </div>
-              <p>{renderInlineField("concept", { multiline: true, displayFallback: "Noch kein klares Konzept eingetragen." })}</p>
-              <p>{renderInlineField("backstory", { multiline: true, displayFallback: "Die Hintergrundgeschichte wächst mit dem Builder-Dialog." })}</p>
+              <p>{renderInlineField("concept", { multiline: true, displayFallback: tr("No clear concept entered yet.", "Noch kein klares Konzept eingetragen.") })}</p>
+              <p>{renderInlineField("backstory", { multiline: true, displayFallback: tr("The backstory develops through the builder conversation.", "Die Hintergrundgeschichte wächst mit dem Builder-Dialog.") })}</p>
             </section>
             <section className="sheet-box">
-              <strong>Grunddaten</strong>
+              <strong>{tr("Basic Details", "Grunddaten")}</strong>
               <dl className="sheet-detail-list">
                 <div><dt>Spieler</dt><dd>{renderInlineField("player_name")}</dd></div>
                 <div><dt>Alter</dt><dd>{renderInlineField("age")}</dd></div>
@@ -1117,6 +1119,7 @@ function CharacterSheetCanvas({
 
 export function CharactersScreen({ characters, campaigns, documents, initialBuilderSeed }: CharactersScreenProps) {
   const router = useRouter();
+  const { locale, tr } = useI18n();
   const { notify } = useNotifications();
   const [rulesetFilter, setRulesetFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -1145,7 +1148,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [isRollModalOpen, setIsRollModalOpen] = useState(false);
   const [rollCameraStatus, setRollCameraStatus] = useState<"idle" | "ready" | "error" | "unsupported">("idle");
-  const [rollCameraMessage, setRollCameraMessage] = useState("Kamera noch nicht gestartet.");
+  const [rollCameraMessage, setRollCameraMessage] = useState(() => tr("Camera not started yet.", "Kamera noch nicht gestartet."));
   const [isRollCapturing, setIsRollCapturing] = useState(false);
   const [currentRollIndex, setCurrentRollIndex] = useState(0);
   const [confirmedRolls, setConfirmedRolls] = useState<boolean[]>(() => Array.from({ length: guidedRollCount }, () => false));
@@ -1392,7 +1395,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         rollVideoRef.current.srcObject = null;
       }
       setRollCameraStatus("idle");
-      setRollCameraMessage("Kamera noch nicht gestartet.");
+      setRollCameraMessage(tr("Camera not started yet.", "Kamera noch nicht gestartet."));
     }
   }, [isRollModalOpen]);
 
@@ -1534,7 +1537,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   async function handleStartRollCamera() {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setRollCameraStatus("unsupported");
-      setRollCameraMessage("Dieser Browser unterstützt keinen Kamerazugriff.");
+      setRollCameraMessage(tr("This browser does not support camera access.", "Dieser Browser unterstützt keinen Kamerazugriff."));
       return;
     }
     try {
@@ -1547,10 +1550,10 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         rollVideoRef.current.srcObject = stream;
       }
       setRollCameraStatus("ready");
-      setRollCameraMessage("Kamera aktiv. Jetzt genau 4d6 für den aktuellen Wurf ins Bild halten.");
+      setRollCameraMessage(tr("Camera active. Hold exactly 4d6 in view for the current roll.", "Kamera aktiv. Halte jetzt genau 4d6 für den aktuellen Wurf ins Bild."));
     } catch (error) {
       setRollCameraStatus("error");
-      setRollCameraMessage(error instanceof Error ? error.message : "Kamera konnte nicht gestartet werden.");
+      setRollCameraMessage(error instanceof Error ? error.message : tr("Could not start camera.", "Kamera konnte nicht gestartet werden."));
     }
   }
 
@@ -1582,25 +1585,25 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
 
   async function handleDetectCurrentRoll() {
     if (rollCameraStatus !== "ready") {
-      setRollCameraMessage("Bitte zuerst die Kamera für den Würfelschritt starten.");
+      setRollCameraMessage(tr("Start the camera for the dice step first.", "Bitte starte zuerst die Kamera für den Würfelschritt."));
       return;
     }
     const imageDataUrl = captureRollFrame();
     if (!imageDataUrl) {
-      setRollCameraMessage("Es konnte gerade kein Kamerabild gelesen werden.");
+      setRollCameraMessage(tr("No camera image could be read.", "Es konnte gerade kein Kamerabild gelesen werden."));
       return;
     }
     setIsRollCapturing(true);
     setRollCameraMessage(`Werte für Wurf ${currentRollIndex + 1} werden ausgewertet...`);
     try {
-      const response = await detectDiceFromImage({ image_data_url: imageDataUrl, language: "de" });
+      const response = await detectDiceFromImage({ image_data_url: imageDataUrl, language: locale });
       const detected = response.dice
         .filter((die) => die.type.toLowerCase() === "d6")
         .map((die) => die.value)
         .filter((value) => value >= 1 && value <= 6)
         .slice(0, 4);
       if (detected.length === 0) {
-        setRollCameraMessage(response.notes || "Keine klaren d6 erkannt. Bitte neu legen und nochmal auswerten.");
+        setRollCameraMessage(response.notes || tr("No clear d6 detected. Reposition them and evaluate again.", "Keine klaren d6 erkannt. Bitte neu legen und erneut auswerten."));
         return;
       }
       while (detected.length < 4) {
@@ -1614,7 +1617,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         `Wurf ${currentRollIndex + 1} erkannt: ${detected.join(", ")}. Bitte kurz prüfen und bei Bedarf korrigieren.`
       );
     } catch (error) {
-      setRollCameraMessage(error instanceof Error ? error.message : "Kameraauswertung fehlgeschlagen.");
+      setRollCameraMessage(error instanceof Error ? error.message : tr("Camera evaluation failed.", "Kameraauswertung fehlgeschlagen."));
     } finally {
       setIsRollCapturing(false);
     }
@@ -1631,7 +1634,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     }
     setIsRollModalOpen(false);
     setIsBuilderResponding(true);
-    setRollCameraMessage("Alle sechs Würfe sind bestätigt. Die KI übernimmt jetzt die Werte und macht weiter.");
+    setRollCameraMessage(tr("All six rolls are confirmed. The AI is applying the values and continuing.", "Alle sechs Würfe sind bestätigt. Die KI übernimmt jetzt die Werte und macht weiter."));
     startTransition(async () => {
       try {
         const resolved = await resolveAbilityScores({
@@ -1657,11 +1660,19 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           },
         });
         const followUp = await sendCharacterBuilderMessage(builderCharacter.id, {
-          message: `Die sieben 4d6-Würfe sind jetzt abgeschlossen. Die Einzelwürfe waren ${sets
-            .map((set, index) => `Wurf ${index + 1}: ${set.join(", ")}`)
-            .join(" | ")}. Der schwächste Gesamtwurf wurde automatisch gestrichen, die sechs verwendeten Werte sind ${resolved.values.join(
-            ", "
-          )}. Bitte gib diese Werte jetzt im Chat sauber aus, erkläre kurz dass der schlechteste Wurf gestrichen wurde, frage ob alles stimmt, und führe dann direkt durch die Verteilung auf Stärke, Geschicklichkeit, Konstitution, Intelligenz, Weisheit und Charisma weiter.`,
+          language: locale,
+          message:
+            locale === "de"
+              ? `Die sieben 4d6-Würfe sind jetzt abgeschlossen. Die Einzelwürfe waren ${sets
+                  .map((set, index) => `Wurf ${index + 1}: ${set.join(", ")}`)
+                  .join(" | ")}. Der schwächste Gesamtwurf wurde automatisch gestrichen, die sechs verwendeten Werte sind ${resolved.values.join(
+                  ", "
+                )}. Bitte gib diese Werte jetzt im Chat sauber aus, erkläre kurz, dass der schlechteste Wurf gestrichen wurde, frage, ob alles stimmt, und führe dann direkt durch die Verteilung auf Stärke, Geschicklichkeit, Konstitution, Intelligenz, Weisheit und Charisma weiter.`
+              : `The seven 4d6 rolls are complete. The individual rolls were ${sets
+                  .map((set, index) => `Roll ${index + 1}: ${set.join(", ")}`)
+                  .join(" | ")}. The lowest total was removed automatically, leaving these six values: ${resolved.values.join(
+                  ", "
+                )}. Present the values clearly, briefly explain that the lowest roll was removed, ask for confirmation, then guide the player through assigning them to Strength, Dexterity, Constitution, Intelligence, Wisdom, and Charisma.`,
         });
         setBuilderCharacter(followUp.character ?? updatedDraft);
         setBuilderMessages(followUp.messages);
@@ -1675,7 +1686,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       } catch (error) {
         notify({
           title: "Dice Step",
-          message: error instanceof Error ? error.message : "Die gewürfelten Werte konnten nicht an den Builder übergeben werden.",
+          message: error instanceof Error ? error.message : tr("Could not pass the rolled values to the builder.", "Die gewürfelten Werte konnten nicht an den Builder übergeben werden."),
           tone: "error",
         });
       } finally {
@@ -1688,7 +1699,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     const sets = currentRollSets();
     const current = sets[currentRollIndex];
     if (current.some((value) => value < 1 || value > 6)) {
-      setRollCameraMessage("Bitte zuerst vier gültige d6-Werte für den aktuellen Wurf eintragen oder erkennen lassen.");
+      setRollCameraMessage(tr("Enter or detect four valid d6 values for the current roll first.", "Bitte zuerst vier gültige d6-Werte für den aktuellen Wurf eingeben oder erkennen lassen."));
       return;
     }
     const nextConfirmed = confirmedRolls.map((entry, index) => (index === currentRollIndex ? true : entry));
@@ -1704,7 +1715,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
 
   function handleStartBuilder() {
     if (!selectedRulesetGroup || selectedDocumentIds.length === 0) {
-      notify({ title: "Builder", message: "Bitte mindestens ein Regelbuch auswaehlen.", tone: "warning" });
+      notify({ title: "Builder", message: tr("Select at least one rulebook.", "Bitte mindestens ein Regelbuch auswählen."), tone: "warning" });
       return;
     }
     setBuilderReferencePopup(null);
@@ -1716,6 +1727,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           ruleset_version: selectedRulesetGroup.version,
           selected_document_ids: selectedDocumentIds,
           player_name: builderPlayerName || undefined,
+          language: locale,
         });
         setBuilderCharacter(response.character);
         setBuilderMessages(response.messages);
@@ -1748,7 +1760,10 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
 
     startTransition(async () => {
       try {
-        const response = await sendCharacterBuilderMessage(builderCharacter.id, { message: outgoingMessage });
+        const response = await sendCharacterBuilderMessage(builderCharacter.id, {
+          message: outgoingMessage,
+          language: locale,
+        });
         setBuilderCharacter(response.character);
         setBuilderMessages(response.messages);
         syncSheetForm(response.character);
@@ -1797,7 +1812,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     setBuilderSpeechError(null);
     try {
       const response = await fetch(
-        `${apiBaseUrl}/api/tts-audio?voice=${encodeURIComponent("narrator-default")}&language=de&text=${encodeURIComponent(
+        `${apiBaseUrl}/api/tts-audio?voice=${encodeURIComponent("narrator-default")}&language=${encodeURIComponent(locale)}&text=${encodeURIComponent(
           buildBuilderSpeechText(message.content)
         )}`,
         { cache: "no-store" }
@@ -1869,7 +1884,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       builderRecordedChunksRef.current = [];
       recorder.onstart = () => {
         setIsBuilderRecording(true);
-        setBuilderSTTStatus("Sprich jetzt. Die Aufnahme endet automatisch nach 12 Sekunden.");
+        setBuilderSTTStatus(tr("Speak now. Recording stops automatically after 12 seconds.", "Sprich jetzt. Die Aufnahme endet automatisch nach 12 Sekunden."));
         if (builderStopTimerRef.current) {
           window.clearTimeout(builderStopTimerRef.current);
         }
@@ -1908,20 +1923,20 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         stream.getTracks().forEach((track) => track.stop());
         builderAudioStreamRef.current = null;
         if (blob.size === 0) {
-          setBuilderSTTError("Keine Sprachaufnahme erkannt.");
+          setBuilderSTTError(tr("No voice recording detected.", "Keine Sprachaufnahme erkannt."));
           return;
         }
         setIsBuilderTranscribing(true);
-        setBuilderSTTStatus("Spracherkennung läuft...");
+        setBuilderSTTStatus(tr("Transcribing speech...", "Spracherkennung läuft …"));
         try {
-          const transcript = await uploadSTTBlob(blob, `builder.${extension}`, "de");
+          const transcript = await uploadSTTBlob(blob, `builder.${extension}`, locale);
           if (!transcript) {
-            throw new Error("Keine Sprache erkannt.");
+            throw new Error(tr("No speech detected.", "Keine Sprache erkannt."));
           }
           setBuilderInput((current) => (current.trim() ? `${current.trim()} ${transcript}` : transcript));
           setBuilderSTTStatus("Transkript übernommen.");
         } catch (error) {
-          setBuilderSTTError(error instanceof Error && error.message ? error.message : "Spracherkennung fehlgeschlagen.");
+          setBuilderSTTError(error instanceof Error && error.message ? error.message : tr("Speech recognition failed.", "Spracherkennung fehlgeschlagen."));
           setBuilderSTTStatus("");
         } finally {
           setIsBuilderTranscribing(false);
@@ -2094,7 +2109,11 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           },
         });
         const followUp = await sendCharacterBuilderMessage(builderCharacter.id, {
-          message: `Die bestätigten Attributwürfe sind ${resolvedValues.join(", ")}. Die Zuordnung lautet STR ${assignment.strength}, DEX ${assignment.dexterity}, CON ${assignment.constitution}, INT ${assignment.intelligence}, WIS ${assignment.wisdom}, CHA ${assignment.charisma}. Bitte prüfe die Werte, frage kurz nach ob alles stimmt und fahre dann mit dem nächsten Schritt der Charaktererstellung fort.`,
+          language: locale,
+          message:
+            locale === "de"
+              ? `Die bestätigten Attributwürfe sind ${resolvedValues.join(", ")}. Die Zuordnung lautet STR ${assignment.strength}, DEX ${assignment.dexterity}, CON ${assignment.constitution}, INT ${assignment.intelligence}, WIS ${assignment.wisdom}, CHA ${assignment.charisma}. Bitte prüfe die Werte, frage kurz, ob alles stimmt, und fahre dann mit dem nächsten Schritt der Charaktererstellung fort.`
+              : `The confirmed ability rolls are ${resolvedValues.join(", ")}. The assignment is STR ${assignment.strength}, DEX ${assignment.dexterity}, CON ${assignment.constitution}, INT ${assignment.intelligence}, WIS ${assignment.wisdom}, CHA ${assignment.charisma}. Verify the values, briefly ask whether everything is correct, then continue with the next character creation step.`,
         });
         setBuilderCharacter(followUp.character);
         setBuilderMessages(followUp.messages);
@@ -2163,12 +2182,12 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
             builder_status: "draft",
           },
         });
-        notify({ title: "Character Copy", message: "Kopie wurde erstellt.", tone: "success" });
+        notify({ title: tr("Character Copy", "Charakterkopie"), message: tr("Copy created.", "Kopie wurde erstellt."), tone: "success" });
         router.refresh();
       } catch (error) {
         notify({
           title: "Character Copy",
-          message: error instanceof Error ? error.message : "Kopie konnte nicht erstellt werden.",
+          message: error instanceof Error ? error.message : tr("Could not create copy.", "Kopie konnte nicht erstellt werden."),
           tone: "error",
         });
       }
@@ -2176,18 +2195,18 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   }
 
   function handleDeleteCharacter(character: RosterCharacter) {
-    if (!window.confirm(`Character "${character.name}" wirklich loeschen?`)) {
+    if (!window.confirm(tr(`Really delete character "${character.name}"?`, `Charakter "${character.name}" wirklich löschen?`))) {
       return;
     }
     startTransition(async () => {
       try {
         await apiDelete<{ deleted: boolean }>(`/api/characters/${character.id}`);
-        notify({ title: "Character Deleted", message: `${character.name} wurde geloescht.`, tone: "success" });
+        notify({ title: tr("Character Deleted", "Charakter gelöscht"), message: tr(`${character.name} was deleted.`, `${character.name} wurde gelöscht.`), tone: "success" });
         router.refresh();
       } catch (error) {
         notify({
           title: "Character Deleted",
-          message: error instanceof Error ? error.message : "Character konnte nicht geloescht werden.",
+          message: error instanceof Error ? error.message : tr("Could not delete character.", "Charakter konnte nicht gelöscht werden."),
           tone: "error",
         });
       }
@@ -2197,32 +2216,32 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   return (
     <div className="page-stack">
       <PageIntro
-        eyebrow="Characters"
-        title="Character roster with AI-guided draft building"
-        description="Neue Charaktere starten aus der Übersicht, binden sich an vorhandene Regelwerke und wachsen dann in einem KI-Dialog zu einem live gespeicherten Draft heran."
+        eyebrow={tr("Characters", "Charaktere")}
+        title={tr("Character roster with AI-guided creation", "Charakterübersicht mit KI-geführter Erstellung")}
+        description={tr("Create characters from your rulesets and develop them in an AI-guided, continuously saved draft.", "Erstelle Charaktere aus deinen Regelwerken und entwickle sie in einem KI-geführten, laufend gespeicherten Entwurf.")}
       />
 
       <div className="dashboard-grid">
-        <Panel title="Roster Overview" description="Der Characters-Bereich startet jetzt als Liste, nicht mehr als Inline-Builder." className="hero-panel">
+        <Panel title={tr("Roster Overview", "Charakterübersicht")} description={tr("View all characters and open the builder when needed.", "Alle Charaktere anzeigen und bei Bedarf den Builder öffnen.")} className="hero-panel">
           <div className="stat-grid">
-            <StatCard label="Characters" value={roster.length} />
-            <StatCard label="Drafts" value={roster.filter((character) => character.statusLabel === "draft").length} />
-            <StatCard label="Ready" value={roster.filter((character) => character.statusLabel === "ready").length} />
-            <StatCard label="Rulesets" value={rulesetGroups.length} />
+            <StatCard label={tr("Characters", "Charaktere")} value={roster.length} />
+            <StatCard label={tr("Drafts", "Entwürfe")} value={roster.filter((character) => character.statusLabel === "draft").length} />
+            <StatCard label={tr("Ready", "Bereit")} value={roster.filter((character) => character.statusLabel === "ready").length} />
+            <StatCard label={tr("Rulesets", "Regelwerke")} value={rulesetGroups.length} />
           </div>
           <div className="button-row">
             <button className="studio-button studio-button--primary" onClick={openNewBuilder} type="button">
               <Plus size={16} />
-              Neuen Charakter erstellen
+              {tr("Create New Character", "Neuen Charakter erstellen")}
             </button>
           </div>
         </Panel>
       </div>
 
-      <Panel title="Character Roster" description="Liste, Filter, Open/Edit/Delete. Der KI-Builder startet nur noch als grosses Modal.">
+      <Panel title={tr("Character Roster", "Charakterliste")} description={tr("Filter, open, edit, duplicate, or delete characters.", "Charaktere filtern, öffnen, bearbeiten, duplizieren oder löschen.")}>
         <div className="library-toolbar">
           <div className="library-toolbar__group">
-            <span className="library-toolbar__label">Regelwerk</span>
+            <span className="library-toolbar__label">{tr("Ruleset", "Regelwerk")}</span>
             <div className="meta-chip-row">
               {availableRulesetFilters.map((option) => (
                 <button
@@ -2231,7 +2250,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   onClick={() => setRulesetFilter(option)}
                   type="button"
                 >
-                  {option === "all" ? "Alle" : option}
+                  {option === "all" ? tr("All", "Alle") : option}
                 </button>
               ))}
             </div>
@@ -2246,7 +2265,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   onClick={() => setStatusFilter(option)}
                   type="button"
                 >
-                  {option === "all" ? "Alle" : option}
+                  {option === "all" ? tr("All", "Alle") : option}
                   </button>
               ))}
             </div>
@@ -2254,7 +2273,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         </div>
 
         <div className="card-grid card-grid--three">
-          {filteredCharacters.length === 0 ? <p className="empty-copy">Noch keine Characters fuer den aktuellen Filter.</p> : null}
+          {filteredCharacters.length === 0 ? <p className="empty-copy">{tr("No characters match the current filter.", "Keine Charaktere entsprechen dem aktuellen Filter.")}</p> : null}
           {filteredCharacters.map((character) => (
             <article className="media-card media-card--roster" key={character.id}>
               <div className="media-card__cover media-card__cover--character">
@@ -2270,7 +2289,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     </StatusPill>
                   </div>
                 </div>
-                <p>{character.race || "Unknown ancestry"} · {character.class_and_level || "Role not chosen yet"}</p>
+                <p>{character.race || tr("Unknown ancestry", "Unbekannte Abstammung")} · {character.class_and_level || tr("Role not chosen yet", "Rolle noch nicht gewählt")}</p>
                 <div className="character-roster-abilities">
                   {abilityOrder.map((ability) => (
                     <div className="character-roster-ability" key={`${character.id}-${ability}`}>
@@ -2279,7 +2298,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     </div>
                   ))}
                 </div>
-                {character.concept ? <p className="muted-copy">{character.concept}</p> : <p className="muted-copy">Noch kein Konzept gespeichert.</p>}
+                {character.concept ? <p className="muted-copy">{character.concept}</p> : <p className="muted-copy">{tr("No concept saved yet.", "Noch kein Konzept gespeichert.")}</p>}
                 {character.selectedDocumentNames.length > 0 ? (
                   <div className="meta-chip-row">
                     {character.selectedDocumentNames.slice(0, 3).map((name) => (
@@ -2294,7 +2313,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     type="button"
                   >
                     <PenSquare size={14} />
-                    Edit
+                    {tr("Edit", "Bearbeiten")}
                   </button>
                   <button
                     className="studio-button studio-button--ghost studio-button--inline"
@@ -2302,7 +2321,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     type="button"
                   >
                     <Copy size={14} />
-                    Duplicate
+                    {tr("Duplicate", "Duplizieren")}
                   </button>
                   <button
                     className="studio-button studio-button--danger studio-button--inline"
@@ -2310,7 +2329,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     type="button"
                   >
                     <Trash2 size={14} />
-                    Delete
+                    {tr("Delete", "Löschen")}
                   </button>
                 </div>
               </div>
@@ -2329,16 +2348,16 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           >
             <div className="modal-card__header">
               <div>
-                <p className="eyebrow">Character Builder</p>
-                <h2>{builderStep === "start" ? "Neuen Charakter vorbereiten" : "KI-geführter Character Draft"}</h2>
+                <p className="eyebrow">{tr("Character Builder", "Charakter-Builder")}</p>
+                <h2>{builderStep === "start" ? tr("Prepare New Character", "Neuen Charakter vorbereiten") : tr("AI-guided Character Draft", "KI-geführter Charakterentwurf")}</h2>
                 <p className="muted-copy">
                   {builderStep === "start"
-                    ? "Erst Regelwerk und Buchbasis wählen. Danach startet links die KI-Konversation und rechts wächst das Character Sheet mit."
-                    : "Links der Builder-Dialog, rechts das live gespeicherte Sheet. Jede bestätigte Entscheidung geht direkt in den Draft."}
+                    ? tr("First select a ruleset and source books. Then chat with the AI while the character sheet develops alongside it.", "Wähle zuerst Regelwerk und Buchbasis. Danach startet der KI-Dialog, während der Charakterbogen mitwächst.")
+                    : tr("Chat with the builder while the character sheet is saved live. Every confirmed decision updates the draft.", "Sprich mit dem Builder, während der Charakterbogen live gespeichert wird. Jede bestätigte Entscheidung aktualisiert den Entwurf.")}
                 </p>
               </div>
               <button className="studio-button studio-button--ghost studio-button--inline" onClick={closeBuilder} type="button">
-                Close
+                {tr("Close", "Schließen")}
               </button>
             </div>
 
@@ -2348,7 +2367,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   <div className="story-box story-box--hero">
                     <User size={16} />
                     <div>
-                      <strong>Portal-Vorbelegung aktiv</strong>
+                      <strong>{tr("Portal defaults active", "Portal-Vorbelegung aktiv")}</strong>
                       <p>
                         {initialBuilderSeed.playerName} · {initialBuilderSeed.rulesetWork} {initialBuilderSeed.rulesetVersion}
                       </p>
@@ -2357,7 +2376,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                 ) : null}
                 <div className="dual-field-grid">
                   <label className="field-stack">
-                    <span>Regelwerk</span>
+                    <span>{tr("Ruleset", "Regelwerk")}</span>
                     <select onChange={(event) => setSelectedRulesetKey(event.target.value)} value={selectedRulesetKey}>
                       {rulesetGroups.map((group) => (
                         <option key={group.key} value={group.key}>
@@ -2367,9 +2386,9 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     </select>
                   </label>
                   <label className="field-stack">
-                    <span>Kampagne</span>
+                    <span>{tr("Campaign", "Kampagne")}</span>
                     <select onChange={(event) => setSelectedCampaignId(event.target.value)} value={selectedCampaignId}>
-                      <option value="">Noch keiner Kampagne zuordnen</option>
+                      <option value="">{tr("Do not assign a campaign yet", "Noch keiner Kampagne zuordnen")}</option>
                       {campaigns.map((campaign) => (
                         <option key={campaign.id} value={campaign.id}>
                           {campaign.name}
@@ -2380,20 +2399,20 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                 </div>
 
                 <label className="field-stack">
-                  <span>Spielername</span>
-                  <input onChange={(event) => setBuilderPlayerName(event.target.value)} placeholder="Optional: Spielername" value={builderPlayerName} />
+                  <span>{tr("Player name", "Spielername")}</span>
+                  <input onChange={(event) => setBuilderPlayerName(event.target.value)} placeholder={tr("Optional: player name", "Optional: Spielername")} value={builderPlayerName} />
                 </label>
 
-                <Panel title="Buchbasis" description="Die KI priorisiert diese Buecher. Nicht ausgewaehlte Buecher werden nicht Standardbasis.">
+                <Panel title={tr("Source Books", "Buchbasis")} description={tr("The AI prioritizes these books. Unselected books are not used as default sources.", "Die KI priorisiert diese Bücher. Nicht ausgewählte Bücher werden nicht als Standardquelle verwendet.")}>
                   <div className="meta-chip-row">
                     {selectedRulesetGroup?.work === "5E" && selectedRulesetGroup?.version === "2014" ? (
                       <>
-                        <StatusPill tone="ready">Beispiel fest verdrahtet</StatusPill>
+                        <StatusPill tone="ready">{tr("Built-in example", "Integriertes Beispiel")}</StatusPill>
                         <StatusPill tone="info">Character Builder Guide</StatusPill>
                         <StatusPill tone="default">Level-Up Guide</StatusPill>
                       </>
                     ) : (
-                      <StatusPill tone="default">Noch kein fest verdrahteter Beispiel-Guide für dieses Regelwerk</StatusPill>
+                      <StatusPill tone="default">{tr("No built-in example guide for this ruleset", "Kein integrierter Beispiel-Guide für dieses Regelwerk")}</StatusPill>
                     )}
                   </div>
                   <div className="builder-documents-grid">
@@ -2412,7 +2431,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                           />
                           <div>
                             <strong>{document.name}</strong>
-                            <p>{document.chunk_count} chunks indexed</p>
+                            <p>{document.chunk_count} {tr("chunks indexed", "Abschnitte indiziert")}</p>
                           </div>
                         </label>
                       );
@@ -2425,9 +2444,9 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                 <section className="character-builder-chat">
                   <div className="character-builder-chat__head">
                     <div>
-                      <strong>Builder Chat</strong>
+                      <strong>{tr("Builder Chat", "Builder-Chat")}</strong>
                       <p>
-                        Text und Sprache im Builder.
+                        {tr("Text and voice in the builder.", "Text und Sprache im Builder.")}
 						{safeString(builderCharacter?.metadata.ruleset_work) === "5E" &&
 						  safeString(builderCharacter?.metadata.ruleset_version) === "2014"
 						  ? " The bundled 5E-compatible SRD 5.1 example guide is active."
@@ -2441,14 +2460,14 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                       const speechKey = `${message.created_at}:${message.content}`;
                       return (
                         <article className={`builder-message builder-message--${message.role}`} key={`${message.created_at}-${index}`}>
-                          <strong>{message.role === "assistant" ? "AI DM" : "You"}</strong>
+                          <strong>{message.role === "assistant" ? tr("AI DM", "KI-Spielleiter") : tr("You", "Du")}</strong>
                           <p>{message.content}</p>
                           {message.role === "assistant" ? (
                             <div className="builder-message__voice">
                               <div className="builder-message__voice-head">
                                 <span className="builder-message__voice-label">
                                   <Volume2 size={14} />
-                                  Freundliche Erzählerstimme
+                                  {tr("Friendly narrator voice", "Freundliche Erzählerstimme")}
                                 </span>
                                 <button
                                   className="studio-button studio-button--ghost studio-button--inline"
@@ -2456,16 +2475,16 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                                   onClick={() => handlePlayBuilderSpeech(message)}
                                   type="button"
                                 >
-                                  {builderSpeechLoadingKey === speechKey ? "Lädt..." : "Abspielen"}
+                                  {builderSpeechLoadingKey === speechKey ? tr("Loading...", "Lädt …") : tr("Play", "Abspielen")}
                                 </button>
                               </div>
                               <audio
                                 controls={builderSpeechActiveKey === speechKey && Boolean(builderSpeechUrl)}
                                 ref={builderSpeechAudioRef}
                               >
-                                Dein Browser kann die Character-Builder-Stimme nicht direkt abspielen.
+                                {tr("Your browser cannot play the character builder voice.", "Dein Browser kann die Charakter-Builder-Stimme nicht abspielen.")}
                               </audio>
-							  <p className="player-audio-note">KI-generierte Stimme / AI-generated voice</p>
+							  <p className="player-audio-note">{tr("AI-generated voice", "KI-generierte Stimme")}</p>
                               {builderSpeechActiveKey === speechKey && builderSpeechUrl ? (
                                 null
                               ) : null}
@@ -2479,12 +2498,12 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                     })}
                     {isBuilderResponding ? (
                       <article className="builder-message builder-message--assistant builder-message--working">
-                        <strong>AI DM</strong>
+                        <strong>{tr("AI DM", "KI-Spielleiter")}</strong>
                         <div className="builder-thinking">
                           <span className="builder-thinking__dot" />
                           <span className="builder-thinking__dot" />
                           <span className="builder-thinking__dot" />
-                          <p>Die KI arbeitet gerade an deinem Character Draft.</p>
+                          <p>{tr("The AI is working on your character draft.", "Die KI arbeitet gerade an deinem Charakterentwurf.")}</p>
                         </div>
                       </article>
                     ) : null}
@@ -2493,7 +2512,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   <div className="character-builder-composer">
                     <textarea
                       onChange={(event) => setBuilderInput(event.target.value)}
-                      placeholder="Beschreibe Konzept, Rolle, Herkunft oder beantworte die letzte Frage der KI."
+                      placeholder={tr("Describe your concept, role, origin, or answer the AI's latest question.", "Beschreibe Konzept, Rolle oder Herkunft oder beantworte die letzte Frage der KI.")}
                       value={builderInput}
                     />
                     {builderSTTStatus ? <p className="player-audio-note">{builderSTTStatus}</p> : null}
@@ -2506,7 +2525,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                         type="button"
                       >
                         {isBuilderRecording ? <MicOff size={16} /> : <Mic size={16} />}
-                        {isBuilderRecording ? "Aufnahme beenden" : isBuilderTranscribing ? "Transkribiert..." : "Spracheingabe"}
+                        {isBuilderRecording ? tr("Stop recording", "Aufnahme beenden") : isBuilderTranscribing ? tr("Transcribing...", "Wird transkribiert …") : tr("Voice input", "Spracheingabe")}
                       </button>
                       <button
                         className="studio-button studio-button--primary"
@@ -2515,7 +2534,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                         type="button"
                       >
                         <MessageSquare size={16} />
-                        {isBuilderResponding ? "KI antwortet..." : "Nachricht senden"}
+                        {isBuilderResponding ? tr("AI is responding...", "KI antwortet …") : tr("Send message", "Nachricht senden")}
                       </button>
                     </div>
                   </div>
@@ -2525,8 +2544,8 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   <div className="character-builder-sheet__section">
                     <div className="character-builder-sheet__head">
                       <div>
-                        <strong>Live Character Sheet</strong>
-                        <p>Rechts steht jetzt der eigentliche Bogen. Die KI füllt ihn Schritt für Schritt mit dir gemeinsam.</p>
+                        <strong>{tr("Live Character Sheet", "Live-Charakterbogen")}</strong>
+                        <p>{tr("The AI fills in the sheet with you, one step at a time.", "Die KI füllt den Bogen Schritt für Schritt gemeinsam mit dir aus.")}</p>
                       </div>
                       {builderCharacter ? (
                         <StatusPill tone={safeString(builderCharacter.metadata.builder_status) === "draft" ? "warning" : "ready"}>
@@ -2549,7 +2568,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   </div>
 
                   <div className="character-builder-sheet__section">
-                    <strong>Buchbasis</strong>
+                    <strong>{tr("Source Books", "Buchbasis")}</strong>
                     <div className="meta-chip-row">
                       {(builderCharacter ? splitMetadataList(builderCharacter.metadata.selected_document_names) : []).map((name) => (
                         <StatusPill key={name} tone="default">{name}</StatusPill>
@@ -2561,20 +2580,20 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
             )}
 
             <div className="modal-card__footer">
-              <span className="modal-card__spacer">{isPending ? "Saving..." : ""}</span>
+              <span className="modal-card__spacer">{isPending ? tr("Saving...", "Wird gespeichert …") : ""}</span>
               <div className="button-row modal-card__actions">
                 <button className="studio-button studio-button--ghost" onClick={closeBuilder} type="button">
-                  Close
+                  {tr("Close", "Schließen")}
                 </button>
                 {builderStep === "start" ? (
                   <button className="studio-button studio-button--primary" disabled={isPending || selectedDocumentIds.length === 0} onClick={handleStartBuilder} type="button">
                     <Plus size={16} />
-                    Builder starten
+                    {tr("Start Builder", "Builder starten")}
                   </button>
                 ) : (
                   <button className="studio-button studio-button--primary" disabled={isPending || !builderCharacter} onClick={handleFinishBuilder} type="button">
                     <Check size={16} />
-                    Als ready markieren
+                    {tr("Mark as Ready", "Als bereit markieren")}
                   </button>
                 )}
               </div>
@@ -2590,12 +2609,14 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
             <div className="player-popup__header">
               <strong>{builderReferencePopup.documentName}</strong>
               <button className="studio-button studio-button--ghost" onClick={() => setBuilderReferencePopup(null)} type="button">
-                Schließen
+                {tr("Close", "Schließen")}
               </button>
             </div>
             <div className="player-popup__document">
               <p>
-                {builderReferencePopup.page ? `Geöffnet auf Seite ${builderReferencePopup.page}.` : "Das Regelwerk ist geöffnet."}
+                {builderReferencePopup.page
+                  ? tr(`Opened on page ${builderReferencePopup.page}.`, `Auf Seite ${builderReferencePopup.page} geöffnet.`)
+                  : tr("The rulebook is open.", "Das Regelwerk ist geöffnet.")}
               </p>
               <div className="player-popup__embed-wrap">
                 <iframe className="player-popup__embed" src={builderReferenceFileUrl} title={builderReferencePopup.documentName} />
@@ -2615,16 +2636,14 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           >
             <div className="modal-card__header">
               <div>
-                <p className="eyebrow">Dice Step</p>
-                <h2>Jetzt 7 mal 4d6 würfeln</h2>
+                <p className="eyebrow">{tr("Dice Step", "Würfelschritt")}</p>
+                <h2>{tr("Roll 4d6 seven times", "Jetzt siebenmal 4d6 würfeln")}</h2>
                 <p className="muted-copy">
-                  Die KI hat den Attribut-Wurf aufgerufen. Wir machen jetzt jeden Wurf gemeinsam: <strong>7 mal 4 x d6</strong> werfen, per Kamera
-                  auswerten lassen, falls nötig korrigieren und dann den einzelnen Wurf bestätigen. Danach wird der <strong>schwächste Gesamtwurf
-                  automatisch gestrichen</strong> und die besten sechs Werte gehen zurück an die KI.
+                  {tr("The AI requested ability rolls. Roll ", "Die KI hat Attributswürfe angefordert. Würfle ")}<strong>{tr("4d6 seven times", "siebenmal 4d6")}</strong>{tr(", use the camera to evaluate and correct each roll, then confirm it. The lowest total is removed and the best six values return to the AI.", ", werte jeden Wurf per Kamera aus, korrigiere ihn bei Bedarf und bestätige ihn. Der niedrigste Gesamtwurf wird entfernt und die besten sechs Werte gehen zurück an die KI.")}
                 </p>
               </div>
               <button className="studio-button studio-button--ghost studio-button--inline" onClick={() => setIsRollModalOpen(false)} type="button">
-                Close
+                {tr("Close", "Schließen")}
               </button>
             </div>
 
@@ -2632,33 +2651,33 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
               <section className="roll-camera-panel">
                 <div className="character-builder-sheet__head">
                   <div>
-                    <strong>Aktueller Wurf {currentRollIndex + 1}</strong>
-                    <p>Lege nur die 4d6 für diesen Wurf in das Kamerabild.</p>
+                    <strong>{tr("Current roll", "Aktueller Wurf")} {currentRollIndex + 1}</strong>
+                    <p>{tr("Place only the four d6 for this roll in the camera view.", "Lege nur die vier d6 für diesen Wurf in das Kamerabild.")}</p>
                   </div>
                   <StatusPill tone={rollCameraStatus === "ready" ? "ready" : rollCameraStatus === "error" ? "warning" : "info"}>
                     {rollCameraStatus}
                   </StatusPill>
                 </div>
                 <div className="meta-chip-row">
-                  <StatusPill tone="info">{confirmedRolls.filter(Boolean).length} / {guidedRollCount} bestätigt</StatusPill>
-                  <StatusPill tone="default">Schritt {currentRollIndex + 1} von {guidedRollCount}</StatusPill>
+                  <StatusPill tone="info">{confirmedRolls.filter(Boolean).length} / {guidedRollCount} {tr("confirmed", "bestätigt")}</StatusPill>
+                  <StatusPill tone="default">{tr("Step", "Schritt")} {currentRollIndex + 1} {tr("of", "von")} {guidedRollCount}</StatusPill>
                 </div>
                 <div className="camera-preview-shell camera-preview-shell--roll">
                   <video autoPlay className="camera-preview" muted playsInline ref={rollVideoRef} />
                   <canvas hidden ref={rollCanvasRef} />
                   {rollCameraStatus !== "ready" ? (
                     <div className="camera-overlay camera-overlay--idle">
-                      <span>No live preview yet</span>
+                      <span>{tr("No live preview yet", "Noch keine Live-Vorschau")}</span>
                     </div>
                   ) : null}
                 </div>
                 <p className="muted-copy">{rollCameraMessage}</p>
                 <div className="button-row">
                   <button className="studio-button studio-button--ghost" onClick={() => void handleStartRollCamera()} type="button">
-                    Kamera starten
+                    {tr("Start Camera", "Kamera starten")}
                   </button>
                   <button className="studio-button studio-button--primary" disabled={rollCameraStatus !== "ready" || isRollCapturing} onClick={() => void handleDetectCurrentRoll()} type="button">
-                    {isRollCapturing ? "Auswertung läuft..." : "Kamera auswerten"}
+                    {isRollCapturing ? tr("Evaluating...", "Auswertung läuft …") : tr("Evaluate Camera", "Kamera auswerten")}
                   </button>
                 </div>
               </section>
@@ -2668,8 +2687,8 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   {currentRollSets().map((set, rowIndex) => (
                     <article className={`roll-step-card${rowIndex === currentRollIndex ? " is-active" : ""}`} key={`roll-set-${rowIndex}`}>
                       <div className="character-builder-sheet__head">
-                        <strong>Wurf {rowIndex + 1}</strong>
-                        {confirmedRolls[rowIndex] ? <StatusPill tone="ready">bestätigt</StatusPill> : null}
+                        <strong>{tr("Roll", "Wurf")} {rowIndex + 1}</strong>
+                        {confirmedRolls[rowIndex] ? <StatusPill tone="ready">{tr("confirmed", "bestätigt")}</StatusPill> : null}
                       </div>
                       <div className="roll-dice-row">
                         {set.map((value, dieIndex) => (
@@ -2690,7 +2709,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                       {rowIndex === currentRollIndex ? (
                         <div className="button-row">
                           <button className="studio-button studio-button--ghost" onClick={handleConfirmCurrentRoll} type="button">
-                            Diesen Wurf bestätigen
+                            {tr("Confirm This Roll", "Diesen Wurf bestätigen")}
                           </button>
                         </div>
                       ) : null}
@@ -2702,11 +2721,11 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
 
             <div className="modal-card__footer">
               <span className="modal-card__spacer">
-                Nach jedem bestätigten Wurf springt der nächste Schritt automatisch an. Nach Wurf 7 werden die besten 6 Werte übernommen und der schlechteste Wurf gestrichen.
+                {tr("After each confirmation, the next roll opens automatically. After roll 7, the best six values are kept and the lowest is removed.", "Nach jeder Bestätigung öffnet sich automatisch der nächste Wurf. Nach Wurf 7 werden die besten sechs Werte übernommen und der niedrigste entfernt.")}
               </span>
               <div className="button-row modal-card__actions">
                 <button className="studio-button studio-button--ghost" onClick={() => setIsRollModalOpen(false)} type="button">
-                  Zurück zum Builder
+                  {tr("Back to Builder", "Zurück zum Builder")}
                 </button>
               </div>
             </div>

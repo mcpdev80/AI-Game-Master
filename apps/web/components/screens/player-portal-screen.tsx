@@ -7,30 +7,32 @@ import { FileText, ImageIcon, Shield, Sparkles, UserRoundCheck } from "lucide-re
 import { PageIntro, Panel, StatusPill } from "../studio-primitives";
 import { useNotifications } from "../notifications-provider";
 import { apiBaseUrl, updatePlayerSlotCharacter, updatePlayerSlotStatus, type PlayerPortalSession } from "../../lib/api";
+import { useI18n } from "../../lib/i18n";
 
 export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) {
   const router = useRouter();
+  const { tr } = useI18n();
   const { notify } = useNotifications();
   const [isPending, startTransition] = useTransition();
   const [selectedCharacterId, setSelectedCharacterId] = useState(portal.character?.id ?? "");
 
   const releasedNarration =
-    portal.session.state.scene_summary || portal.session.state.last_narration || "Die KI hat noch keine spielersichere Szene freigegeben.";
+    portal.session.state.scene_summary || portal.session.state.last_narration || tr("The AI has not released a player-safe scene yet.", "Die KI hat noch keine spielersichere Szene freigegeben.");
   const visibleHandouts = portal.visible_state.visible_handouts;
   const visibleMedia = portal.visible_state.visible_media;
 
   function handleAssignCharacter() {
     if (!selectedCharacterId) {
-      notify({ title: "Player Portal", message: "Bitte zuerst einen Charakter waehlen.", tone: "warning" });
+      notify({ title: tr("Player Portal", "Spielerportal"), message: tr("Choose a character first.", "Bitte zuerst einen Charakter wählen."), tone: "warning" });
       return;
     }
     startTransition(async () => {
       try {
         await updatePlayerSlotCharacter(portal.player_slot.id, { character_id: selectedCharacterId });
-        notify({ title: "Character", message: "Charakter wurde dem Spieler-Slot zugewiesen.", tone: "success" });
+        notify({ title: tr("Character", "Charakter"), message: tr("Character assigned to the player slot.", "Charakter wurde dem Spielerplatz zugewiesen."), tone: "success" });
         router.refresh();
       } catch (error) {
-        notify({ title: "Player Portal", message: error instanceof Error ? error.message : "Zuweisung fehlgeschlagen.", tone: "error" });
+        notify({ title: tr("Player Portal", "Spielerportal"), message: error instanceof Error ? error.message : tr("Assignment failed.", "Zuweisung fehlgeschlagen."), tone: "error" });
       }
     });
   }
@@ -39,10 +41,10 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
     startTransition(async () => {
       try {
         await updatePlayerSlotStatus(portal.player_slot.id, { status: "ready" });
-        notify({ title: "Ready", message: "Du bist jetzt als ready markiert.", tone: "success" });
+        notify({ title: tr("Ready", "Bereit"), message: tr("You are now marked as ready.", "Du bist jetzt als bereit markiert."), tone: "success" });
         router.refresh();
       } catch (error) {
-        notify({ title: "Player Portal", message: error instanceof Error ? error.message : "Ready-Status fehlgeschlagen.", tone: "error" });
+        notify({ title: tr("Player Portal", "Spielerportal"), message: error instanceof Error ? error.message : tr("Ready status failed.", "Bereitschaftsstatus fehlgeschlagen."), tone: "error" });
       }
     });
   }
@@ -51,12 +53,12 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
     <main className="portal-page">
       <div className="page-stack">
         <PageIntro
-          eyebrow="Player Portal"
+          eyebrow={tr("Player Portal", "Spielerportal")}
           title={portal.character?.name || portal.player_slot.display_name}
-          description="Spieler waehlen hier ihren Charakter, sehen freigegebene Inhalte und melden sich fuer den Session-Start als ready."
+          description={tr("Choose your character, view released content, and mark yourself ready for the session.", "Wähle deinen Charakter, sieh freigegebene Inhalte und melde dich für den Session-Start als bereit.")}
           actions={
             <div className="button-row">
-              <StatusPill tone="ready">Player-Safe Zone</StatusPill>
+              <StatusPill tone="ready">{tr("Player-Safe Zone", "Spielersicherer Bereich")}</StatusPill>
               <StatusPill tone={portal.player_slot.status === "ready" ? "ready" : portal.player_slot.status === "joined" ? "live" : "info"}>
                 {portal.player_slot.status}
               </StatusPill>
@@ -65,10 +67,10 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
         />
 
         <div className="dashboard-grid">
-          <Panel title="Join Status" description="Charakter waehlen und fuer den Session-Start bereit melden.">
+          <Panel title={tr("Join Status", "Beitrittsstatus")} description={tr("Choose a character and mark yourself ready for the session.", "Charakter wählen und für den Session-Start bereit melden.")}>
             <div className="form-grid">
               <select onChange={(event) => setSelectedCharacterId(event.target.value)} value={selectedCharacterId}>
-                <option value="">Charakter waehlen</option>
+                <option value="">{tr("Choose character", "Charakter wählen")}</option>
                 {portal.available_characters.map((character) => (
                   <option key={character.id} value={character.id}>
                     {character.name} · {character.race || "—"} · {character.class_and_level || "—"}
@@ -77,26 +79,26 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
               </select>
               <div className="button-row">
                 <button className="studio-button studio-button--ghost" disabled={isPending || !selectedCharacterId} onClick={handleAssignCharacter} type="button">
-                  Charakter uebernehmen
+                  {tr("Assign character", "Charakter übernehmen")}
                 </button>
                 <Link className="studio-button studio-button--ghost" href={`/characters?portal_token=${encodeURIComponent(portal.token)}`}>
-                  Neuen Charakter erstellen
+                  {tr("Create new character", "Neuen Charakter erstellen")}
                 </Link>
                 <button className="studio-button" disabled={isPending || !portal.character} onClick={handleSetReady} type="button">
                   <UserRoundCheck size={16} />
-                  Ready
+                  {tr("Ready", "Bereit")}
                 </button>
               </div>
-              {!portal.character ? <p className="muted-copy">Falls dein Charakter fehlt, kannst du ihn direkt aus diesem Portal im Character Builder anlegen.</p> : null}
+              {!portal.character ? <p className="muted-copy">{tr("If your character is missing, create it directly from this portal in the Character Builder.", "Falls dein Charakter fehlt, kannst du ihn direkt aus diesem Portal im Character Builder anlegen.")}</p> : null}
             </div>
           </Panel>
 
-          <Panel title="Session Feed" description="Aktuell freigegebene Szene fuer diesen Spieler.">
+          <Panel title={tr("Session Feed", "Session-Verlauf")} description={tr("The scene currently released for this player.", "Die aktuell für diesen Spieler freigegebene Szene.")}>
             <div className="portal-feed">
               <article className="story-box story-box--hero">
                 <Sparkles size={18} />
                 <div>
-                  <strong>Current scene</strong>
+                  <strong>{tr("Current scene", "Aktuelle Szene")}</strong>
                   <p>{releasedNarration}</p>
                 </div>
               </article>
@@ -106,18 +108,18 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                   <p>{portal.session.name}</p>
                 </article>
                 <article className="scope-card">
-                  <strong>Regelwerk</strong>
+                  <strong>{tr("Ruleset", "Regelwerk")}</strong>
                   <p>{portal.session.ruleset_work} {portal.session.ruleset_version}</p>
                 </article>
                 <article className="scope-card">
-                  <strong>Board Modus</strong>
+                  <strong>{tr("Board mode", "Board-Modus")}</strong>
                   <p>{portal.session.state.visual_mode || "pause_or_recap"}</p>
                 </article>
               </div>
             </div>
           </Panel>
 
-          <Panel title="Character" description="Der aktuell zugewiesene Charakter fuer diesen Slot.">
+          <Panel title={tr("Character", "Charakter")} description={tr("The character currently assigned to this slot.", "Der aktuell diesem Spielerplatz zugewiesene Charakter.")}>
             {portal.character ? (
               <div className="character-summary">
                 <div className="ability-grid">
@@ -130,32 +132,32 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                 </div>
                 <div className="meta-list">
                   <div>
-                    <dt>Race</dt>
-                    <dd>{portal.character.race || "Unknown"}</dd>
+                    <dt>{tr("Ancestry", "Volk")}</dt>
+                    <dd>{portal.character.race || tr("Unknown", "Unbekannt")}</dd>
                   </div>
                   <div>
-                    <dt>Class</dt>
-                    <dd>{portal.character.class_and_level || "Unknown"}</dd>
+                    <dt>{tr("Class", "Klasse")}</dt>
+                    <dd>{portal.character.class_and_level || tr("Unknown", "Unbekannt")}</dd>
                   </div>
                   <div>
-                    <dt>Background</dt>
-                    <dd>{portal.character.background || "Unknown"}</dd>
+                    <dt>{tr("Background", "Hintergrund")}</dt>
+                    <dd>{portal.character.background || tr("Unknown", "Unbekannt")}</dd>
                   </div>
                   <div>
-                    <dt>Player Slot</dt>
+                    <dt>{tr("Player slot", "Spielerplatz")}</dt>
                     <dd>{portal.player_slot.display_name}</dd>
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="empty-copy">Diesem Slot ist noch kein Charakter zugewiesen.</p>
+              <p className="empty-copy">{tr("No character is assigned to this slot yet.", "Diesem Spielerplatz ist noch kein Charakter zugewiesen.")}</p>
             )}
           </Panel>
 
-          <Panel title="Handouts & Media" description="Nur explizit freigegebene Inhalte erscheinen hier.">
+          <Panel title={tr("Handouts & Media", "Handouts & Medien")} description={tr("Only explicitly released content appears here.", "Nur ausdrücklich freigegebene Inhalte erscheinen hier.")}>
             <div className="portal-assets">
               {visibleHandouts.length === 0 && visibleMedia.length === 0 ? (
-                <p className="empty-copy">No released handouts or media yet.</p>
+                <p className="empty-copy">{tr("No released handouts or media yet.", "Noch keine Handouts oder Medien freigegeben.")}</p>
               ) : null}
               {visibleHandouts.map((item) => (
                 <article className="portal-asset-card" key={String(item.id)}>
@@ -165,7 +167,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                   <div className="portal-asset-card__body">
                     <div className="button-row">
                       <StatusPill tone="info">Handout</StatusPill>
-                      <StatusPill tone="ready">Released</StatusPill>
+                      <StatusPill tone="ready">{tr("Released", "Freigegeben")}</StatusPill>
                     </div>
                     <strong>{String(item.name)}</strong>
                     <p>{String(item.type || "document")}</p>
@@ -176,7 +178,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                     rel="noreferrer"
                     target="_blank"
                   >
-                    Open
+                    {tr("Open", "Öffnen")}
                   </a>
                 </article>
               ))}
@@ -192,13 +194,13 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                     <div className="portal-asset-card__body">
                       <div className="button-row">
                         <StatusPill tone="default">Media</StatusPill>
-                        <StatusPill tone="ready">Player Safe</StatusPill>
+                        <StatusPill tone="ready">{tr("Player Safe", "Spielersicher")}</StatusPill>
                       </div>
                       <strong>{String(item.name)}</strong>
                       <p>{String(item.type || "asset")}</p>
                     </div>
                     <a className="studio-button studio-button--ghost studio-button--inline" href={assetUrl} rel="noreferrer" target="_blank">
-                      Open
+                      {tr("Open", "Öffnen")}
                     </a>
                   </article>
                 );
@@ -206,12 +208,12 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
             </div>
           </Panel>
 
-          <Panel title="Safety" description="Das Portal bleibt strikt spielersicher.">
+          <Panel title={tr("Safety", "Sicherheit")} description={tr("The portal remains strictly player-safe.", "Das Portal bleibt strikt spielersicher.")}>
             <div className="story-box">
               <Shield size={16} />
               <div>
-                <strong>Player-safe route</strong>
-                <p>Nur freigegebene Handouts, Medien und Charakterdaten erscheinen hier. DM-Notizen bleiben verborgen.</p>
+                <strong>{tr("Player-safe route", "Spielersicherer Zugang")}</strong>
+                <p>{tr("Only released handouts, media, and character data appear here. GM notes remain hidden.", "Nur freigegebene Handouts, Medien und Charakterdaten erscheinen hier. Spielleiter-Notizen bleiben verborgen.")}</p>
               </div>
             </div>
           </Panel>

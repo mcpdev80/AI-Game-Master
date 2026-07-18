@@ -7,6 +7,7 @@ import { PageIntro, Panel, StatCard, StatusPill } from "../studio-primitives";
 import { createFungalCavernsDemo, detectDiceFromImage, fetchLLMModels, stabilizeDiceFrames, testLLMConnection, updateSystemConfig, type DiceBox, type DiceDetection, type DiceDetectionFrame, type LLMGatewayStatus } from "../../lib/api";
 import { createClientId } from "../../lib/client-id";
 import type { PlayerLinkSlot, Session } from "../../lib/api";
+import { useI18n } from "../../lib/i18n";
 
 type ControlCenterScreenProps = {
   services: { name: string; status: string }[];
@@ -98,6 +99,7 @@ const checks = [
 ];
 
 export function ControlCenterScreen({ services, counts, llm, llmGateway, sessions, playerLinks, stt, tts }: ControlCenterScreenProps) {
+  const { locale } = useI18n();
   const onlineServices = services.filter((service) => service.status === "online").length;
   const liveSession = sessions.find((session) => session.status === "live") ?? sessions[0] ?? null;
   const joinedPlayers = playerLinks.filter((slot) => slot.player_slot.status === "joined").length;
@@ -560,7 +562,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
 
         const detection = await detectDiceFromImage({
           image_data_url: imageDataURL,
-          language: "de",
+          language: locale,
         });
         detectionNotes.push(detection.notes);
         detectionImages.push(imageDataURL);

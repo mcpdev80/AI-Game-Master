@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, FileText, Maximize, Mic, MicOff, Minimize, Pause, RotateCcw, Send, SkipForward, Square, Volume2, VolumeX, Wifi } from "lucide-react";
 import { apiBaseUrl, apiPost, apiUploadRaw, detectDiceFromImage, splitMetadataList, type Adventure, type Asset, type Character, type Document, type GMResponse, type PlayerLinkSlot, type Session } from "../../lib/api";
+import { useI18n } from "../../lib/i18n";
 
 function normalizeAmbientUrl(session: Session | null): string {
   const payload = session?.state.audio_payload;
@@ -412,6 +413,7 @@ export function PlayerScreenView({
   characters: Character[];
   playerLinks: PlayerLinkSlot[];
 }) {
+  const { locale, tr } = useI18n();
   const [liveSession, setLiveSession] = useState<Session | null>(session);
   const [enableState, setEnableState] = useState<EnableState>({
     board: false,
@@ -1079,7 +1081,7 @@ export function PlayerScreenView({
       await apiPost<GMResponse>("/api/gm/respond", {
         session_id: liveSession.id,
         player_input: text.trim(),
-        language: "de",
+        language: locale,
       });
       if (clearInput) {
         setPromptInput("");
@@ -1090,7 +1092,7 @@ export function PlayerScreenView({
         setLiveSession(updated);
       }
     } catch (error) {
-      setPromptError(error instanceof Error ? error.message : "Nachricht konnte nicht gesendet werden.");
+      setPromptError(error instanceof Error ? error.message : tr("Could not send message.", "Nachricht konnte nicht gesendet werden."));
     } finally {
       setPromptPending(false);
     }
@@ -1116,19 +1118,19 @@ export function PlayerScreenView({
 
   async function handleDetectDiceRoll() {
     if (!enableState.cam) {
-      setDiceDetectError("Die Kamera ist nicht aktiv. Aktiviere zuerst die Kamera im Board.");
+      setDiceDetectError(tr("The camera is not active. Enable it on the board first.", "Die Kamera ist nicht aktiv. Aktiviere zuerst die Kamera im Board."));
       return;
     }
     const imageDataUrl = captureDiceFrame();
     if (!imageDataUrl) {
-      setDiceDetectError("Es konnte gerade kein Kamerabild gelesen werden.");
+      setDiceDetectError(tr("No camera image could be read.", "Es konnte gerade kein Kamerabild gelesen werden."));
       return;
     }
     setDiceDetectPending(true);
     setDiceDetectError(null);
-    setDiceDetectMessage("Würfel werden ausgewertet...");
+    setDiceDetectMessage(tr("Evaluating dice...", "Würfel werden ausgewertet …"));
     try {
-      const response = await detectDiceFromImage({ image_data_url: imageDataUrl, language: "de" });
+      const response = await detectDiceFromImage({ image_data_url: imageDataUrl, language: locale });
       const noteValue = extractDetectedDieValue(String(response.notes || ""));
       const detectedDice = Array.isArray(response.dice)
         ? response.dice
@@ -1184,7 +1186,7 @@ export function PlayerScreenView({
     if (!liveSession || !hasRollRequest || diceSubmitPending) {
       return;
     }
-    const playerInput = pendingRollPlayerInput || promptInput.trim() || sttTranscript.trim() || "Ich würfle jetzt.";
+    const playerInput = pendingRollPlayerInput || promptInput.trim() || sttTranscript.trim() || tr("I am rolling now.", "Ich würfle jetzt.");
     const dice = normalizedRollDice.map((type, index) => ({
       type,
       value: Math.max(1, Math.round(diceValues[index] ?? 1)),
@@ -1210,7 +1212,7 @@ export function PlayerScreenView({
       await apiPost<GMResponse>("/api/gm/respond", {
         session_id: liveSession.id,
         player_input: playerInput,
-        language: "de",
+        language: locale,
         dice_roll: {
           dice: combinedDice,
           total: rollComputation?.total,
@@ -1349,16 +1351,16 @@ export function PlayerScreenView({
         setIsRecording(false);
         const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "audio/webm" });
         if (blob.size === 0) {
-          setSTTError("Es wurde keine Sprachaufnahme erkannt.");
+          setSTTError(tr("No voice recording was detected.", "Es wurde keine Sprachaufnahme erkannt."));
           return;
         }
         setSTTPending(true);
         try {
-          const transcript = await uploadSTTBlob(blob, recorder.mimeType.includes("ogg") ? "speech.ogg" : recorder.mimeType.includes("mp4") ? "speech.mp4" : "speech.webm", liveSession?.language);
+          const transcript = await uploadSTTBlob(blob, recorder.mimeType.includes("ogg") ? "speech.ogg" : recorder.mimeType.includes("mp4") ? "speech.mp4" : "speech.webm", locale);
           setSTTTranscript(transcript);
           setPromptInput(transcript);
         } catch (error) {
-          setSTTError(error instanceof Error ? error.message : "Sprachaufnahme konnte nicht transkribiert werden.");
+          setSTTError(error instanceof Error ? error.message : tr("Could not transcribe voice recording.", "Sprachaufnahme konnte nicht transkribiert werden."));
         } finally {
           setSTTPending(false);
         }
@@ -1367,7 +1369,7 @@ export function PlayerScreenView({
       recorder.start();
       setIsRecording(true);
     } catch (error) {
-      setSTTError(error instanceof Error ? error.message : "Mikrofon konnte nicht gestartet werden.");
+      setSTTError(error instanceof Error ? error.message : tr("Could not start microphone.", "Mikrofon konnte nicht gestartet werden."));
     }
   }
 

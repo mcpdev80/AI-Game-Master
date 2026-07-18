@@ -6,6 +6,7 @@ import { BookOpen, FileText, FolderPlus, ImageIcon, Layers, Plus, Trash2, Upload
 import { PageIntro, Panel, StatCard, StatusPill } from "../studio-primitives";
 import { useNotifications } from "../notifications-provider";
 import { apiDelete, apiUpload, splitMetadataList, type Adventure, type Asset, type Campaign, type Document, type ZipImportReport } from "../../lib/api";
+import { useI18n } from "../../lib/i18n";
 
 type Props = {
   campaigns: Campaign[];
@@ -25,13 +26,6 @@ type AssetView = Asset & {
   previewUrl: string;
   isImage: boolean;
 };
-
-const tabs: { key: TabKey; label: string }[] = [
-  { key: "overview", label: "Übersicht" },
-  { key: "rulebooks", label: "Rulebooks" },
-  { key: "adventures", label: "Adventures" },
-  { key: "assets", label: "Assets" },
-];
 
 function deriveRuleset(document: Document) {
   const work = String(document.metadata?.ruleset_work ?? "");
@@ -68,13 +62,20 @@ function documentKindLabel(document: Document) {
 
 export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: Props) {
   const router = useRouter();
+  const { locale, tr } = useI18n();
   const { notify } = useNotifications();
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [activeModal, setActiveModal] = useState<ModalKind>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const [language, setLanguage] = useState("de");
+  const [language, setLanguage] = useState<string>(locale);
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "overview", label: tr("Overview", "Übersicht") },
+    { key: "rulebooks", label: tr("Rulebooks", "Regelbücher") },
+    { key: "adventures", label: tr("Adventures", "Abenteuer") },
+    { key: "assets", label: tr("Assets", "Medien") },
+  ];
   const [rulesName, setRulesName] = useState("");
   const [rulesFile, setRulesFile] = useState<File | null>(null);
   const [rulesetWork, setRulesetWork] = useState("5E");
@@ -197,7 +198,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
     setAssetRulesets("");
     setAssetAdventureIds("");
     setAssetTags("");
-    setLanguage("de");
+    setLanguage(locale);
   }
 
   function finishSuccess(title: string, message: string) {
@@ -208,7 +209,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
   }
 
   function finishError(title: string, err: unknown) {
-    const message = err instanceof Error ? err.message : "Unbekannter Fehler";
+    const message = err instanceof Error ? err.message : tr("Unknown error", "Unbekannter Fehler");
     setError(message);
     notify({ title, message, tone: "error" });
   }
@@ -216,11 +217,11 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
   function tabActionLabel(tab: TabKey) {
     switch (tab) {
       case "rulebooks":
-        return "Rulebook hinzufügen";
+        return tr("Add Rulebook", "Regelbuch hinzufügen");
       case "adventures":
-        return "Adventure hinzufügen";
+        return tr("Add Adventure", "Abenteuer hinzufügen");
       case "assets":
-        return "Asset hinzufügen";
+        return tr("Add Asset", "Medium hinzufügen");
       default:
         return "Add";
     }
@@ -238,7 +239,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
 
   function handleRulesUpload() {
     if (!rulesFile) {
-      setError("Bitte ein Rulebook-PDF auswählen.");
+      setError(tr("Select a rulebook PDF.", "Bitte ein Regelbuch-PDF auswählen."));
       return;
     }
     setError(null);
@@ -252,7 +253,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
         form.append("ruleset_work", rulesetWork);
         form.append("ruleset_version", rulesetVersion);
         await apiUpload<Document>("/api/documents/upload", form);
-        finishSuccess("Rulebook uploaded", `${rulesName || rulesFile.name} wurde gespeichert.`);
+        finishSuccess(tr("Rulebook uploaded", "Regelbuch hochgeladen"), tr(`${rulesName || rulesFile.name} was saved.`, `${rulesName || rulesFile.name} wurde gespeichert.`));
       } catch (err) {
         finishError("Rulebook upload failed", err);
       }
@@ -261,7 +262,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
 
   function handleAdventureUpload() {
     if (!adventurePdf || !adventureName.trim()) {
-      setError("Adventure-Name und PDF sind erforderlich.");
+      setError(tr("Adventure name and PDF are required.", "Abenteuername und PDF sind erforderlich."));
       return;
     }
     setError(null);
@@ -275,7 +276,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
         if (adventureZip) form.append("resources_zip", adventureZip);
         form.append("compatible_rulesets", compatibleRulesets);
         await apiUpload<ZipImportReport>("/api/adventures/create-package", form);
-        finishSuccess("Adventure imported", `${adventureName} wurde importiert.`);
+        finishSuccess(tr("Adventure imported", "Abenteuer importiert"), tr(`${adventureName} was imported.`, `${adventureName} wurde importiert.`));
       } catch (err) {
         finishError("Adventure import failed", err);
       }
@@ -284,7 +285,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
 
   function handleAssetUpload() {
     if (!assetFile) {
-      setError("Bitte eine Asset-Datei auswählen.");
+      setError(tr("Select an asset file.", "Bitte eine Mediendatei auswählen."));
       return;
     }
     setError(null);
@@ -299,7 +300,7 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
         form.append("adventure_ids", assetAdventureIds);
         form.append("tags", assetTags);
         await apiUpload<Asset>("/api/assets/upload", form);
-        finishSuccess("Asset uploaded", `${assetName || assetFile.name} wurde gespeichert.`);
+        finishSuccess(tr("Asset uploaded", "Medium hochgeladen"), tr(`${assetName || assetFile.name} was saved.`, `${assetName || assetFile.name} wurde gespeichert.`));
       } catch (err) {
         finishError("Asset upload failed", err);
       }
@@ -324,9 +325,9 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
   return (
     <div className="page-stack">
       <PageIntro
-        eyebrow="Library"
-        title="Campaign knowledge, rulebooks, adventures, and assets"
-        description="Die Library ist jetzt nach Inhaltsart getrennt. Rulebooks hängen an Werk und Version, Adventures können mehreren Regelwerken zugeordnet sein, Assets bleiben global oder werden gezielt verlinkt."
+        eyebrow={tr("Library", "Bibliothek")}
+        title={tr("Campaign knowledge, rulebooks, adventures, and assets", "Kampagnenwissen, Regelbücher, Abenteuer und Medien")}
+        description={tr("Browse content by type. Rulebooks are versioned, adventures support multiple rulesets, and assets can be global or linked.", "Durchsuche Inhalte nach Typ. Regelbücher sind versioniert, Abenteuer unterstützen mehrere Regelwerke und Medien können global oder verknüpft sein.")}
         actions={
           activeTab !== "overview" ? (
             <button className="studio-button" onClick={() => openAddModalForTab(activeTab)} type="button">
@@ -352,24 +353,24 @@ export function LibraryCoreScreen({ campaigns, adventures, documents, assets }: 
 
       {activeTab === "overview" ? (
         <section className="dashboard-grid">
-          <Panel title="Library Overview" description="Kompakte Zusammenfassung der wichtigsten Inhalte und der letzten Änderungen." className="hero-panel">
+          <Panel title={tr("Library Overview", "Bibliotheksübersicht")} description={tr("Summary of the most important available content.", "Zusammenfassung der wichtigsten verfügbaren Inhalte.")} className="hero-panel">
             <div className="stat-grid">
-              <StatCard label="Rulebooks" value={rulebookCount} />
-              <StatCard label="Rulesets" value={rulesetCount} />
-              <StatCard label="Adventures" value={adventures.length} />
-              <StatCard label="Assets" value={assets.length} />
+              <StatCard label={tr("Rulebooks", "Regelbücher")} value={rulebookCount} />
+              <StatCard label={tr("Rulesets", "Regelwerke")} value={rulesetCount} />
+              <StatCard label={tr("Adventures", "Abenteuer")} value={adventures.length} />
+              <StatCard label={tr("Assets", "Medien")} value={assets.length} />
             </div>
           </Panel>
 
-          <Panel title="Asset-Kategorien" description="Unterkategorien aller verfügbaren Assets in der Library.">
+          <Panel title={tr("Asset Categories", "Medienkategorien")} description={tr("Categories of all available assets in the library.", "Kategorien aller verfügbaren Medien in der Bibliothek.")}>
             <div className="list-stack">
-              {assetCategorySummary.length === 0 ? <p className="empty-copy">Noch keine Assets vorhanden.</p> : null}
+              {assetCategorySummary.length === 0 ? <p className="empty-copy">{tr("No assets available yet.", "Noch keine Medien vorhanden.")}</p> : null}
               {assetCategorySummary.map((item) => (
                 <article className="list-row" key={item.type}>
                   <div className="list-row__icon"><Layers size={18} /></div>
                   <div className="list-row__body">
                     <strong>{item.type}</strong>
-                    <p>Asset-Kategorie</p>
+                    <p>{tr("Asset category", "Medienkategorie")}</p>
                   </div>
                   <StatusPill tone="info">{item.count}</StatusPill>
                 </article>

@@ -34,22 +34,22 @@ test("complete browser golden path from demo and character builder to dice resol
   }>(request, "post", "/api/demo/fungal-caverns", { language: "en" });
 
   await page.goto("/characters");
-  await page.getByRole("button", { name: "Neuen Charakter erstellen" }).click();
-  await page.getByLabel("Kampagne").selectOption(demo.campaign.id);
-  await page.getByLabel("Spielername").fill("Browser Golden Player");
+  await page.getByRole("button", { name: "Create New Character" }).click();
+  await page.getByLabel("Campaign").selectOption(demo.campaign.id);
+  await page.getByLabel("Player name").fill("Browser Golden Player");
 
   const startResponsePromise = page.waitForResponse((response) => response.url().includes("/api/characters/builder/start") && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Builder starten" }).click();
+  await page.getByRole("button", { name: "Start Builder" }).click();
   const startResponse = await startResponsePromise;
   expect(startResponse.ok()).toBeTruthy();
   const started = (await startResponse.json()) as { character: { id: string } };
   const characterId = started.character.id;
-  await expect(page.getByRole("heading", { name: "KI-geführter Character Draft" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AI-guided Character Draft" })).toBeVisible();
 
-  await page.getByPlaceholder("Beschreibe Konzept, Rolle, Herkunft oder beantworte die letzte Frage der KI.").fill(
+  await page.getByPlaceholder("Describe your concept, role, origin, or answer the AI's latest question.").fill(
     "I want to play a careful cave scout who protects the group and maps hidden routes."
   );
-  await page.getByRole("button", { name: "Nachricht senden" }).click();
+  await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("A careful cave scout is a strong concept.")).toBeVisible();
 
   await jsonRequest(request, "post", `/api/characters/${characterId}/builder/apply`, {
@@ -70,8 +70,8 @@ test("complete browser golden path from demo and character builder to dice resol
       metadata: { builder_stage: "review", skill_proficiencies: ["Perception", "Survival"] },
     },
   });
-  await page.getByRole("button", { name: "Als ready markieren" }).click();
-  await expect(page.getByRole("heading", { name: "KI-geführter Character Draft" })).toBeHidden();
+  await page.getByRole("button", { name: "Mark as Ready" }).click();
+  await expect(page.getByRole("heading", { name: "AI-guided Character Draft" })).toBeHidden();
   await expect(page.getByRole("heading", { name: "Eira Browser" }).first()).toBeVisible();
 
   const session = await jsonRequest<{ id: string; join_token: string }>(request, "post", "/api/sessions", {
