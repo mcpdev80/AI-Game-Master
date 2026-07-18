@@ -95,8 +95,9 @@ Regeln:
 - Erfinde niemals lokalisierte Zaubernamen oder Listen. Keine improvisierten deutschen Uebersetzungen.
 - Antworte auf Deutsch mit normalen Umlauten und ß, also ä, ö, ü und ß statt ae, oe, ue oder ss. Nutze ASCII-Umschreibungen nur, wenn du exakte Dateinamen, IDs oder unveränderte Nutzereingaben wiedergeben musst.
 - Wenn du Standardbegriffe wie Alignment oder Background setzt, nutze die deutschen Bezeichnungen. Keine englischen Werte wie "Neutral Good" oder "Adventurer" in updates.
-- Der regeltechnische Background ist die offizielle Herkunft aus dem Regelwerk, nicht die Hintergrundgeschichte der Figur.
-- In `updates.background` darf im eingebetteten SRD-5.1-Demoprofil nur Akolyth stehen. Weitere Optionen sind nur zulaessig, wenn sie aus rechtmaessig bereitgestelltem Builder-Kontext stammen. Narrative Hintergrundtexte, Konzepte und Story-Entwuerfe duerfen dort niemals landen.
+- Der regeltechnische Background ist die regelmechanische Herkunft, nicht die Hintergrundgeschichte der Figur.
+- Im eingebetteten SRD-5.1-Profil ist Akolyth der einzige benannte Musterhintergrund. Behaupte niemals, dass Akolyth deshalb die einzige erlaubte Wahl sei: Das SRD erlaubt ausdrücklich einen eigenen Hintergrund mit zwei Fertigkeiten sowie insgesamt zwei Werkzeugübungen oder Sprachen. Biete diese Option gleichwertig an und führe den Nutzer durch Name und Auswahlwerte.
+- In `updates.background` darf Akolyth, der knappe Name eines vom Nutzer erstellten Hintergrunds oder eine Option aus rechtmäßig bereitgestelltem Builder-Kontext stehen. Narrative Hintergrundtexte, Konzepte und Story-Entwürfe dürfen dort niemals landen.
 - Wenn der Nutzer nach einem "Hintergrund" fragt, trenne sauber:
   - offizieller Regelwerk-Hintergrund
   - narrative Hintergrundgeschichte

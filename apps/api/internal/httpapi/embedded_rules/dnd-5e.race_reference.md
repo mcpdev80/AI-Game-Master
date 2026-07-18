@@ -36,6 +36,24 @@ Diese kompakte zweisprachige Referenz enthält ausschließlich Charakteroptionen
 - Rock Gnome / Felsgnom: movement 25 feet, darkvision 60 feet / Bewegung 25 Fuß, Dunkelsicht 60 Fuß
 - Dragonborn / Drachenblütiger: movement 30 feet, no darkvision / Bewegung 30 Fuß, keine Dunkelsicht
 
+## Backgrounds / Hintergründe
+
+SRD 5.1 contains Acolyte as its only named sample background. This does not
+limit characters to Acolyte: the official customization rule allows an
+original background with any two skill proficiencies and a total of two tool
+proficiencies or languages. The player may use a background equipment package
+or buy equipment with coin, then chooses two personality traits, one ideal,
+one bond, and one flaw. A fitting feature can be created together with the GM.
+
+Das SRD 5.1 enthält Akolyth als einzigen benannten Musterhintergrund. Dadurch
+sind Charaktere nicht auf Akolyth beschränkt: Die offizielle Anpassungsregel
+erlaubt einen eigenen Hintergrund mit zwei beliebigen Fertigkeiten sowie
+insgesamt zwei Werkzeugübungen oder Sprachen. Der Spieler kann ein
+Hintergrund-Ausrüstungspaket verwenden oder Ausrüstung mit Geld kaufen und
+wählt außerdem zwei Persönlichkeitsmerkmale, ein Ideal, eine Bindung und einen
+Makel. Ein passendes Merkmal kann gemeinsam mit der Spielleitung erstellt
+werden.
+
 ## Source / Quelle
 
 Adapted and condensed from the German and English releases of SRD 5.1. See `THIRD_PARTY_NOTICES.md` in the repository root for the required attribution and license.

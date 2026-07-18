@@ -46,6 +46,7 @@
 - Added Playwright coverage for the same judge-facing browser path from one-click demo seeding through character creation and dice resolution.
 - Fixed embedded Character Builder document IDs being sent to PostgreSQL as UUIDs, an undefined DM-notes render crash in live sessions, and leakage of private DM notes, hidden DCs, and internal LLM session IDs through the Player Portal.
 - Fixed LAN clients crashing after successful actions when the insecure HTTP context does not expose `crypto.randomUUID`; client IDs now have a deterministic compatibility fallback, and STT reports the HTTPS requirement without crashing.
+- Corrected the SRD 5.1 background step: Acolyte remains the only bundled named sample, while the builder now explains and accepts the official custom-background rule instead of forcing Acolyte or copying non-SRD Player's Handbook options.
 
 ### OpenAI speech input and output
 

@@ -1381,11 +1381,11 @@ func builderDeterministicSkillChoiceReply(character Character, latestUserMessage
 
 func builderDeterministicBackgroundReply(character Character, latestUserMessage string) (string, bool) {
 	message := normalizeBuilderIntentText(latestUserMessage)
-	if !strings.Contains(message, "hintergrund") && !strings.Contains(message, "background") {
+	if !builderMentionsRulesBackgroundTopic(message) {
 		return "", false
 	}
 	if strings.Contains(message, "welch") || strings.Contains(message, "empfehl") || strings.Contains(message, "rat") {
-		return "Das SRD-5.1-Demoprofil enthält den Hintergrund Akolyth (Acolyte). Wähle Akolyth oder beschreibe einen eigenen, originalen Hintergrund.", true
+		return "Das SRD 5.1 enthält als einzigen benannten Musterhintergrund Akolyth. Dieselben offiziellen Regeln erlauben aber ausdrücklich einen eigenen Hintergrund: Wähle dafür zwei Fertigkeiten sowie insgesamt zwei Sprachen oder Werkzeugübungen und gib ihm einen passenden Namen. Du kannst also Akolyth wählen oder mir deinen eigenen Hintergrund beschreiben.", true
 	}
 	return "", false
 }
@@ -1839,13 +1839,9 @@ func normalizeBackground(value string) string {
 	}
 }
 
-func isOfficialBackground(value string) bool {
-	switch strings.TrimSpace(value) {
-	case "Akolyth":
-		return true
-	default:
-		return false
-	}
+func isAllowedBackgroundName(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && len(value) <= 96 && !strings.ContainsAny(value, "\r\n\t")
 }
 
 func latestBuilderUserMessage(messages []CharacterBuilderMessage) string {
@@ -2602,7 +2598,7 @@ func sanitizeCharacterBuilderPatchForStage(patch *CharacterBuilderPatch, stage s
 	}
 	if patch.Background != nil {
 		background := normalizeBackground(*patch.Background)
-		if !isOfficialBackground(background) {
+		if !isAllowedBackgroundName(background) {
 			patch.Background = nil
 		} else {
 			*patch.Background = background
@@ -2635,7 +2631,7 @@ func builderFallbackReply(stage string, character *Character) string {
 	case "class_and_level":
 		return "Welche Klasse und welche Stufe soll die Figur haben? Dann machen wir mit den Klassengrundlagen weiter."
 	case "background_and_alignment":
-		return "Jetzt ist der offizielle Regelwerk-Hintergrund dran. Lege zuerst den Hintergrund fest, danach bei Bedarf die Gesinnung. Die Hintergrundgeschichte ist davon getrennt."
+		return "Jetzt ist der regeltechnische Hintergrund dran. Im SRD 5.1 kannst du Akolyth wählen oder nach der offiziellen Anpassungsregel einen eigenen Hintergrund mit zwei Fertigkeiten und insgesamt zwei Sprachen oder Werkzeugübungen erstellen. Lege zuerst den Hintergrund fest, danach die Gesinnung; die narrative Hintergrundgeschichte kommt getrennt davon."
 	case "ability_method":
 		return "Lege jetzt die Attributsmethode fest: Standardwerte, Point Buy oder Würfeln."
 	case "ability_scores":
@@ -2889,7 +2885,7 @@ func builderRulesContext(character Character, stage string, latestUserMessage st
 			addDerived(fmt.Sprintf("Bewegungsrate ist aus dem Volk bereits fest: %s.", raceRule.Speed))
 		}
 	case "background_and_alignment":
-		addChoice("Lege zuerst den offiziellen Regelwerk-Hintergrund fest. Die Hintergrundgeschichte bleibt getrennt davon.")
+		addChoice("Wähle Akolyth oder erstelle nach der offiziellen SRD-5.1-Anpassungsregel einen eigenen Hintergrund mit zwei Fertigkeiten und insgesamt zwei Sprachen oder Werkzeugübungen. Die Hintergrundgeschichte bleibt davon getrennt.")
 	case "languages_senses_and_body":
 		if hasRace && raceRule.ExtraLanguageChoiceCount > 0 {
 			addChoice(fmt.Sprintf("%s: Wähle %d zusätzliche Sprache nach Wahl.", raceRule.RaceName, raceRule.ExtraLanguageChoiceCount))
@@ -2996,7 +2992,7 @@ func builderReplyContract(character Character, stage string) string {
 	case "class_proficiencies_and_choices":
 		return "Nenne zuerst feste Klassen- und Volksvorgaben, dann die konkreten Auswahloptionen und fordere danach die Auswahl ein."
 	case "background_and_alignment":
-		return "Trenne offiziellen Regelwerk-Hintergrund und narrative Geschichte sauber. Wenn nach dem Hintergrund gefragt wird, nenne offizielle Optionen oder eine kurze Empfehlung daraus."
+		return "Trenne regeltechnischen Hintergrund und narrative Geschichte sauber. Nenne Akolyth als einzigen benannten SRD-5.1-Musterhintergrund und biete gleichwertig die offizielle Regel für einen eigenen Hintergrund mit zwei Fertigkeiten und insgesamt zwei Sprachen oder Werkzeugübungen an."
 	case "hit_points_hit_dice_and_movement":
 		return "Nenne Trefferpunkte, Trefferwürfel und Bewegungsrate knapp als festgelegten Stand und fordere dann direkt die nächste Pflichtentscheidung an, zum Beispiel Sprachen, Sinne oder Körperdaten."
 	}
