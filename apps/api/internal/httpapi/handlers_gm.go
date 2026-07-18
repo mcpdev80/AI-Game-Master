@@ -1256,19 +1256,31 @@ func buildRollRequestNarration(language string, request *RollRequest) string {
 		return ""
 	}
 	request = sanitizeRollRequestForDisplay(request)
+	isGerman := strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de")
 	label := strings.TrimSpace(request.Label)
 	if label == "" {
-		label = "Eine Probe ist fällig."
+		if isGerman {
+			label = "Eine Probe ist fällig."
+		} else {
+			label = "A roll is required."
+		}
 	}
 	parts := []string{label}
 	if instructions := strings.TrimSpace(request.Instructions); instructions != "" {
 		parts = append(parts, instructions)
-	}
-	if len(request.Dice) > 0 {
-		parts = append(parts, fmt.Sprintf("Würfle %s.", strings.Join(request.Dice, ", ")))
+	} else if len(request.Dice) > 0 {
+		if isGerman {
+			parts = append(parts, fmt.Sprintf("Würfle %s.", strings.Join(request.Dice, ", ")))
+		} else {
+			parts = append(parts, fmt.Sprintf("Roll %s.", strings.Join(request.Dice, ", ")))
+		}
 	}
 	if request.DC != nil && !request.HideDC {
-		parts = append(parts, fmt.Sprintf("Die Schwierigkeit liegt bei %d.", *request.DC))
+		if isGerman {
+			parts = append(parts, fmt.Sprintf("Die Schwierigkeit liegt bei %d.", *request.DC))
+		} else {
+			parts = append(parts, fmt.Sprintf("The difficulty is %d.", *request.DC))
+		}
 	}
 	if reason := strings.TrimSpace(request.Reason); reason != "" {
 		parts = append(parts, reason)

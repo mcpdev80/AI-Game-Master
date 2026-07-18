@@ -28,3 +28,15 @@
 - OpenAI requests never receive the local provider's `chat_template_kwargs`.
 - Control Center model discovery and connection tests now run through the API backend, keeping provider credentials out of the browser.
 - Deterministic HTTP mock tests cover request shape, strict schema selection, privacy identifiers, refusals, and incomplete responses.
+
+### Golden-path smoke test
+
+- Updated the smoke test to the current session contract and English public-demo defaults.
+- The test now creates a character and player link, joins and marks the player ready, then starts the session in the same order as the product UI.
+- API failures include the HTTP status and response body for fast diagnosis.
+- The live AI assertion requires an OpenAI-generated response whose resolved model starts with `gpt-5.6`.
+- Final portal verification checks that the player remains ready and the session is live.
+- Encounter gateway budgets now match the existing 12k campaign-play budget instead of rejecting the full game-master prompt before it reaches GPT-5.6.
+- The smoke test waits for the asynchronous GPT session opening before sending the first player turn and releases only persisted UUID-backed handouts or media.
+- Roll-request narration now respects the selected English/German locale and avoids repeating model-provided dice instructions.
+- Live verification passed end-to-end on July 18, 2026: OpenAI resolved the configured `gpt-5.6` alias to `gpt-5.6-sol` for both the generated session opening and the first structured player turn.

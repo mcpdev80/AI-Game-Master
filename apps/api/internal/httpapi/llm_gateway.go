@@ -63,11 +63,14 @@ func NewLLMGateway(cfg Config) *LLMGateway {
 		semaphore:        make(chan struct{}, max(cfg.LLMMaxConcurrent, 1)),
 		redis:            redisClient,
 		profiles: map[string]llmProfileLimit{
-			"scene":             {Name: "scene", MaxInputTokens: 3200, MaxOutputTokens: 700, Timeout: 50 * time.Second, LiveTurnWindow: 8},
-			"rules":             {Name: "rules", MaxInputTokens: 2200, MaxOutputTokens: 320, Timeout: 70 * time.Second, LiveTurnWindow: 8},
-			"opening":           {Name: "opening", MaxInputTokens: 2800, MaxOutputTokens: 900, Timeout: 70 * time.Second, LiveTurnWindow: 8},
-			"reopening":         {Name: "reopening", MaxInputTokens: 2600, MaxOutputTokens: 700, Timeout: 60 * time.Second, LiveTurnWindow: 8},
-			"summary":           {Name: "summary", MaxInputTokens: 1200, MaxOutputTokens: 220, Timeout: 35 * time.Second, LiveTurnWindow: 8},
+			// Encounter prompts combine the game-master contract, strict output
+			// instructions, session state, and compact character context. Keep the
+			// guard aligned with the 12k campaign-play session budget.
+			"scene":             {Name: "scene", MaxInputTokens: 12000, MaxOutputTokens: 700, Timeout: 70 * time.Second, LiveTurnWindow: 8},
+			"rules":             {Name: "rules", MaxInputTokens: 6000, MaxOutputTokens: 320, Timeout: 70 * time.Second, LiveTurnWindow: 8},
+			"opening":           {Name: "opening", MaxInputTokens: 12000, MaxOutputTokens: 900, Timeout: 90 * time.Second, LiveTurnWindow: 8},
+			"reopening":         {Name: "reopening", MaxInputTokens: 12000, MaxOutputTokens: 700, Timeout: 90 * time.Second, LiveTurnWindow: 8},
+			"summary":           {Name: "summary", MaxInputTokens: 4000, MaxOutputTokens: 220, Timeout: 35 * time.Second, LiveTurnWindow: 8},
 			"character_builder": {Name: "character_builder", MaxInputTokens: 110000, MaxOutputTokens: 1200, Timeout: 90 * time.Second, LiveTurnWindow: 8},
 			"builder":           {Name: "builder", MaxInputTokens: 110000, MaxOutputTokens: 1200, Timeout: 90 * time.Second, LiveTurnWindow: 8},
 			"level_up":          {Name: "level_up", MaxInputTokens: 110000, MaxOutputTokens: 1200, Timeout: 90 * time.Second, LiveTurnWindow: 8},

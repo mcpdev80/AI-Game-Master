@@ -86,7 +86,7 @@ Der Golden Path für Bewertung und Video ist:
 
 ### P0.1 Baseline und Git-Nachweis herstellen
 
-- [ ] `.gitignore` vor dem ersten Commit erweitern:
+- [x] `.gitignore` vor dem ersten Commit erweitern:
   - `.pnpm-store/`
   - `**/__pycache__/`
   - `*.pyc`
@@ -94,12 +94,12 @@ Der Golden Path für Bewertung und Video ist:
   - `docs/private/`
   - `docs/**/*.pdf`, `docs/**/*.zip`, `docs/**/*.wav` oder die sensiblen Verzeichnisse vollständig
   - lokale Uploads, Datenbanken, Logs, Coverage und Testartefakte
-- [ ] Urheberrechtlich problematische und persönliche Dateien aus der Submission-Kopie entfernen oder außerhalb des Repositories ablegen.
-- [ ] Prüfen, dass kein API-Key, Passwort, Token, privater Hostname oder internes Zertifikat enthalten ist.
-- [ ] Git initialisieren.
-- [ ] Ersten Commit eindeutig als importierten Altbestand kennzeichnen, z. B. `chore: import pre-build-week baseline`.
-- [ ] Tag `pre-build-week-baseline` setzen.
-- [ ] `BUILD_WEEK_CHANGELOG.md` anlegen und ab dann jeden relevanten Commit mit Codex-/GPT-5.6-Bezug dokumentieren.
+- [x] Urheberrechtlich problematische und persönliche Dateien aus der Submission-Kopie entfernen oder außerhalb des Repositories ablegen.
+- [x] Prüfen, dass kein API-Key, Passwort, Token, privater Hostname oder internes Zertifikat enthalten ist.
+- [x] Git initialisieren.
+- [x] Ersten Commit eindeutig als importierten Altbestand kennzeichnen, z. B. `chore: import pre-build-week baseline`.
+- [x] Tag `pre-build-week-baseline` setzen.
+- [x] `BUILD_WEEK_CHANGELOG.md` anlegen und ab dann jeden relevanten Commit mit Codex-/GPT-5.6-Bezug dokumentieren.
 - [ ] GitHub-/GitLab-Repository anlegen und den Baseline-Commit vor der Implementierung pushen.
 
 **Abnahme:** `git status` ist sauber, `git ls-files` enthält keine privaten PDFs, ZIPs, WAVs, Binaries, Caches oder Secrets und der Baseline-Tag ist remote sichtbar.
@@ -117,16 +117,16 @@ Der Golden Path für Bewertung und Video ist:
 
 ### P0.3 Golden Path reparieren
 
-- [ ] `scripts/mvp_smoke_test.sh` an das aktuelle `CreateSessionRequest` anpassen:
+- [x] `scripts/mvp_smoke_test.sh` an das aktuelle `CreateSessionRequest` anpassen:
   - `name`
   - `ruleset_work`
   - `ruleset_version`
   - `target_player_count`
-- [ ] Den realen Start-Workflow korrekt abbilden: Spielerlink erstellen, Player beitreten/ready setzen, danach Session starten.
-- [ ] Fehlerausgaben mit Response-Body anzeigen, damit HTTP-400-Ursachen sofort sichtbar sind.
+- [x] Den realen Start-Workflow korrekt abbilden: Spielerlink erstellen, Player beitreten/ready setzen, danach Session starten.
+- [x] Fehlerausgaben mit Response-Body anzeigen, damit HTTP-400-Ursachen sofort sichtbar sind.
 - [ ] Demo-Seed oder Adventure-Import in den Test aufnehmen.
-- [ ] OpenAI-Aufruf im Test entweder über echten opt-in API-Test oder einen deterministischen Mock ausführen.
-- [ ] Test am Ende mit klarer Zusammenfassung und nützlichen URLs beenden.
+- [x] OpenAI-Aufruf im Test entweder über echten opt-in API-Test oder einen deterministischen Mock ausführen.
+- [x] Test am Ende mit klarer Zusammenfassung und nützlichen URLs beenden.
 
 **Abnahme:** `docker compose up -d --wait && bash scripts/mvp_smoke_test.sh` läuft auf leerer Datenbank ohne manuellen Eingriff grün durch.
 
@@ -401,19 +401,19 @@ Zielwerte für die Demo:
 
 Das Projekt wird nur eingereicht, wenn alle folgenden Punkte erfüllt sind:
 
-- [ ] GPT-5.6 wird im echten Golden Path aufgerufen und `raw_model`/Provider ist nachvollziehbar.
+- [x] GPT-5.6 wird im echten Golden Path aufgerufen und `raw_model`/Provider ist nachvollziehbar.
 - [ ] Die Mehrheit der neuen Kernfunktion wurde in einer dokumentierten Codex-Session gebaut.
-- [ ] Baseline und Build-Week-Commits sind klar getrennt.
-- [ ] Keine urheberrechtlich problematischen oder privaten Dateien im Repository oder Video.
+- [x] Baseline und Build-Week-Commits sind klar getrennt.
+- [x] Keine urheberrechtlich problematischen oder privaten Dateien im Repository oder Video.
 - [ ] Frischer Checkout startet nach README-Anleitung.
-- [ ] Golden-Path-Smoke-Test ist grün.
-- [ ] Web- und API-Build sind grün.
-- [ ] Mindestens die kritischen Backend- und E2E-Tests sind grün.
+- [x] Golden-Path-Smoke-Test ist grün.
+- [x] Web- und API-Build sind grün.
+- [x] Mindestens die kritischen Backend- und E2E-Tests sind grün.
 - [ ] Öffentliche Demo ist per HTTPS erreichbar und gegen Missbrauch begrenzt.
 - [ ] Judge-Testanleitung funktioniert ohne Rückfrage.
 - [ ] Video ist öffentlich, hat Audio und ist kürzer als drei Minuten.
 - [ ] README erklärt Codex, GPT-5.6, menschliche Entscheidungen und neue Build-Week-Arbeit.
-- [ ] Lizenz und Third-Party Notices sind vorhanden.
+- [x] Lizenz und Third-Party Notices sind vorhanden.
 - [ ] Repository-Link und Demo-Link sind bis zum Ende der Bewertung verfügbar.
 
 ## 14. Reihenfolge der Umsetzung
