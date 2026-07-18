@@ -26,7 +26,8 @@ A browser-based, 5E-compatible AI game master for shared tabletop sessions. The 
 
 ## Local setup
 
-Requirements: Docker with Compose, `curl`, and `jq` for the smoke test.
+Requirements: Docker with Compose, Node.js/npm, `curl`, `jq`, and Google Chrome (or
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`) for the complete browser test.
 
 ```bash
 cp .env.example .env
@@ -34,6 +35,19 @@ cp .env.example .env
 docker compose up -d --build --wait
 bash scripts/mvp_smoke_test.sh
 ```
+
+The deterministic Golden Path needs no real OpenAI key. It starts an isolated
+Compose stack with a local OpenAI-compatible mock, creates a character through
+the AI builder, plays a complete roll-request/resolution turn, verifies the
+player-safe portal, and drives the corresponding browser flow with Playwright:
+
+```bash
+npm ci
+npm run test:golden-path
+```
+
+The test stack uses separate ports and is removed automatically when the test
+finishes. Set `KEEP_TEST_STACK=true` only when debugging it locally.
 
 Default endpoints:
 
@@ -71,6 +85,14 @@ cp .env.example .env
 # OPENAI_API_KEY in .env eintragen
 docker compose up -d --build --wait
 bash scripts/mvp_smoke_test.sh
+```
+
+Vollständiger, deterministischer Test inklusive Character Builder, Session,
+Würfelauflösung, Player Portal und Playwright-Browserablauf:
+
+```bash
+npm ci
+npm run test:golden-path
 ```
 
 Kommerzielle Regelbücher, Abenteuer, private Kampagnendaten, persönliche Sprachaufnahmen und Zugangsdaten dürfen nicht in das Repository gelangen. Zulässige SRD-5.1-Inhalte sind gemäß CC BY 4.0 gekennzeichnet.

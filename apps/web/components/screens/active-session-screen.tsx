@@ -195,7 +195,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
 
   const displayedNarration =
     localResponse?.narration || session.state.last_narration || "The AI DM is ready to describe the next scene once the session is started.";
-  const displayedNotes = localResponse?.dm_notes ?? session.state.last_dm_notes;
+  const displayedNotes = localResponse?.dm_notes ?? session.state.last_dm_notes ?? [];
   const displayedCue = localResponse?.scene_events?.[0]?.name || session.state.active_media_cue;
 
   function splitLines(value: unknown): string[] {

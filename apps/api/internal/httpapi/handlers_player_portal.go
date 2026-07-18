@@ -388,5 +388,24 @@ func (h *Handler) loadPlayerPortalSession(ctx context.Context, token string) (Pl
 		available = append(available, character)
 	}
 	portal.AvailableCharacters = available
+	portal.Session = sanitizeSessionForPlayers(portal.Session)
 	return portal, nil
+}
+
+func sanitizeSessionForPlayers(session Session) Session {
+	session.State.LastDMNotes = nil
+	session.State.PlayLLMSessionID = ""
+	session.State.RulesLLMSessionID = ""
+	session.State.SummarySessionID = ""
+	if len(session.State.VisualPayload) > 0 {
+		payload := make(map[string]any, len(session.State.VisualPayload))
+		for key, value := range session.State.VisualPayload {
+			payload[key] = value
+		}
+		if hidden, _ := payload["hide_dc"].(bool); hidden {
+			delete(payload, "roll_dc")
+		}
+		session.State.VisualPayload = payload
+	}
+	return session
 }

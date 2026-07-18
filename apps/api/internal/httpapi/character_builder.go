@@ -111,7 +111,7 @@ func (h *Handler) startCharacterBuilder(c *gin.Context) {
 		return
 	}
 
-	documents, err := h.store.ListDocumentsByIDs(c.Request.Context(), req.SelectedDocumentIDs)
+	documents, err := h.loadSelectedBuilderDocuments(c.Request.Context(), req.SelectedDocumentIDs)
 	if err != nil {
 		errorResponse(c, 500, "load selected rulebooks", err)
 		return
@@ -253,7 +253,7 @@ func (h *Handler) characterBuilderMessage(c *gin.Context) {
 		return
 	}
 
-	documents, err := h.store.ListDocumentsByIDs(c.Request.Context(), stringListFromAny(character.Metadata["selected_document_ids"]))
+	documents, err := h.loadSelectedBuilderDocuments(c.Request.Context(), stringListFromAny(character.Metadata["selected_document_ids"]))
 	if err != nil {
 		errorResponse(c, 500, "load selected rulebooks", err)
 		return
@@ -393,6 +393,30 @@ func (h *Handler) characterBuilderMessage(c *gin.Context) {
 		UIAction:     completion.UIAction,
 		UIPayload:    completion.UIPayload,
 	})
+}
+
+func (h *Handler) loadSelectedBuilderDocuments(ctx context.Context, documentIDs []string) ([]Document, error) {
+	embeddedByID := map[string]Document{}
+	for _, document := range embeddedBuilderGuideDocuments() {
+		embeddedByID[document.ID] = document
+	}
+	persistedDocumentIDs := make([]string, 0, len(documentIDs))
+	documents := make([]Document, 0, len(documentIDs))
+	for _, documentID := range documentIDs {
+		if embedded, ok := embeddedByID[documentID]; ok {
+			documents = append(documents, embedded)
+			continue
+		}
+		persistedDocumentIDs = append(persistedDocumentIDs, documentID)
+	}
+	if len(persistedDocumentIDs) == 0 {
+		return documents, nil
+	}
+	persistedDocuments, err := h.store.ListDocumentsByIDs(ctx, persistedDocumentIDs)
+	if err != nil {
+		return nil, err
+	}
+	return append(documents, persistedDocuments...), nil
 }
 
 func (h *Handler) applyCharacterBuilderPatch(c *gin.Context) {

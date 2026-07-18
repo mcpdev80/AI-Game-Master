@@ -201,7 +201,7 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 - [ ] `state_updates` serverseitig über Allowlist validieren.
 - [ ] Unbekannte Entities und Felder ablehnen statt stillschweigend anwenden.
 - [ ] Würfelanforderungen validieren: erlaubte Würfel, Wertebereiche, DC-Bereich und maximale Anzahl.
-- [ ] Interne `dm_notes` niemals an Player Portal oder Player Screen ausliefern.
+- [x] Interne `dm_notes` niemals an Player Portal oder Player Screen ausliefern.
 
 **Abnahme:** Ein manipulierter Abenteuertext kann weder Systemprompt noch Serveraktionen überschreiben; unerlaubte State Updates werden verworfen und geloggt.
 
@@ -213,14 +213,14 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 - [ ] Tests für gültige, verweigerte, unvollständige und fehlerhafte Structured Outputs.
 - [ ] Tests für `state_updates`-Allowlist und Würfelvalidierung.
 - [ ] Tests für Session-Memory/Kompaktierung und Trennung von Erzählungs- und Regelkontext.
-- [ ] Tests für Player-Safe-Serialisierung: keine DM Notes, versteckten DCs oder privaten Dokumente.
+- [x] Tests für Player-Safe-Serialisierung: keine DM Notes, versteckten DCs oder internen LLM-Session-IDs.
 - [x] `httptest.Server` als deterministischer OpenAI-Mock.
-- [ ] Mindestens ein Integrationstest: Spieleraktion → Roll Request → bestätigter Wurf → Zustandsänderung.
+- [x] Mindestens ein Integrationstest: Spieleraktion → Roll Request → bestätigter Wurf → Zustandsänderung.
 
 ### Frontend/E2E
 
-- [ ] Playwright einrichten.
-- [ ] Golden Path testen: Demo öffnen, Player beitreten, Turn senden, Wurf bestätigen, Narration und State Update sehen.
+- [x] Playwright einrichten.
+- [x] Golden Path testen: Demo öffnen, Charakter erstellen, Player beitreten, Turn senden, Wurf bestätigen, Narration und State Update sehen.
 - [ ] Kamera-Verweigerung und manuellen Würfel-Fallback testen.
 - [ ] Lade-, Fehler-, Rate-Limit- und LLM-Fallback-Zustände sichtbar und verständlich darstellen.
 - [ ] Responsive Test für Operator Desktop und Player Smartphone.
@@ -234,6 +234,7 @@ docker compose config --quiet
 docker compose build
 docker compose up -d --wait
 bash scripts/mvp_smoke_test.sh
+npm run test:golden-path
 ```
 
 - [ ] `npm audit` prüfen; Findings gezielt aktualisieren oder begründet dokumentieren, kein blindes `--force`.

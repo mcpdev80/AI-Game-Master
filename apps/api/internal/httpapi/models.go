@@ -50,7 +50,7 @@ type SessionState struct {
 	LastDiceRoll         *DiceRollEvent        `json:"last_dice_roll"`
 	LastConfirmedRoll    *DiceRollEvent        `json:"last_confirmed_roll,omitempty"`
 	LastNarration        string                `json:"last_narration"`
-	LastDMNotes          []string              `json:"last_dm_notes"`
+	LastDMNotes          []string              `json:"last_dm_notes,omitempty"`
 	ActiveMediaCue       string                `json:"active_media_cue"`
 	VisualMode           string                `json:"visual_mode,omitempty"`
 	VisualPayload        map[string]any        `json:"visual_payload,omitempty"`

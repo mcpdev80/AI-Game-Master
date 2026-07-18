@@ -41,6 +41,10 @@
 - Roll-request narration now respects the selected English/German locale and avoids repeating model-provided dice instructions.
 - Live verification passed end-to-end on July 18, 2026: OpenAI resolved the configured `gpt-5.6` alias to `gpt-5.6-sol` for both the generated session opening and the first structured player turn.
 - Fixed the production Next.js rewrite fallback from the removed `dungeon-master-api` hostname to the Compose service `api`; embedded rules and session lifecycle actions now reach the backend through the browser proxy.
+- Added an isolated deterministic Golden Path stack with an OpenAI-compatible mock; it requires no API key and leaves the normal development database untouched.
+- Added a complete API flow covering the embedded SRD reference, conversational character creation, finished character sheet, player join/readiness, session opening, roll request, confirmed physical-die value, state update, map release, and player-safe portal.
+- Added Playwright coverage for the same judge-facing browser path from one-click demo seeding through character creation and dice resolution.
+- Fixed embedded Character Builder document IDs being sent to PostgreSQL as UUIDs, an undefined DM-notes render crash in live sessions, and leakage of private DM notes, hidden DCs, and internal LLM session IDs through the Player Portal.
 
 ### OpenAI speech input and output
 

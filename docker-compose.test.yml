@@ -1,0 +1,27 @@
+services:
+  mock-openai:
+    image: python:3.13-alpine
+    working_dir: /mock
+    command: ["python", "/mock/mock_openai.py"]
+    volumes:
+      - ./tests/mock_openai.py:/mock/mock_openai.py:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8099/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  api:
+    environment:
+      APP_ENV: test
+      LLM_PROVIDER: openai
+      OPENAI_API_KEY: golden-path-test-key
+      OPENAI_BASE_URL: http://mock-openai:8099/v1
+      OPENAI_MODEL: gpt-5.6
+      OPENAI_REASONING_EFFORT: low
+      OPENAI_STORE: "false"
+      TTS_PROVIDER: openai
+      STT_PROVIDER: openai
+    depends_on:
+      mock-openai:
+        condition: service_healthy
