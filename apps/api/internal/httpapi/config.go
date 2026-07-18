@@ -11,9 +11,12 @@ type Config struct {
 	Env                       string
 	DatabaseURL               string
 	RedisURL                  string
+	LLMProvider               string
 	LLMBaseURL                string
 	LLMModel                  string
 	LLMAPIKey                 string
+	LLMReasoningEffort        string
+	LLMStoreResponses         bool
 	TTSBaseURL                string
 	TTSModel                  string
 	STTBaseURL                string
@@ -26,15 +29,27 @@ type Config struct {
 }
 
 func LoadConfig() Config {
+	provider := envOrDefault("LLM_PROVIDER", "openai")
+	llmBaseURL := envOrDefault("LLM_BASE_URL", "http://host.docker.internal:11434/v1")
+	llmModel := envOrDefault("LLM_MODEL", "local-model")
+	llmAPIKey := os.Getenv("LLM_API_KEY")
+	if provider == "openai" {
+		llmBaseURL = envOrDefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
+		llmModel = envOrDefault("OPENAI_MODEL", "gpt-5.6")
+		llmAPIKey = os.Getenv("OPENAI_API_KEY")
+	}
 	return Config{
 		Host:                      envOrDefault("API_HOST", "0.0.0.0"),
 		Port:                      envOrDefault("API_PORT", "8080"),
 		Env:                       envOrDefault("APP_ENV", "development"),
 		DatabaseURL:               envOrDefault("DATABASE_URL", "postgres://dungeon:dungeon@postgres:5432/dungeon_master?sslmode=disable"),
 		RedisURL:                  envOrDefault("REDIS_URL", "redis://redis:6379/0"),
-		LLMBaseURL:                envOrDefault("LLM_BASE_URL", "http://host.docker.internal:11434/v1"),
-		LLMModel:                  envOrDefault("LLM_MODEL", "local-model"),
-		LLMAPIKey:                 os.Getenv("LLM_API_KEY"),
+		LLMProvider:               provider,
+		LLMBaseURL:                llmBaseURL,
+		LLMModel:                  llmModel,
+		LLMAPIKey:                 llmAPIKey,
+		LLMReasoningEffort:        envOrDefault("OPENAI_REASONING_EFFORT", "medium"),
+		LLMStoreResponses:         envBoolOrDefault("OPENAI_STORE", false),
 		TTSBaseURL:                envOrDefault("TTS_BASE_URL", "http://dungeon-master-speech-tts:8091/v1"),
 		TTSModel:                  envOrDefault("TTS_MODEL", "piper"),
 		STTBaseURL:                envOrDefault("STT_BASE_URL", "http://dungeon-master-speech-stt:8092/v1"),
@@ -45,6 +60,18 @@ func LoadConfig() Config {
 		LLMBreakerThreshold:       envIntOrDefault("LLM_BREAKER_THRESHOLD", 3),
 		LLMBreakerCooldownSeconds: envIntOrDefault("LLM_BREAKER_COOLDOWN_SECONDS", 45),
 	}
+}
+
+func envBoolOrDefault(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func (c Config) Address() string {

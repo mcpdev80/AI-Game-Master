@@ -13,28 +13,37 @@ import (
 )
 
 type LLMClient struct {
-	baseURL    string
-	apiKey     string
-	model      string
-	httpClient *http.Client
-	gateway    *LLMGateway
-	mu         sync.RWMutex
+	provider        string
+	baseURL         string
+	apiKey          string
+	model           string
+	reasoningEffort string
+	storeResponses  bool
+	httpClient      *http.Client
+	gateway         *LLMGateway
+	mu              sync.RWMutex
 }
 
 func NewLLMClient(cfg Config) *LLMClient {
 	return &LLMClient{
-		baseURL: strings.TrimRight(cfg.LLMBaseURL, "/"),
-		apiKey:  cfg.LLMAPIKey,
-		model:   cfg.LLMModel,
+		provider:        strings.ToLower(strings.TrimSpace(cfg.LLMProvider)),
+		baseURL:         strings.TrimRight(cfg.LLMBaseURL, "/"),
+		apiKey:          cfg.LLMAPIKey,
+		model:           cfg.LLMModel,
+		reasoningEffort: cfg.LLMReasoningEffort,
+		storeResponses:  cfg.LLMStoreResponses,
 		httpClient: &http.Client{
 			Timeout: 240 * time.Second,
 		},
 	}
 }
 
-func (c *LLMClient) UpdateRuntimeConfig(baseURL string, model string) {
+func (c *LLMClient) UpdateRuntimeConfig(provider string, baseURL string, model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if strings.TrimSpace(provider) != "" {
+		c.provider = strings.ToLower(strings.TrimSpace(provider))
+	}
 	if strings.TrimSpace(baseURL) != "" {
 		c.baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	}
@@ -47,15 +56,104 @@ func (c *LLMClient) CurrentConfig() SystemConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return SystemConfig{
-		LLMBaseURL: c.baseURL,
-		LLMModel:   c.model,
+		LLMProvider: c.provider,
+		LLMBaseURL:  c.baseURL,
+		LLMModel:    c.model,
 	}
+}
+
+func (c *LLMClient) RuntimeClient(cfg SystemConfig) *LLMClient {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	provider := strings.ToLower(strings.TrimSpace(cfg.LLMProvider))
+	if provider == "" {
+		provider = c.provider
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(cfg.LLMBaseURL), "/")
+	if baseURL == "" {
+		baseURL = c.baseURL
+	}
+	model := strings.TrimSpace(cfg.LLMModel)
+	if model == "" {
+		model = c.model
+	}
+	return &LLMClient{
+		provider:        provider,
+		baseURL:         baseURL,
+		apiKey:          c.apiKey,
+		model:           model,
+		reasoningEffort: c.reasoningEffort,
+		storeResponses:  c.storeResponses,
+		httpClient:      c.httpClient,
+	}
+}
+
+func (c *LLMClient) TestConnection(ctx context.Context) (string, string, error) {
+	messages := []map[string]string{
+		{"role": "system", "content": "You are a concise fantasy tabletop game master."},
+		{"role": "user", "content": "Write two atmospheric sentences that open a mysterious scene. Do not use JSON or explain the test."},
+	}
+	return c.chatCompletion(ctx, messages, false, 220)
+}
+
+func (c *LLMClient) ListModels(ctx context.Context) ([]string, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.currentBaseURL()+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	rawBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode >= 300 {
+		return nil, fmt.Errorf("list models failed with status %d: %s", response.StatusCode, compactAPIError(rawBody))
+	}
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rawBody, &result); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(result.Data))
+	for _, item := range result.Data {
+		if strings.TrimSpace(item.ID) != "" {
+			models = append(models, item.ID)
+		}
+	}
+	return models, nil
 }
 
 func (c *LLMClient) DetectDiceFromImage(ctx context.Context, imageDataURL string, language string) (DetectDiceResponse, error) {
 	lang := language
 	if strings.TrimSpace(lang) == "" {
-		lang = "de"
+		lang = "en"
+	}
+	if c.isOpenAI() {
+		result, err := c.detectDiceWithResponses(ctx, imageDataURL, lang)
+		if err != nil {
+			return DetectDiceResponse{}, err
+		}
+		result.Dice = normalizeDiceResults(result.Dice)
+		if result.Dice == nil {
+			result.Dice = []DiceResult{}
+		}
+		if result.Boxes == nil {
+			result.Boxes = []DiceBox{}
+		}
+		if result.DiceCount == 0 && len(result.Dice) > 0 {
+			result.DiceCount = len(result.Dice)
+		}
+		return result, nil
 	}
 
 	payload := map[string]any{
@@ -194,13 +292,19 @@ func (c *LLMClient) CompleteGMResponse(ctx context.Context, session Session, req
 	if queryKind == "opening" {
 		maxTokens = 900
 	}
-	content, modelName, err := c.chatCompletion(ctx, messages, isSceneLikeQueryKind(queryKind), maxTokens)
+	var content, modelName string
+	var err error
+	if c.isOpenAI() && isSceneLikeQueryKind(queryKind) {
+		content, modelName, err = c.responsesCompletion(ctx, messages, maxTokens, encounterTurnSchema())
+	} else {
+		content, modelName, err = c.chatCompletion(ctx, messages, isSceneLikeQueryKind(queryKind), maxTokens)
+	}
 	if err != nil {
 		return GMResponse{}, err
 	}
 
 	result, err := parseLLMResponse(content, queryKind)
-	if err != nil {
+	if err != nil && !c.isOpenAI() {
 		repaired, repairErr := c.repairJSONResponse(ctx, content, queryKind)
 		if repairErr != nil {
 			return GMResponse{}, err
@@ -210,6 +314,9 @@ func (c *LLMClient) CompleteGMResponse(ctx context.Context, session Session, req
 		if err != nil {
 			return GMResponse{}, err
 		}
+	}
+	if err != nil {
+		return GMResponse{}, err
 	}
 
 	result.SessionID = req.SessionID
@@ -278,6 +385,13 @@ func (c *LLMClient) chatCompletion(ctx context.Context, messages []map[string]st
 		} else {
 			maxTokens = 192
 		}
+	}
+	if c.isOpenAI() {
+		var schema *responseJSONSchema
+		if requireJSON {
+			schema = &responseJSONSchema{Name: "generic_json_response", JSONMode: true}
+		}
+		return c.responsesCompletion(ctx, messages, maxTokens, schema)
 	}
 	payload := map[string]any{
 		"model":       c.currentModel(),
@@ -382,6 +496,12 @@ func (c *LLMClient) currentModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.model
+}
+
+func (c *LLMClient) isOpenAI() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.provider == "openai"
 }
 
 func (c *LLMClient) repairCharacterBuilderResponse(ctx context.Context, broken string) (string, error) {

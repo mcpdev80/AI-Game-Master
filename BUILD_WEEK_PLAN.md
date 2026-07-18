@@ -144,11 +144,11 @@ OPENAI_MODEL=gpt-5.6
 OPENAI_STORE=false
 ```
 
-- [ ] API-Key nur serverseitig aus der Umgebung lesen; nie über `GET /api/system/config` oder das Frontend ausgeben.
-- [ ] Lokalen OpenAI-kompatiblen Provider optional erhalten, aber OpenAI für Submission und Demo als klaren Standard dokumentieren.
-- [ ] Provider-spezifische Felder wie `chat_template_kwargs` nicht an OpenAI senden.
-- [ ] Health-/Summary-Antwort um Provider, Modell und Verbindungstest ergänzen, aber Secrets maskieren.
-- [ ] UI sichtbar anzeigen lassen: `Powered by GPT-5.6` und welcher Turn tatsächlich von welchem Modell erzeugt wurde.
+- [x] API-Key nur serverseitig aus der Umgebung lesen; nie über `GET /api/system/config` oder das Frontend ausgeben.
+- [x] Lokalen OpenAI-kompatiblen Provider optional erhalten, aber OpenAI für Submission und Demo als klaren Standard dokumentieren.
+- [x] Provider-spezifische Felder wie `chat_template_kwargs` nicht an OpenAI senden.
+- [x] Health-/Summary-Antwort um Provider, Modell und Verbindungstest ergänzen, aber Secrets maskieren.
+- [x] UI sichtbar anzeigen lassen: `Powered by GPT-5.6` und welcher Turn tatsächlich von welchem Modell erzeugt wurde.
 
 **Betroffene Dateien:**
 
@@ -164,9 +164,9 @@ OPENAI_STORE=false
 
 Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_object` angefordert und anschließend repariert. Für OpenAI soll ein striktes JSON-Schema verwendet werden.
 
-- [ ] OpenAI-Aufrufe über `POST /v1/responses` implementieren.
-- [ ] Für den Encounter-Turn ein versioniertes Schema `encounter_turn_v1` definieren.
-- [ ] Schema mindestens für folgende Felder festlegen:
+- [x] OpenAI-Aufrufe über `POST /v1/responses` implementieren.
+- [x] Für den Encounter-Turn ein versioniertes Schema `encounter_turn_v1` definieren.
+- [x] Schema mindestens für folgende Felder festlegen:
   - `narration`
   - `language`
   - `rules_used`
@@ -175,11 +175,11 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
   - `scene_events`
   - `dm_notes`
   - optional `speaker` und `media_cue`
-- [ ] Für alle Objekte `additionalProperties: false` verwenden und erforderliche Felder explizit markieren.
-- [ ] Refusals, unvollständige Responses, Timeouts, Rate Limits und ungültige Schemas als eigene Fehlerarten behandeln.
-- [ ] Den bestehenden Prosa-Fallback behalten, aber im UI und in Logs klar markieren.
-- [ ] JSON-Reparatur höchstens als letzter Fallback für lokale Provider behalten; der OpenAI-Hauptpfad darf im Normalfall keine zweite Modellrunde benötigen.
-- [ ] Für Endnutzer einen stabilen, datensparsamen `safety_identifier` mitsenden, z. B. einen serverseitig gehashten Player-/Session-Identifier.
+- [x] Für alle Objekte `additionalProperties: false` verwenden und erforderliche Felder explizit markieren.
+- [x] Refusals, unvollständige Responses, Timeouts, Rate Limits und ungültige Schemas als eigene Fehlerarten behandeln.
+- [x] Den bestehenden Prosa-Fallback behalten, aber im UI und in Logs klar markieren.
+- [x] JSON-Reparatur höchstens als letzter Fallback für lokale Provider behalten; der OpenAI-Hauptpfad darf im Normalfall keine zweite Modellrunde benötigen.
+- [x] Für Endnutzer einen stabilen, datensparsamen `safety_identifier` mitsenden, z. B. einen serverseitig gehashten Player-/Session-Identifier.
 
 **Architekturentscheidung:** Der eigene PostgreSQL-Session-State bleibt Source of Truth. OpenAI-Responses werden standardmäßig mit `store: false` verwendet, damit die vorhandene Memory- und Audit-Architektur nachvollziehbar bleibt.
 

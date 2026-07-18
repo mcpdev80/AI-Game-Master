@@ -2,7 +2,7 @@
 
 A browser-based, 5E-compatible AI game master for shared tabletop sessions. The operator controls the adventure and releases information, while players join from their phones, speak or type actions, roll physical dice, and receive synchronized narration.
 
-> This repository is being prepared for OpenAI Build Week. The imported baseline still uses an OpenAI-compatible local text endpoint; the next implementation step migrates the core turn flow to GPT-5.6 and the Responses API.
+> The Build Week implementation uses GPT-5.6 through the OpenAI Responses API. Encounter turns and camera-assisted dice results use strict, versioned Structured Outputs; a local OpenAI-compatible provider remains available as an optional fallback.
 
 ## Features
 
@@ -30,6 +30,7 @@ Requirements: Docker with Compose, `curl`, and `jq` for the smoke test.
 
 ```bash
 cp .env.example .env
+# Add OPENAI_API_KEY to .env
 docker compose up -d --build --wait
 bash scripts/mvp_smoke_test.sh
 ```
@@ -41,7 +42,9 @@ Default endpoints:
 - Vision health: `http://localhost:8090/health`
 - PostgreSQL: `localhost:5435`
 
-The current baseline expects optional OpenAI-compatible text, STT, and TTS services configured through `.env`. Do not commit `.env`, uploads, private campaign material, commercial rulebooks, personal voice recordings, or credentials.
+The default text provider is OpenAI with `OPENAI_MODEL=gpt-5.6`, `OPENAI_STORE=false`, and `POST /v1/responses`. The key is read only by the Go API and is never returned by the system configuration endpoints. Set `LLM_PROVIDER=local` to use the optional local OpenAI-compatible fallback. STT and TTS still use the local adapters at this stage.
+
+Do not commit `.env`, uploads, private campaign material, commercial rulebooks, personal voice recordings, or credentials.
 
 ## Languages
 
@@ -63,6 +66,7 @@ Lokaler Start:
 
 ```bash
 cp .env.example .env
+# OPENAI_API_KEY in .env eintragen
 docker compose up -d --build --wait
 bash scripts/mvp_smoke_test.sh
 ```

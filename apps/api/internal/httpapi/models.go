@@ -533,13 +533,15 @@ type SessionJoinPreview struct {
 }
 
 type SystemConfig struct {
-	LLMBaseURL string `json:"llm_base_url"`
-	LLMModel   string `json:"llm_model"`
+	LLMProvider string `json:"llm_provider"`
+	LLMBaseURL  string `json:"llm_base_url"`
+	LLMModel    string `json:"llm_model"`
 }
 
 type UpdateSystemConfigRequest struct {
-	LLMBaseURL string `json:"llm_base_url"`
-	LLMModel   string `json:"llm_model"`
+	LLMProvider string `json:"llm_provider"`
+	LLMBaseURL  string `json:"llm_base_url"`
+	LLMModel    string `json:"llm_model"`
 }
 
 type UpdatePlayerSlotCharacterRequest struct {

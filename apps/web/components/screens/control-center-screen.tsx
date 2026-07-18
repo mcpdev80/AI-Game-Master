@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Camera, Database, Dices, Mic, Monitor, Network, PlayCircle, Radio, RefreshCw, Square, Volume2, Wifi, X } from "lucide-react";
 import { PageIntro, Panel, StatCard, StatusPill } from "../studio-primitives";
-import { detectDiceFromImage, stabilizeDiceFrames, updateSystemConfig, type DiceBox, type DiceDetection, type DiceDetectionFrame, type LLMGatewayStatus } from "../../lib/api";
+import { detectDiceFromImage, fetchLLMModels, stabilizeDiceFrames, testLLMConnection, updateSystemConfig, type DiceBox, type DiceDetection, type DiceDetectionFrame, type LLMGatewayStatus } from "../../lib/api";
 import type { PlayerLinkSlot, Session } from "../../lib/api";
 
 type ControlCenterScreenProps = {
@@ -792,12 +792,8 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     setLlmTestStatus("running");
     setLlmTestMessage("Fetching available models...");
     try {
-      const response = await fetch(`${llmBaseUrl.replace(/\/$/, "")}/models`);
-      if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`);
-      }
-      const data = (await response.json()) as { data?: Array<{ id?: string }> };
-      const models = (data.data ?? []).map((item) => item.id).filter((value): value is string => Boolean(value));
+      const data = await fetchLLMModels({ llm_base_url: llmBaseUrl.trim(), llm_model: llmModelInput.trim() });
+      const models = data.models;
       setAvailableModels(models);
       if (!llmModelInput && models[0]) {
         setLlmModelInput(models[0]);
@@ -818,41 +814,12 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     }
 
     setLlmTestStatus("running");
-    setLlmTestMessage("Sending a short DM prompt to the selected local model...");
+    setLlmTestMessage("Sending a short GM prompt through the secure API backend...");
     try {
-      const response = await fetch(`${llmBaseUrl.replace(/\/$/, "")}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: llmModelInput,
-          chat_template_kwargs: {
-            enable_thinking: false,
-          },
-          messages: [
-            {
-              role: "system",
-              content:
-                "Du bist ein hervorragender deutschsprachiger Spielleiter für Pen-and-Paper-Rollenspiele. Antworte atmosphärisch, natürlich und knapp, ohne JSON und ohne Meta-Erklärung.",
-            },
-            {
-              role: "user",
-              content:
-                "Dies ist ein Verbindungstest aus dem Control Center. Schreibe 3 bis 5 schöne Sätze, als würdest du gerade eine düstere Fantasy-Szene für eine Heldengruppe eröffnen.",
-            },
-          ],
-          temperature: 0.9,
-        }),
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `${response.status} ${response.statusText}`);
-      }
-      const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }>; model?: string };
-      const content = data.choices?.[0]?.message?.content?.trim();
+      const data = await testLLMConnection({ llm_base_url: llmBaseUrl.trim(), llm_model: llmModelInput.trim() });
+      const content = data.content.trim();
       setLlmTestStatus("success");
-      setLlmTestMessage(content || `${data.model ?? llmModelInput} responded successfully.`);
+      setLlmTestMessage(content || `${data.model || llmModelInput} responded successfully.`);
     } catch (error) {
       setLlmTestStatus("error");
       setLlmTestMessage(error instanceof Error ? error.message : "LLM test failed.");
@@ -947,7 +914,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               </div>
               <div>
                 <div className="status-card__head">
-                  <strong>AI Model</strong>
+                  <strong>AI Model · Powered by {savedLlmModel || "GPT-5.6"}</strong>
                   <StatusPill tone={llmTone}>{llmConfigured ? "Ready" : "Setup"}</StatusPill>
                 </div>
                 <p>{llmDetail}</p>
@@ -1479,9 +1446,9 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               <div>
                 <p className="eyebrow">AI Model Settings</p>
                 <h2 className="studio-panel__title" id="llm-settings-title">
-                  Configure local model routing
+                  Configure AI model routing
                 </h2>
-                <p className="studio-panel__description">Enter the OpenAI-compatible base URL, fetch available models, choose one, then run a live DM-style response test.</p>
+                <p className="studio-panel__description">Configure OpenAI GPT-5.6 or an optional OpenAI-compatible local provider, then run a server-side GM response test.</p>
               </div>
               <button className="icon-button" aria-label="Close AI model settings" onClick={handleCloseLlmModal} type="button">
                 <X size={18} />
@@ -1493,7 +1460,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                 <input
                   className="studio-input"
                   onChange={(event) => setLlmBaseUrl(event.target.value)}
-                  placeholder="http://host.docker.internal:11434/v1"
+                  placeholder="https://api.openai.com/v1"
                   value={llmBaseUrl}
                 />
                 <div className="button-row">
@@ -1509,6 +1476,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
                 </div>
                 <select onChange={(event) => setLlmModelInput(event.target.value)} value={llmModelInput}>
                   <option value="">{availableModels.length === 0 ? "No fetched models yet" : "Choose a model"}</option>
+                  {llmModelInput && !availableModels.includes(llmModelInput) ? <option value={llmModelInput}>{llmModelInput}</option> : null}
                   {availableModels.map((model) => (
                     <option key={model} value={model}>
                       {model}

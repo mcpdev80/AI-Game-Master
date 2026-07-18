@@ -328,6 +328,7 @@ export type SessionJoinPreview = {
 };
 
 export type SystemConfig = {
+  llm_provider?: "openai" | "local";
   llm_base_url: string;
   llm_model: string;
 };
@@ -670,6 +671,14 @@ export async function fetchSystemConfig(): Promise<SystemConfig> {
 
 export async function updateSystemConfig(payload: SystemConfig): Promise<SystemConfig> {
   return apiPut<SystemConfig>("/api/system/config", payload);
+}
+
+export async function testLLMConnection(payload: SystemConfig): Promise<{ content: string; model: string }> {
+  return apiPost<{ content: string; model: string }>("/api/system/llm-test", payload);
+}
+
+export async function fetchLLMModels(payload: SystemConfig): Promise<{ models: string[] }> {
+  return apiPost<{ models: string[] }>("/api/system/llm-models", payload);
 }
 
 export async function updatePlayerSlotCharacter(playerSlotId: string, payload: { character_id: string }) {

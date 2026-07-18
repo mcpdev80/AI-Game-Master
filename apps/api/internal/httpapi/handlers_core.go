@@ -66,6 +66,7 @@ func (h *Handler) systemSummary(c *gin.Context) {
 		"active_session": nil,
 		"last_ai_action": nil,
 		"llm": gin.H{
+			"provider": llmConfig.LLMProvider,
 			"base_url": llmConfig.LLMBaseURL,
 			"model":    llmConfig.LLMModel,
 		},
@@ -98,6 +99,9 @@ func (h *Handler) getSystemConfig(c *gin.Context) {
 	}
 
 	current := h.llmClient.CurrentConfig()
+	if strings.TrimSpace(cfg.LLMProvider) == "" {
+		cfg.LLMProvider = current.LLMProvider
+	}
 	if strings.TrimSpace(cfg.LLMBaseURL) == "" {
 		cfg.LLMBaseURL = current.LLMBaseURL
 	}
@@ -116,8 +120,16 @@ func (h *Handler) updateSystemConfig(c *gin.Context) {
 	}
 
 	cfg := SystemConfig{
-		LLMBaseURL: strings.TrimSpace(req.LLMBaseURL),
-		LLMModel:   strings.TrimSpace(req.LLMModel),
+		LLMProvider: strings.ToLower(strings.TrimSpace(req.LLMProvider)),
+		LLMBaseURL:  strings.TrimSpace(req.LLMBaseURL),
+		LLMModel:    strings.TrimSpace(req.LLMModel),
+	}
+	if cfg.LLMProvider == "" {
+		cfg.LLMProvider = h.llmClient.CurrentConfig().LLMProvider
+	}
+	if cfg.LLMProvider != "openai" && cfg.LLMProvider != "local" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "llm_provider must be openai or local"})
+		return
 	}
 	if cfg.LLMBaseURL == "" || cfg.LLMModel == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "llm_base_url and llm_model are required"})
@@ -130,8 +142,38 @@ func (h *Handler) updateSystemConfig(c *gin.Context) {
 		return
 	}
 
-	h.llmClient.UpdateRuntimeConfig(updated.LLMBaseURL, updated.LLMModel)
+	h.llmClient.UpdateRuntimeConfig(updated.LLMProvider, updated.LLMBaseURL, updated.LLMModel)
 	c.JSON(http.StatusOK, updated)
+}
+
+func (h *Handler) testLLMConnection(c *gin.Context) {
+	var req UpdateSystemConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid llm test payload", err)
+		return
+	}
+	client := h.llmClient.RuntimeClient(SystemConfig{LLMProvider: req.LLMProvider, LLMBaseURL: req.LLMBaseURL, LLMModel: req.LLMModel})
+	content, model, err := client.TestConnection(c.Request.Context())
+	if err != nil {
+		errorResponse(c, http.StatusBadGateway, "llm test failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"content": content, "model": model})
+}
+
+func (h *Handler) listLLMModels(c *gin.Context) {
+	var req UpdateSystemConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid model list payload", err)
+		return
+	}
+	client := h.llmClient.RuntimeClient(SystemConfig{LLMProvider: req.LLMProvider, LLMBaseURL: req.LLMBaseURL, LLMModel: req.LLMModel})
+	models, err := client.ListModels(c.Request.Context())
+	if err != nil {
+		errorResponse(c, http.StatusBadGateway, "load llm models", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"models": models})
 }
 
 func errorResponse(c *gin.Context, status int, message string, err error) {

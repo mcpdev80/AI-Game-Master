@@ -34,7 +34,11 @@ func NewServer(cfg Config) *Server {
 	llmGateway := NewLLMGateway(cfg)
 	llmClient.gateway = llmGateway
 	if systemConfig, configErr := store.GetSystemConfig(ctx); configErr == nil {
-		llmClient.UpdateRuntimeConfig(systemConfig.LLMBaseURL, systemConfig.LLMModel)
+		// Ignore legacy settings without a provider. This keeps old local Ollama
+		// settings from silently overriding the Build Week OpenAI default.
+		if systemConfig.LLMProvider != "" {
+			llmClient.UpdateRuntimeConfig(systemConfig.LLMProvider, systemConfig.LLMBaseURL, systemConfig.LLMModel)
+		}
 	}
 	ttsClient := NewTTSClient(cfg)
 	sttClient := NewSTTClient(cfg)
@@ -61,6 +65,8 @@ func registerRoutes(router *gin.Engine, handler *Handler) {
 	router.GET("/api/system/llm-gateway/status", handler.llmGatewayStatus)
 	router.GET("/api/system/config", handler.getSystemConfig)
 	router.PUT("/api/system/config", handler.updateSystemConfig)
+	router.POST("/api/system/llm-test", handler.testLLMConnection)
+	router.POST("/api/system/llm-models", handler.listLLMModels)
 	router.GET("/api/campaigns", handler.listCampaigns)
 	router.POST("/api/campaigns", handler.createCampaign)
 	router.GET("/api/adventures", handler.listAdventures)
