@@ -6,7 +6,7 @@ const nextConfig = {
     proxyClientMaxBodySize: "250mb",
   },
   async rewrites() {
-    const apiOrigin = process.env.API_INTERNAL_BASE_URL ?? "http://dungeon-master-api:8080";
+    const apiOrigin = process.env.API_INTERNAL_BASE_URL ?? "http://api:8080";
     return {
       beforeFiles: [
         {

@@ -40,3 +40,4 @@
 - The smoke test waits for the asynchronous GPT session opening before sending the first player turn and releases only persisted UUID-backed handouts or media.
 - Roll-request narration now respects the selected English/German locale and avoids repeating model-provided dice instructions.
 - Live verification passed end-to-end on July 18, 2026: OpenAI resolved the configured `gpt-5.6` alias to `gpt-5.6-sol` for both the generated session opening and the first structured player turn.
+- Fixed the production Next.js rewrite fallback from the removed `dungeon-master-api` hostname to the Compose service `api`; embedded rules and session lifecycle actions now reach the backend through the browser proxy.
