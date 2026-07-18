@@ -50,6 +50,25 @@ health_json="$(api_request GET /api/health)"
 jq -e '.status == "ok" and .database == "ok"' <<<"${health_json}" >/dev/null
 jq '{status,database}' <<<"${health_json}"
 
+echo
+echo "==> Seed licensed bilingual demo"
+demo_json="$(api_request POST /api/demo/fungal-caverns '{"language":"en"}')"
+demo_session_id="$(jq -r '.session.id' <<<"${demo_json}")"
+demo_asset_id="$(jq -r '.map_asset.id' <<<"${demo_json}")"
+jq -e '
+  .campaign.id and
+  .adventure.id and
+  .session.status == "live" and
+  .session.state.visual_mode == "scene" and
+  .session.state.visual_payload.image_asset_id == .map_asset.id and
+  .map_asset.metadata.license == "CC BY 3.0 US"
+' <<<"${demo_json}" >/dev/null
+demo_documents_json="$(api_request GET /api/documents)"
+jq -e '[.items[] | select(.metadata.demo_id == "fungal-caverns-v1")] | length >= 4' <<<"${demo_documents_json}" >/dev/null
+demo_repeat_json="$(api_request POST /api/demo/fungal-caverns '{"language":"en"}')"
+jq -e --arg session_id "${demo_session_id}" --arg asset_id "${demo_asset_id}" '.reused == true and .session.id == $session_id and .map_asset.id == $asset_id' <<<"${demo_repeat_json}" >/dev/null
+jq '{campaign:.campaign.name,adventure:.adventure.name,session:.session.id,map_asset:.map_asset.id,reused}' <<<"${demo_repeat_json}"
+
 suffix="$(date +%s)"
 campaign_name="Build Week Demo ${suffix}"
 session_name="Clockwork Observatory Test ${suffix}"

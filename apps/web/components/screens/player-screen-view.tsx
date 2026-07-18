@@ -1491,7 +1491,9 @@ export function PlayerScreenView({
           <div className="player-stage__meta">
             <span>{stageTitle}</span>
           </div>
-          {effectiveVisualMode === "rules_reference" ? (
+          {effectiveVisualMode === "scene" && referencedAsset ? (
+            <img alt={referencedAsset.name} className="player-stage__image player-stage__image--map" src={assetUrl} />
+          ) : effectiveVisualMode === "rules_reference" ? (
             <div className="player-stage__status">
               <FileText size={22} />
               <div>

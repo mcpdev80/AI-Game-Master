@@ -2508,6 +2508,12 @@ pre {
   object-fit: cover;
 }
 
+.player-stage__image--map {
+  object-fit: contain;
+  padding: 48px 24px 20px;
+  background: #f3f0e8;
+}
+
 .player-stage__scene,
 .player-stage__document,
 .player-stage__status {

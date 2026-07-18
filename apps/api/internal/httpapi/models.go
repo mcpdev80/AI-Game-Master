@@ -297,6 +297,20 @@ type CreateAdventureRequest struct {
 	Metadata    map[string]any `json:"metadata"`
 }
 
+type CreateFungalCavernsDemoRequest struct {
+	Language string `json:"language"`
+}
+
+type FungalCavernsDemoResponse struct {
+	Campaign        Campaign  `json:"campaign"`
+	Adventure       Adventure `json:"adventure"`
+	Session         Session   `json:"session"`
+	MapAsset        Asset     `json:"map_asset"`
+	GMURL           string    `json:"gm_url"`
+	PlayerScreenURL string    `json:"player_screen_url"`
+	Reused          bool      `json:"reused"`
+}
+
 type CreateCharacterRequest struct {
 	CampaignID    *string        `json:"campaign_id"`
 	Name          string         `json:"name" binding:"required,min=2,max=160"`

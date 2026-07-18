@@ -22,3 +22,16 @@ Changes made / Vorgenommene Änderungen:
 No affiliation with or endorsement by Wizards of the Coast is claimed.
 
 Es wird keine Verbindung zu oder Unterstützung durch Wizards of the Coast behauptet.
+
+## The Fungal Caverns
+
+The bundled Build Week demo includes **The Fungal Caverns**, a system-neutral one-page dungeon whose content and art were created by **Logen Nein**.
+
+- Original work: https://logen-nein.itch.io/the-fungal-caverns
+- Creator license notice: https://logen-nein.itch.io/
+- License: Creative Commons Attribution 3.0 United States (CC BY 3.0 US)
+- License terms: https://creativecommons.org/licenses/by/3.0/us/
+
+The original GM PDF and unkeyed player map are included without modification. This application adds metadata and image-cue mapping, an English structured adaptation, and a German translation. These files and adaptations remain under CC BY 3.0 US and are not relicensed under the repository's MIT license.
+
+Die Build-Week-Demo enthält **The Fungal Caverns**, ein systemneutrales One-Page-Abenteuer mit Text und Illustrationen von **Logen Nein**. Original-PDF und Spielerkarte sind unverändert enthalten. Ergänzt wurden Metadaten, die Verknüpfung als Bild-Cue, eine strukturierte englische Bearbeitung und eine deutsche Übersetzung. Diese Inhalte stehen weiterhin unter CC BY 3.0 US und nicht unter der MIT-Lizenz des Repositorys.

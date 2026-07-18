@@ -641,6 +641,11 @@ func gmUserPrompt(session Session, req GMRespondRequest, documents []Document, c
 		"hard_focus_rule":       "Prioritize session context in this exact order: (1) selected adventure, (2) short_rules only when rules are explicitly asked for or actually required, (3) active character sheets. Only after these may you rely on larger selected rulebooks, and only when needed.",
 		"rules_visibility_rule": "Do not surface rule text, rule names, or mechanics unless the players explicitly ask for rules or the scene cannot be resolved cleanly without a short ruling.",
 		"player_options_rule":   "If the player asks what they can do, respond as a DM inside the fiction. Suggest options drawn from the scene, the adventure, the group situation, and the active character sheets, but phrase them as natural possibilities in the story rather than as sheet commentary.",
+		"scene_event_contract": map[string]any{
+			"allowed_types":         []string{"sfx", "music", "ambience", "video", "image", "map", "portrait"},
+			"asset_cue_rule":        "For image, map, or portrait events, use an exact cue key explicitly present in the selected adventure context. Never invent an asset cue.",
+			"show_relevant_visuals": true,
+		},
 		"state_update_contract": map[string]any{
 			"character_progress_fields": []string{
 				"experience_points",
@@ -948,7 +953,7 @@ func isSceneLikeQueryKind(queryKind string) bool {
 
 func repairSchemaForQueryKind(queryKind string) string {
 	if isSceneLikeQueryKind(queryKind) {
-		return `{"narration":"string","language":"string","rules_used":["string"],"roll_request":{"type":"attack|damage|check|save","label":"string","dice":["string"],"ability":"string","skill":"string","dc":0,"hide_dc":false,"reason":"string","instructions":"string","follow_up_on_success":{"type":"damage|check|save","label":"string","dice":["string"],"ability":"string","skill":"string","dc":0,"hide_dc":false,"reason":"string","instructions":"string"}},"state_updates":[{"entity_id":"string","field":"string","delta":0,"value":"string"}],"scene_events":[{"type":"sfx|music|ambience|video","name":"string"}],"dm_notes":["string"]}`
+		return `{"narration":"string","language":"string","rules_used":["string"],"roll_request":{"type":"attack|damage|check|save","label":"string","dice":["string"],"ability":"string","skill":"string","dc":0,"hide_dc":false,"reason":"string","instructions":"string","follow_up_on_success":{"type":"damage|check|save","label":"string","dice":["string"],"ability":"string","skill":"string","dc":0,"hide_dc":false,"reason":"string","instructions":"string"}},"state_updates":[{"entity_id":"string","field":"string","delta":0,"value":"string"}],"scene_events":[{"type":"sfx|music|ambience|video|image|map|portrait","name":"string"}],"dm_notes":["string"]}`
 	}
 	return `{"narration":"string","language":"string","rules_used":["string"],"dm_notes":["string"]}`
 }

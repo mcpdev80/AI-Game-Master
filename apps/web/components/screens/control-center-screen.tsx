@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Camera, Database, Dices, Mic, Monitor, Network, PlayCircle, Radio, RefreshCw, Square, Volume2, Wifi, X } from "lucide-react";
 import { PageIntro, Panel, StatCard, StatusPill } from "../studio-primitives";
-import { detectDiceFromImage, fetchLLMModels, stabilizeDiceFrames, testLLMConnection, updateSystemConfig, type DiceBox, type DiceDetection, type DiceDetectionFrame, type LLMGatewayStatus } from "../../lib/api";
+import { createFungalCavernsDemo, detectDiceFromImage, fetchLLMModels, stabilizeDiceFrames, testLLMConnection, updateSystemConfig, type DiceBox, type DiceDetection, type DiceDetectionFrame, type LLMGatewayStatus } from "../../lib/api";
 import type { PlayerLinkSlot, Session } from "../../lib/api";
 
 type ControlCenterScreenProps = {
@@ -147,6 +147,8 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   const [isLlmModalOpen, setIsLlmModalOpen] = useState(false);
   const [playerScreenTestStatus, setPlayerScreenTestStatus] = useState<"idle" | "success">("idle");
   const [playerScreenTestMessage, setPlayerScreenTestMessage] = useState("No player screen test has been triggered yet.");
+  const [demoStatus, setDemoStatus] = useState<"idle" | "creating" | "error">("idle");
+  const [demoError, setDemoError] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -836,6 +838,19 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
     setPlayerScreenTestMessage("Player screen opened in a new tab. Verify the routed display or projector output.");
   }
 
+  async function handleStartFungalCavernsDemo() {
+    setDemoStatus("creating");
+    setDemoError("");
+    try {
+      const language = typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("de") ? "de" : "en";
+      const demo = await createFungalCavernsDemo(language);
+      window.location.assign(demo.gm_url);
+    } catch (error) {
+      setDemoStatus("error");
+      setDemoError(error instanceof Error ? error.message : "The demo could not be created.");
+    }
+  }
+
   const cameraTone: "default" | "ready" | "warning" | "live" | "info" =
     cameraStatus === "ready" || cameraConfigured ? "ready" : cameraStatus === "unsupported" || cameraStatus === "error" ? "warning" : "info";
   const cameraDetail =
@@ -866,12 +881,16 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
         description="This is the operator surface. Devices, model reachability, player output paths, and live readiness stay visible here before you start a session."
         actions={
           <div className="button-row">
+            <button className="studio-button" disabled={demoStatus === "creating"} onClick={() => void handleStartFungalCavernsDemo()} type="button">
+              {demoStatus === "creating" ? "Preparing demo…" : "Start Fungal Caverns Demo"}
+            </button>
             <Link className="studio-button studio-button--ghost" href="/player-screen">
               Player Screen
             </Link>
-            <Link className="studio-button" href={liveSession ? `/sessions/${liveSession.id}` : "/sessions"}>
+            <Link className="studio-button studio-button--ghost" href={liveSession ? `/sessions/${liveSession.id}` : "/sessions"}>
               Open Live Session
             </Link>
+            {demoError ? <span className="error-copy">{demoError}</span> : null}
           </div>
         }
       />

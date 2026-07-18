@@ -106,12 +106,12 @@ Der Golden Path für Bewertung und Video ist:
 
 ### P0.2 Rechtssichere Demo-Daten
 
-- [ ] Eine kleine eigene Kampagne schreiben, z. B. **The Clockwork Observatory**.
-- [ ] Umfang bewusst klein halten: eine Startszene, ein NPC, ein Konflikt, ein Geheimnis, ein möglicher Würfelwurf.
-- [ ] Eigene minimalistische Regeldatei erstellen, die nur die für die Demo notwendigen Checks beschreibt.
-- [ ] Eigene Beispielcharaktere und Handouts erstellen.
-- [ ] Nur eigene oder eindeutig frei lizenzierte Bilder und Sounds einsetzen; Quelle und Lizenz in `THIRD_PARTY_NOTICES.md` dokumentieren.
-- [ ] Produktbeschreibung generisch als Tabletop-/Fantasy-RPG formulieren; keine Zugehörigkeit zu Dungeons & Dragons behaupten.
+- [x] Das systemneutrale One-Page-Abenteuer **The Fungal Caverns** von Logen Nein als klar abgegrenzte Demo auswählen (CC BY 3.0 US).
+- [x] Original-GM-PDF und unnummerierte Spielerkarte unverändert einbetten und per SHA-256 gegen die Quelldateien prüfen.
+- [x] Englischen strukturierten AI-GM-Leitfaden und deutsche Übersetzung mit Bild-Cues erstellen.
+- [x] Einen systemneutralen Beispielcharakter und eine sofort spielbare Startszene anlegen.
+- [x] Quelle, Urheber, Lizenz, Änderungen und Lizenz-URL sowohl im Demo-Paket als auch in `THIRD_PARTY_NOTICES.md` dokumentieren.
+- [x] Produktbeschreibung generisch als Tabletop-/Fantasy-RPG formulieren; keine Zugehörigkeit zu Dungeons & Dragons behaupten.
 
 **Abnahme:** Eine frische Installation kann den vollständigen Demo-Flow ohne externe Bücher, private Dateien oder manuelles DB-Editing ausführen.
 
@@ -124,7 +124,7 @@ Der Golden Path für Bewertung und Video ist:
   - `target_player_count`
 - [x] Den realen Start-Workflow korrekt abbilden: Spielerlink erstellen, Player beitreten/ready setzen, danach Session starten.
 - [x] Fehlerausgaben mit Response-Body anzeigen, damit HTTP-400-Ursachen sofort sichtbar sind.
-- [ ] Demo-Seed oder Adventure-Import in den Test aufnehmen.
+- [x] Idempotenten Demo-Seed mit Kampagne, Abenteuer, EN/DE-Dokumenten, Asset, Charakter und Live-Session bereitstellen.
 - [x] OpenAI-Aufruf im Test entweder über echten opt-in API-Test oder einen deterministischen Mock ausführen.
 - [x] Test am Ende mit klarer Zusammenfassung und nützlichen URLs beenden.
 

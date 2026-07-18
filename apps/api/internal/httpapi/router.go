@@ -67,6 +67,7 @@ func registerRoutes(router *gin.Engine, handler *Handler) {
 	router.PUT("/api/system/config", handler.updateSystemConfig)
 	router.POST("/api/system/llm-test", handler.testLLMConnection)
 	router.POST("/api/system/llm-models", handler.listLLMModels)
+	router.POST("/api/demo/fungal-caverns", handler.createFungalCavernsDemo)
 	router.GET("/api/campaigns", handler.listCampaigns)
 	router.POST("/api/campaigns", handler.createCampaign)
 	router.GET("/api/adventures", handler.listAdventures)

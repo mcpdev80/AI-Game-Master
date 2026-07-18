@@ -193,6 +193,20 @@ export type Session = {
   updated_at: string;
 };
 
+export type FungalCavernsDemoResponse = {
+  campaign: Campaign;
+  adventure: Adventure;
+  session: Session;
+  map_asset: Asset;
+  gm_url: string;
+  player_screen_url: string;
+  reused: boolean;
+};
+
+export async function createFungalCavernsDemo(language: "en" | "de" = "en"): Promise<FungalCavernsDemoResponse> {
+  return apiPost<FungalCavernsDemoResponse>("/api/demo/fungal-caverns", { language });
+}
+
 export type Character = {
   id: string;
   campaign_id: string | null;

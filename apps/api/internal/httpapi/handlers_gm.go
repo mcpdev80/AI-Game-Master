@@ -830,6 +830,15 @@ func (h *Handler) gmRespond(c *gin.Context) {
 	activeLLMSession.LastActiveAt = time.Now().UTC()
 	activeLLMSession.EstimatedPromptTokens = estimatePromptTokens(messageHistoryToStrings(activeLLMSession.MessageHistory))
 	activeLLMSession.Status = "active"
+	var sceneAsset *Asset
+	if session.AdventureID != nil {
+		resolvedAsset, resolveErr := h.resolveAdventureSceneAsset(c.Request.Context(), *session.AdventureID, response.SceneEvents)
+		if resolveErr != nil {
+			errorResponse(c, http.StatusInternalServerError, "resolve scene image", resolveErr)
+			return
+		}
+		sceneAsset = resolvedAsset
+	}
 
 	nextState := session.State
 	nextState.LastNarration = response.Narration
@@ -890,6 +899,13 @@ func (h *Handler) gmRespond(c *gin.Context) {
 			"title":     firstNonEmpty(adventureName(adventure), session.Name),
 			"scene":     firstNonEmpty(session.CurrentScene, response.Narration),
 			"narration": response.Narration,
+		}
+		if sceneAsset != nil {
+			nextState.VisualPayload["image_asset_id"] = sceneAsset.ID
+			nextState.VisualPayload["image_cue"] = metadataString(sceneAsset.Metadata, "cue_key")
+			if strings.TrimSpace(nextState.ActiveMediaCue) == "" {
+				nextState.ActiveMediaCue = metadataString(sceneAsset.Metadata, "cue_key")
+			}
 		}
 		nextState.VoiceMode = "narrator"
 		nextState.ActiveSpeakerRole = "narrator"

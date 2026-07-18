@@ -52,3 +52,12 @@
 - The Player Screen and Character Builder disclose that narration voices are AI-generated.
 - Deterministic mock tests verify authentication, multipart transcription fields, OpenAI TTS instructions, WAV responses, and voice mapping.
 - A live roundtrip generated a WAV with `gpt-4o-mini-tts` and transcribed it exactly with `gpt-4o-transcribe` on July 18, 2026.
+
+### Licensed bilingual demo adventure and visual direction
+
+- Added **The Fungal Caverns** by Logen Nein as the bundled system-neutral demo under CC BY 3.0 US, with source, creator, license, and modification notices in both the package and repository notices.
+- Preserved the original GM PDF and unkeyed player map, and added an English AI-GM adaptation plus a German translation.
+- Added an idempotent one-click seed that creates the campaign, adventure, indexed bilingual documents, license record, player-safe map, example character, and live demo session.
+- Added runtime scene-asset resolution: structured scene cues are matched against adventure assets, with an adventure map fallback.
+- Scene images now render directly on the Player Screen instead of being restricted to combat overlays.
+- Live verification passed: duplicate seeding reused the same records, the served map matched the source SHA-256, and a real GPT-5.6 roll-request/resolution turn restored the correct map to scene mode.

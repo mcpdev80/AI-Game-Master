@@ -266,8 +266,11 @@ func encounterTurnSchema() *responseJSONSchema {
 			}},
 			"scene_events": map[string]any{"type": "array", "items": map[string]any{
 				"type": "object", "additionalProperties": false,
-				"properties": map[string]any{"type": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}},
-				"required":   []string{"type", "name"},
+				"properties": map[string]any{
+					"type": map[string]any{"type": "string", "enum": []string{"sfx", "music", "ambience", "video", "image", "map", "portrait"}},
+					"name": map[string]any{"type": "string"},
+				},
+				"required": []string{"type", "name"},
 			}},
 			"dm_notes": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		},
