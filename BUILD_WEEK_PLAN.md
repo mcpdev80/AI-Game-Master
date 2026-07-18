@@ -50,21 +50,30 @@ Der Golden Path für Bewertung und Video ist:
 - Die Docker-Images für Web, API und Vision bauen erfolgreich.
 - Der vollständige Compose-Stack startet und meldet alle Services als healthy.
 
-### Aktuelle Blocker für eine Einreichung
+### Aktueller Stand nach der Umsetzung
 
-| Blocker | Beobachtung | Konsequenz |
-|---|---|---|
-| Kein Git-Verlauf | Die Kopie ist noch kein Git-Repository. | Build-Week-Arbeit kann nicht sauber vom Altbestand getrennt werden. |
-| Kein funktionsfähiger Golden-Path-Test | `scripts/mvp_smoke_test.sh` sendet einen veralteten Session-Payload und bricht mit HTTP 400 ab. | README-Versprechen und tatsächliche API sind nicht synchron. |
-| Keine automatisierten Tests | Es wurden keine Go-, Python-, TypeScript- oder E2E-Testdateien gefunden. | Hohes Regressionsrisiko und schwacher Nachweis technischer Qualität. |
-| GPT-5.6 nicht integriert | Der aktive Client verwendet `/chat/completions`, lokale Modell-Defaults und provider-spezifische Felder. | Die Challenge-Kernanforderung ist noch nicht erfüllt. |
-| Unsicher für öffentlichen Betrieb | Keine API-Authentifizierung, `Access-Control-Allow-Origin: *`, frei änderbare Systemkonfiguration. | Ein öffentliches Deployment wäre manipulierbar. |
-| Urheberrecht/IP | Unter `docs/` liegen D&D-Regelbücher, Abenteuer-ZIPs/PDFs und persönliche Sprachaufnahmen. | Diese Dateien dürfen nicht in das Submission-Repository oder Video gelangen. |
-| Repository-Hygiene | Binäres Go-Artefakt, `__pycache__`, `.pnpm-store`, Build-Artefakte und mehrere Lockfiles liegen lokal vor. | Sehr großes oder unsauberes Repository; potenziell falsche Dateien beim ersten Commit. |
-| Keine Lizenz | Keine Projektlizenz vorhanden. | Öffentliches Repository erfüllt die Submission-Anforderung nicht sauber. |
-| README veraltet | Interne Pfade, LAN-IP-Adressen und lokale Qwen-/Mistral-Defaults dominieren die Anleitung. | Juroren können das Projekt nicht reproduzierbar testen. |
-| Dependency-Risiken | Der Web-Container meldet bei `npm install` eine moderate und eine hohe Schwachstelle. | Vor Veröffentlichung prüfen und gezielt beheben oder dokumentieren. |
-| Langsamer Vision-Build | Python 3.14 kompiliert NumPy lokal; der frische Vision-Build dauert mehrere Minuten. | Erhöht Ausfall- und Zeitrisiko für Juroren und CI. |
+Bereits abgeschlossen und verifiziert:
+
+- Git-Baseline `dffac74` mit Tag `pre-build-week-baseline` und nachvollziehbare Build-Week-Commits.
+- GPT-5.6 über die OpenAI Responses API mit strict Structured Outputs und `store: false`.
+- OpenAI STT mit `gpt-4o-transcribe` und TTS mit `gpt-4o-mini-tts`.
+- Rechtssichere, zweisprachige Demo **The Fungal Caverns** inklusive Attribution und Spielerkarte.
+- Deterministischer API- und Browser-Golden-Path von der Charaktererstellung bis zur Würfelauflösung.
+- Vollständige, persistente Deutsch-/Englisch-Umschaltung für Oberfläche, AI-Antworten, STT und TTS.
+- MIT-Lizenz, Third-Party Notices, Content Policy und bereinigtes Repository.
+- Produktiver Compose-Stack läuft lokal; API-Health und Web-Build sind grün.
+
+### Tatsächlich verbleibende Einreichungsblocker
+
+| Priorität | Blocker | Aktueller Befund | Erforderliches Ergebnis |
+|---|---|---|---|
+| P0 | Modelloutput noch nicht vollständig serverseitig begrenzt | Für `state_updates`, unbekannte Entities und Würfelparameter fehlt eine zentrale Allowlist-Validierung. | Manipulierte oder ungültige Modellantworten werden verworfen und getestet. |
+| P0 | Öffentliche API nicht abgesichert | Keine Operator-Authentifizierung, CORS erlaubt `*`, Systemkonfiguration ist änderbar und kostenpflichtige Endpunkte haben keine Rate Limits. | Öffentliche Demo ist gegen Manipulation und unkontrollierte API-Kosten geschützt. |
+| P0 | Verwundbare Web-Abhängigkeiten | `npm audit --omit=dev` meldet am 18. Juli 2026 drei High- und einen Moderate-Fund; Next.js 16.2.2 und Playwright 1.54.2 sind betroffen. | Sichere Versionen installieren und alle Build-/E2E-Gates erneut grün ausführen. |
+| P0 | Kein Remote-Repository | `git remote -v` ist leer. | Vollständigen Verlauf und Baseline-Tag zu einem Judge-zugänglichen Repository pushen. |
+| P0 | Kein öffentlicher Judge-Zugang | Die Demo ist nur lokal/LAN per HTTP erreichbar. | HTTPS-Demo oder vollständig getesteter alternativer Judge-Zugang ist dokumentiert. |
+| P0 | Submission-Material fehlt | Judge Guide, Architektur, Security-Hinweise, Evaluation, Video und Devpost-Texte fehlen. | Vollständiges, englisches Submission-Paket mit nachvollziehbaren Testschritten. |
+| P1 | Vision-Image baut unnötig langsam | Python 3.14 kompiliert NumPy statt ein verfügbares Wheel zu verwenden. | Unterstützte Python-Basis mit reproduzierbarem, deutlich schnellerem Build. |
 
 ## 3. Challenge-Anforderungen und Nachweis
 
@@ -100,7 +109,7 @@ Der Golden Path für Bewertung und Video ist:
 - [x] Ersten Commit eindeutig als importierten Altbestand kennzeichnen, z. B. `chore: import pre-build-week baseline`.
 - [x] Tag `pre-build-week-baseline` setzen.
 - [x] `BUILD_WEEK_CHANGELOG.md` anlegen und ab dann jeden relevanten Commit mit Codex-/GPT-5.6-Bezug dokumentieren.
-- [ ] GitHub-/GitLab-Repository anlegen und den Baseline-Commit vor der Implementierung pushen.
+- [ ] GitHub-/GitLab-Repository anlegen, den vollständigen Verlauf pushen und sicherstellen, dass der Tag `pre-build-week-baseline` remote sichtbar ist.
 
 **Abnahme:** `git status` ist sauber, `git ls-files` enthält keine privaten PDFs, ZIPs, WAVs, Binaries, Caches oder Secrets und der Baseline-Tag ist remote sichtbar.
 
@@ -210,7 +219,8 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 ### Backend-Tests
 
 - [x] Go-Unit-Tests für Parsing des Responses-API-Formats.
-- [ ] Tests für gültige, verweigerte, unvollständige und fehlerhafte Structured Outputs.
+- [x] Tests für gültige, verweigerte und unvollständige Structured Outputs.
+- [ ] Tests für HTTP-Fehler, ungültiges JSON und schemawidrige Structured Outputs ergänzen.
 - [ ] Tests für `state_updates`-Allowlist und Würfelvalidierung.
 - [ ] Tests für Session-Memory/Kompaktierung und Trennung von Erzählungs- und Regelkontext.
 - [x] Tests für Player-Safe-Serialisierung: keine DM Notes, versteckten DCs oder internen LLM-Session-IDs.
@@ -237,7 +247,8 @@ bash scripts/mvp_smoke_test.sh
 npm run test:golden-path
 ```
 
-- [ ] `npm audit` prüfen; Findings gezielt aktualisieren oder begründet dokumentieren, kein blindes `--force`.
+- [x] `npm audit --omit=dev` geprüft: drei High- und ein Moderate-Fund am 18. Juli 2026.
+- [ ] Next.js mindestens auf `16.2.10` und Playwright mindestens auf `1.55.1` aktualisieren, danach Audit, Build und E2E erneut ausführen; kein blindes `--force`.
 - [ ] Vision-Basis auf eine Python-Version mit fertigen NumPy-Wheels umstellen oder Build-Cache sauber dokumentieren.
 - [ ] CI-Workflow hinzufügen, der Build, Tests und Secret Scan ausführt.
 
@@ -269,7 +280,7 @@ Die aktuelle API darf nicht unverändert öffentlich erreichbar sein.
 ### Ein fokussierter Demo-Modus
 
 - [ ] Startseite mit genau einem primären CTA: `Start the demo adventure`.
-- [ ] Demo automatisch mit Seed-Kampagne, Charakter und Session vorbereiten.
+- [x] Demo automatisch mit Seed-Kampagne, Abenteuer, Charakter und Session vorbereiten.
 - [ ] Operator View auf die für den Golden Path nötigen Elemente reduzieren:
   - aktueller Spielerinput
   - GPT-5.6-Status
@@ -284,8 +295,8 @@ Die aktuelle API darf nicht unverändert öffentlich erreichbar sein.
 
 ### Design
 
-- [ ] Alle sichtbaren Demo-Texte auf Englisch vereinheitlichen.
-- [ ] Deutsche UI-Fragmente im Golden Path entfernen oder vollständige Sprachumschaltung anbieten.
+- [x] Alle sichtbaren Demo-Texte auf Englisch vereinheitlichen.
+- [x] Vollständige persistente Sprachumschaltung für Deutsch und Englisch anbieten.
 - [ ] Mobile Player-Ansicht mit realem Smartphone testen.
 - [ ] Visuelle Hierarchie für Video optimieren: große Narration, klarer Würfelstatus, wenig Verwaltungsrauschen.
 - [ ] Leere und Lade-Zustände gestalten.
@@ -311,9 +322,9 @@ Die neue englische README soll in dieser Reihenfolge aufgebaut sein:
 
 Zusätzliche Dateien:
 
-- [ ] `LICENSE` – passende Lizenz bewusst auswählen.
-- [ ] `BUILD_WEEK_CHANGELOG.md` – Baseline versus neue Arbeit.
-- [ ] `THIRD_PARTY_NOTICES.md` – verwendete Assets und Lizenzen.
+- [x] `LICENSE` – MIT-Lizenz für den eigenen Quellcode; Drittinhalte bleiben unter ihren jeweiligen Lizenzen.
+- [x] `BUILD_WEEK_CHANGELOG.md` – Baseline versus neue Arbeit.
+- [x] `THIRD_PARTY_NOTICES.md` – verwendete Assets und Lizenzen.
 - [ ] `SECURITY.md` – verantwortliche Meldung und Demo-Grenzen.
 - [ ] `docs/architecture.md` – kompakte System- und Datenflussgrafik.
 - [ ] `docs/judge-testing.md` – fünfminütiger Testablauf und Zugangsdaten.
@@ -376,37 +387,39 @@ Zielwerte für die Demo:
 
 ## 12. Zeitplan bis zur Deadline
 
-### 18. Juli – Fundament und Nachweis
+### 18. Juli – Produktkern abgeschlossen
 
-- P0.1 Repository bereinigen, Git-Baseline, Tag und Remote.
-- P0.2 lizenzfreie Demo-Daten definieren.
-- P0.3 Smoke-Test reparieren.
-- GPT-5.6-Provider-/Responses-Architektur implementieren beginnen.
+- [x] Repository bereinigt, Git-Baseline und Tag erstellt.
+- [x] Lizenzfreie Demo-Daten integriert.
+- [x] GPT-5.6 Responses API und strict Structured Outputs integriert.
+- [x] OpenAI STT/TTS integriert.
+- [x] API- und Browser-Golden-Path erstellt und erfolgreich ausgeführt.
+- [x] Deutsch/Englisch vollständig umgesetzt.
 
-### 19. Juli – GPT-5.6 Encounter Director
+### 19. Juli – Safety, Abhängigkeiten und Regressionstests
 
-- Responses API vollständig anbinden.
-- Structured Output Schema und Fehlerbehandlung.
-- State-Update-Validierung und Player-Safe-Ausgabe.
-- Deterministische OpenAI-Mocktests.
-- Ersten echten GPT-5.6-Golden-Path dreimal ausführen.
+- P0.6 vollständig umsetzen: Prompt-Grenzen, State-Update-Allowlist und Würfelvalidierung.
+- Negative Backend-Tests für Prompt Injection, ungültige State Updates, ungültige Würfel und fehlerhafte Responses ergänzen.
+- Next.js und Playwright auf sichere Versionen aktualisieren.
+- Vision-Basisimage auf eine Python-Version mit NumPy-Wheels umstellen.
+- Danach `npm audit`, Web-Build, Go-Tests und den isolierten Golden Path ausführen.
 
-### 20. Juli – Demo und Stabilität
+### 20. Juli – Öffentliche Demo und Submission-Paket
 
-- Demo-Modus und Seed-Daten.
-- Kamera-, Sprache- und manuelle Fallbacks.
-- Playwright Golden Path.
-- Public-Deployment-Schutz, HTTPS und Rate Limits.
-- README, Changelog, Architektur und Judge-Testanleitung.
+- Operator-Schutz, CORS-Allowlist, Rate Limits und Größenlimits implementieren.
+- HTTPS-Deployment mit stabiler URL bereitstellen.
+- Demo auf Desktop und echtem Smartphone mit Kamera, Mikrofon und manuellem Fallback testen.
+- README finalisieren sowie `SECURITY.md`, Architektur, Judge Guide, Evaluation und Video-Drehbuch erstellen.
+- Remote-Repository veröffentlichen und einen frischen Clone vollständig testen.
 
 ### 21. Juli – Submission Day
 
-- Morgens: vollständiger Test auf frischem Checkout und separatem Gerät.
-- Demo-Video aufnehmen, schneiden, Untertitel prüfen und hochladen.
-- Devpost-Texte, Screenshots, Repository- und Demo-Links eintragen.
-- Codex `/feedback`-Session-ID sichern.
+- Morgens: alle Ship-Gates und den echten GPT-5.6-Golden-Path dreimal ausführen.
+- Demo-Video aufnehmen, auf unter drei Minuten schneiden, englische Tonspur/Untertitel prüfen und öffentlich hochladen.
+- Devpost-Texte, Kategorie, Screenshots, Repository-, Demo- und Video-Link eintragen.
+- Codex `/feedback`-Session-ID dieser Kernimplementierung sichern und eintragen.
 - Submission spätestens mehrere Stunden vor 17:00 PDT abschicken.
-- Danach Demo-Verfügbarkeit und Logs kontrollieren, keine riskanten Featureänderungen mehr.
+- Danach nur noch Verfügbarkeit und Logs kontrollieren; keine riskanten Featureänderungen mehr.
 
 ## 13. Harte Ship-/No-Ship-Gates
 
@@ -427,20 +440,139 @@ Das Projekt wird nur eingereicht, wenn alle folgenden Punkte erfüllt sind:
 - [x] Lizenz und Third-Party Notices sind vorhanden.
 - [ ] Repository-Link und Demo-Link sind bis zum Ende der Bewertung verfügbar.
 
-## 14. Reihenfolge der Umsetzung
+## 14. Verbindliche nächste Schritte
 
-Wenn Zeit knapp wird, gilt strikt:
+Die folgenden Arbeitspakete werden in dieser Reihenfolge umgesetzt. Ein Paket gilt erst als abgeschlossen, wenn seine Abnahme erfüllt ist.
 
-1. IP-/Secret-Bereinigung und Git-Baseline.
-2. Funktionsfähiger Smoke-Test.
-3. Echte GPT-5.6-Responses-Integration.
-4. Structured Outputs und State-Safety.
-5. Lizenzfreie Demo-Daten.
-6. Stabiler Golden Path mit manuellen Fallbacks.
-7. Kritische Tests.
-8. Öffentlich abgesichertes Deployment.
-9. README, Judge Guide und Video.
-10. Erst danach zusätzlicher visueller Polish.
+### Schritt 1 – Modelloutput und Prompt-Kontext absichern
+
+**Ziel:** GPT-5.6 darf nur erlaubte Änderungen am serverseitigen Spielzustand auslösen.
+
+**Umsetzung:**
+
+1. In `apps/api/internal/httpapi` eine zentrale Validierungsfunktion für `GMResponse` ergänzen, die vor jeder Persistierung ausgeführt wird.
+2. Für `state_updates` eine explizite Allowlist der im Golden Path benötigten Felder definieren; unbekannte Felder und Entities ablehnen.
+3. Datentypen und Wertebereiche prüfen, insbesondere Lebenspunkte, Gold, Inventar, Quest-/Szenenstatus und freigegebene Medien.
+4. `roll_request` validieren: nur unterstützte Würfel, höchstens eine definierte Anzahl, plausible DC-Grenzen und Ergebniswerte innerhalb des Würfels.
+5. Fehlerhafte Modelländerungen nicht teilweise übernehmen. Sie werden verworfen, ohne interne Details an Player auszugeben.
+6. Systemprompts in Rolle, Wahrheitshierarchie, Regeln, Player Agency, untrusted context, Output und Safety gliedern.
+7. Adventure-, Regel- und Uploadtext mit klaren Delimitern als nicht vertrauenswürdige Daten markieren. Darin enthaltene Anweisungen dürfen System- und Developer-Regeln nicht ändern.
+8. Sicherstellen, dass Modelltexte niemals als Dateipfad, URL, Shell-Befehl oder SQL ausgeführt werden.
+
+**Tests:**
+
+- Erlaubtes State Update wird vollständig übernommen.
+- Unbekanntes Feld und unbekannte Entity werden vollständig verworfen.
+- Negative HP-/Gold-Werte außerhalb der erlaubten Semantik werden abgewiesen.
+- Ungültiger Würfel, zu viele Würfel, DC außerhalb des Bereichs und unmögliches Ergebnis werden abgewiesen.
+- Abenteuertext mit „ignore previous instructions“ ändert weder Prompt-Hierarchie noch Serververhalten.
+- Player-Antwort enthält weiterhin keine `dm_notes`, versteckten DCs oder internen IDs.
+
+**Abnahme:** Alle neuen Go-Tests und `npm run test:golden-path` sind grün; abgelehnte Updates werden strukturiert und ohne Secrets geloggt.
+
+### Schritt 2 – Verwundbare Abhängigkeiten beseitigen
+
+**Ziel:** Keine bekannten High- oder Critical-Funde in den für die Submission installierten Node-Abhängigkeiten.
+
+**Umsetzung:**
+
+1. Next.js von `16.2.2` mindestens auf `16.2.10` aktualisieren.
+2. `@playwright/test` mindestens auf `1.55.1` aktualisieren.
+3. Lockfile ausschließlich über `npm install` aktualisieren; kein `npm audit fix --force`.
+4. Vision-Dockerfile von Python 3.14 auf eine stabile Python-Version mit passenden NumPy-Wheels umstellen und den Image-Build prüfen.
+
+**Abnahmebefehle:**
+
+```bash
+npm audit --omit=dev
+npm run build:web
+docker compose config --quiet
+docker compose build
+npm run test:golden-path
+```
+
+Erwartung: kein High/Critical-Fund, erfolgreicher Produktionsbuild und grüner Golden Path.
+
+### Schritt 3 – Öffentliche Demo absichern
+
+**Ziel:** Anonyme Juroren können den vorgesehenen Demo-Flow verwenden, aber keine Administration übernehmen oder unbegrenzt Kosten erzeugen.
+
+**Umsetzung:**
+
+1. Operator-Routen und sämtliche schreibenden Verwaltungsendpunkte mit einem serverseitigen Demo-Operator-Secret oder vorgeschalteter Authentifizierung schützen.
+2. `PUT /api/system/config`, Modelltest, Modellliste, Uploads, Löschen sowie Kampagnen-/Session-Verwaltung nur für Operatoren erlauben.
+3. Player-Zugriffe nur über zufällige, widerrufbare Join-/Portal-Tokens erlauben; keine Sessiondaten allein anhand einer erratbaren ID ausgeben.
+4. `Access-Control-Allow-Origin: *` durch `CORS_ALLOWED_ORIGINS` ersetzen und nur die HTTPS-Demo-Domain sowie lokale Entwicklungsadressen erlauben.
+5. Trusted Proxies explizit setzen; Forwarded Headers nur von diesen Proxies akzeptieren.
+6. Rate Limits getrennt für GPT, STT/TTS, Vision, Demo-Seed, Join und Uploads setzen.
+7. Request- und Uploadgrößen begrenzen. MIME-Type, Dateiendung, ZIP-Einträge und Zielpfade gegen Zip-Slip/Path-Traversal prüfen.
+8. Logs auf API-Keys, Authorization-Header, Player-Tokens und vollständige private Prompts prüfen und diese Werte redigieren.
+9. Demo-Daten automatisch oder per dokumentiertem Admin-Vorgang zurücksetzen.
+10. OpenAI-Projektbudget und Warnschwellen außerhalb der App konfigurieren.
+
+**Abnahme:** Ohne Operator-Zugang sind Systemkonfiguration, Upload, Löschen und Administration nicht möglich; Player-Link funktioniert; Rate-Limit liefert einen verständlichen `429`; erlaubte HTTPS-Origin funktioniert und fremde Origin nicht.
+
+### Schritt 4 – HTTPS bereitstellen und auf echten Geräten testen
+
+**Ziel:** Kamera, Mikrofon und Audio funktionieren im tatsächlichen Judge-Szenario.
+
+**Umsetzung:**
+
+1. Web und API unter einer stabilen HTTPS-Domain deployen; Datenbank und Redis nicht öffentlich exponieren.
+2. Healthchecks, Restart-Policy und persistente Konfiguration prüfen.
+3. Operator Desktop, Player Screen und Player Portal gleichzeitig testen.
+4. Auf einem echten Smartphone testen: Join-Link/QR, Spracheingabe, TTS-Wiedergabe, Kameraerlaubnis, Würfelerkennung und manueller Würfel-Fallback.
+5. Fehlerfälle testen: Mikrofon verweigert, Kamera verweigert, OpenAI-Timeout, Rate Limit und Audio-Autoplay blockiert.
+6. Demo bis zum Ende der Judging Period erreichbar halten.
+
+**Abnahme:** Der Golden Path läuft über die öffentliche URL auf Desktop plus Smartphone dreimal hintereinander ohne Serverneustart.
+
+### Schritt 5 – Submission-Dokumentation fertigstellen
+
+**Ziel:** Juroren verstehen Nutzen, technische Tiefe und Testweg ohne Rückfrage.
+
+**Zu erstellen oder zu überarbeiten:**
+
+- `README.md`: Pitch, Zielgruppe, Screenshots, Build-Week-Neuentwicklung, GPT-5.6-Nutzung, Codex-Beitrag, menschliche Entscheidungen, Architektur, Demo, Setup, Tests, Datenschutz und Einschränkungen.
+- `SECURITY.md`: unterstützte Demo-Grenzen, verantwortliche Meldung und Umgang mit Zugangsdaten.
+- `docs/architecture.md`: Client → Go API → GPT-5.6/Speech/Vision → PostgreSQL/Redis sowie Player-safe Datenfluss.
+- `docs/judge-testing.md`: öffentlicher Link, Testzugang und ein höchstens fünfminütiger Schritt-für-Schritt-Test.
+- `docs/demo-script.md`: sekundengenaues englisches Drehbuch unter drei Minuten.
+- `docs/evals.md`: feste Testfälle, Messwerte, Resultate und bekannte Grenzen.
+- `BUILD_WEEK_CHANGELOG.md`: alle weiteren Safety-, Deployment- und Submission-Commits ergänzen.
+
+**Abnahme:** Eine unbeteiligte Person kann nur mit README/Judge Guide die Demo starten, den Golden Path abschließen und GPT-5.6-/Codex-Beitrag erklären.
+
+### Schritt 6 – Repository veröffentlichen und frischen Clone prüfen
+
+**Umsetzung:**
+
+1. Repository auf GitHub oder GitLab erstellen.
+2. Vollständigen Branch und alle Tags pushen; `pre-build-week-baseline` muss sichtbar sein.
+3. Repository öffentlich schalten oder `testing@devpost.com` und `build-week-event@openai.com` Zugriff geben.
+4. Secret-, Dateinamen-, Marken- und Lizenzscan ausführen; jedes binäre Asset manuell gegen `THIRD_PARTY_NOTICES.md` prüfen.
+5. In einem neuen Verzeichnis frisch klonen und ausschließlich nach README starten.
+6. Dort `npm ci` und `npm run test:golden-path` ausführen.
+
+**Abnahme:** Frischer Clone funktioniert ohne lokale, nicht versionierte Dateien; Repository- und Tag-Links sind von außen erreichbar.
+
+### Schritt 7 – Evaluation und finale Regression
+
+1. Die zwölf Fälle aus Abschnitt 10 ausführen und Ergebnisse dokumentieren.
+2. Deterministischen Golden Path einmal und echten GPT-5.6-Golden-Path dreimal ausführen.
+3. DE und EN jeweils mindestens einmal vollständig durchspielen.
+4. Player-safe Ausgabe, Quellenanzeige, State Updates, STT/TTS und manuelle Fallbacks prüfen.
+5. Keine neuen Features mehr beginnen, sobald alle Ship-Gates grün sind.
+
+### Schritt 8 – Video und Devpost-Submission
+
+1. Englisches Video nach Abschnitt 11 aufnehmen; Ziel 2:50 bis 2:58 Minuten.
+2. Audio, Untertitel, lesbare UI und fehlende private/geschützte Inhalte prüfen.
+3. Video öffentlich auf YouTube hochladen.
+4. Devpost-Projektbeschreibung, Kategorie **Apps for Your Life**, Screenshots sowie Repository-, Demo- und Video-Link eintragen.
+5. Erklären, welche Kernfunktionen Codex beschleunigt hat, wie GPT-5.6 zur Laufzeit arbeitet und welche Entscheidungen bewusst vom Menschen getroffen wurden.
+6. Mit `/feedback` die Codex-Session-ID der Kernimplementierung ermitteln und in das Submission-Formular eintragen.
+7. Submission mehrere Stunden vor der Deadline absenden und anschließend alle Links in einem privaten Browserfenster prüfen.
 
 Ein schmaler, dreimal reproduzierbarer Demo-Flow ist wertvoller als weitere halbfertige Features.
 
