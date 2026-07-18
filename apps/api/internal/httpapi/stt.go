@@ -14,15 +14,21 @@ import (
 )
 
 type STTClient struct {
+	provider   string
 	baseURL    string
 	model      string
+	apiKey     string
+	prompt     string
 	httpClient *http.Client
 }
 
 func NewSTTClient(cfg Config) *STTClient {
 	return &STTClient{
-		baseURL: strings.TrimRight(cfg.STTBaseURL, "/"),
-		model:   cfg.STTModel,
+		provider: strings.ToLower(strings.TrimSpace(cfg.STTProvider)),
+		baseURL:  strings.TrimRight(cfg.STTBaseURL, "/"),
+		model:    cfg.STTModel,
+		apiKey:   cfg.STTAPIKey,
+		prompt:   cfg.STTPrompt,
 		httpClient: &http.Client{
 			Timeout: 240 * time.Second,
 		},
@@ -34,7 +40,7 @@ var (
 	sttDecoderDebugPattern    = regexp.MustCompile(`(?is),?\s*text='[^']*',\s*dec_out=.*?last_frame=None\)`)
 )
 
-func (c *STTClient) Transcribe(ctx context.Context, filename string, contentType string, data []byte) (string, error) {
+func (c *STTClient) Transcribe(ctx context.Context, filename string, contentType string, language string, data []byte) (string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	part, err := writer.CreateFormFile("file", filename)
@@ -47,6 +53,15 @@ func (c *STTClient) Transcribe(ctx context.Context, filename string, contentType
 	if strings.TrimSpace(c.model) != "" {
 		_ = writer.WriteField("model", c.model)
 	}
+	if c.provider == "openai" {
+		_ = writer.WriteField("response_format", "json")
+		if prompt := strings.TrimSpace(c.prompt); prompt != "" {
+			_ = writer.WriteField("prompt", prompt)
+		}
+		if normalizedLanguage := normalizeAudioLanguage(language); normalizedLanguage != "" {
+			_ = writer.WriteField("language", normalizedLanguage)
+		}
+	}
 	if err := writer.Close(); err != nil {
 		return "", err
 	}
@@ -56,6 +71,9 @@ func (c *STTClient) Transcribe(ctx context.Context, filename string, contentType
 		return "", err
 	}
 	request.Header.Set("Content-Type", writer.FormDataContentType())
+	if c.apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 	if strings.TrimSpace(contentType) != "" {
 		request.Header.Set("X-Original-Content-Type", contentType)
 	}
@@ -85,6 +103,21 @@ func (c *STTClient) Transcribe(ctx context.Context, filename string, contentType
 		return "", fmt.Errorf("empty transcription result")
 	}
 	return text, nil
+}
+
+func (c *STTClient) Provider() string { return c.provider }
+func (c *STTClient) BaseURL() string  { return c.baseURL }
+func (c *STTClient) Model() string    { return c.model }
+
+func normalizeAudioLanguage(language string) string {
+	normalized := strings.ToLower(strings.TrimSpace(language))
+	if separator := strings.IndexAny(normalized, "-_"); separator >= 0 {
+		normalized = normalized[:separator]
+	}
+	if len(normalized) == 2 {
+		return normalized
+	}
+	return ""
 }
 
 func sanitizeSTTTranscript(input string) string {

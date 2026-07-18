@@ -11,6 +11,8 @@ type ControlCenterScreenProps = {
   services: { name: string; status: string }[];
   counts: Record<string, number>;
   llm: { base_url?: string; model?: string };
+	tts: { provider?: string; model?: string };
+	stt: { provider?: string; model?: string };
   llmGateway?: LLMGatewayStatus;
   sessions: Session[];
   playerLinks: PlayerLinkSlot[];
@@ -94,7 +96,7 @@ const checks = [
   { name: "Network", icon: Network, detail: "Local network reachable", tone: "ready" as const },
 ];
 
-export function ControlCenterScreen({ services, counts, llm, llmGateway, sessions, playerLinks }: ControlCenterScreenProps) {
+export function ControlCenterScreen({ services, counts, llm, llmGateway, sessions, playerLinks, stt, tts }: ControlCenterScreenProps) {
   const onlineServices = services.filter((service) => service.status === "online").length;
   const liveSession = sessions.find((session) => session.status === "live") ?? sessions[0] ?? null;
   const joinedPlayers = playerLinks.filter((slot) => slot.player_slot.status === "joined").length;
@@ -847,9 +849,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
   const audioDetail =
     audioStatus === "unsupported"
       ? "Browser security context is blocking audio APIs"
-      : audioConfigured
-        ? `Configured: ${savedMicrophoneLabel} / ${savedSpeakerLabel}`
-        : "Open settings to choose and test microphone and speakers";
+		: `${stt.provider || "audio"}: ${stt.model || "STT"} → ${tts.model || "TTS"}${audioConfigured ? ` · ${savedMicrophoneLabel} / ${savedSpeakerLabel}` : " · choose browser devices"}`;
   const llmConfigured = savedLlmBaseUrl.trim().length > 0 && savedLlmModel.trim().length > 0;
   const llmTone: "default" | "ready" | "warning" | "live" | "info" =
     llmTestStatus === "success" || llmConfigured ? "ready" : llmTestStatus === "error" ? "warning" : "info";
@@ -902,7 +902,7 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
               </div>
               <div>
                 <div className="status-card__head">
-                  <strong>Audio & Microphone</strong>
+				  <strong>Audio · {stt.model || "STT"} / {tts.model || "TTS"}</strong>
                   <StatusPill tone={audioTone}>{audioConfigured ? "Ready" : "Setup"}</StatusPill>
                 </div>
                 <p>{audioDetail}</p>

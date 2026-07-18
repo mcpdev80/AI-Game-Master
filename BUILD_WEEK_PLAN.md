@@ -183,6 +183,16 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 
 **Architekturentscheidung:** Der eigene PostgreSQL-Session-State bleibt Source of Truth. OpenAI-Responses werden standardmäßig mit `store: false` verwendet, damit die vorhandene Memory- und Audit-Architektur nachvollziehbar bleibt.
 
+### P0.5b OpenAI Speech
+
+- [x] Spieleraufnahmen serverseitig über `POST /v1/audio/transcriptions` mit `gpt-4o-transcribe` verarbeiten.
+- [x] Erzähltext serverseitig über `POST /v1/audio/speech` mit `gpt-4o-mini-tts` als WAV erzeugen.
+- [x] Aktive Sprache und kurzen Tabletop-Kontext an die Transkription übergeben.
+- [x] Bestehende Rollenprofile auf OpenAI-Stimmen abbilden; `cedar` als Standard verwenden.
+- [x] OpenAI-Schlüssel ausschließlich im Backend halten und lokale Audio-Provider optional erhalten.
+- [x] KI-generierte Stimmen im Player Screen und Character Builder sichtbar kennzeichnen.
+- [x] Deterministische Provider-Mocks sowie einen echten TTS-zu-STT-Rundtrip ausführen.
+
 ### P0.6 Prompt und Zustandsänderungen absichern
 
 - [ ] Systemprompt in klare Abschnitte teilen: Rolle, Wahrheitshierarchie, Regeln, Player Agency, Output-Schema, Safety.
@@ -199,12 +209,12 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 
 ### Backend-Tests
 
-- [ ] Go-Unit-Tests für Parsing des Responses-API-Formats.
+- [x] Go-Unit-Tests für Parsing des Responses-API-Formats.
 - [ ] Tests für gültige, verweigerte, unvollständige und fehlerhafte Structured Outputs.
 - [ ] Tests für `state_updates`-Allowlist und Würfelvalidierung.
 - [ ] Tests für Session-Memory/Kompaktierung und Trennung von Erzählungs- und Regelkontext.
 - [ ] Tests für Player-Safe-Serialisierung: keine DM Notes, versteckten DCs oder privaten Dokumente.
-- [ ] `httptest.Server` als deterministischer OpenAI-Mock.
+- [x] `httptest.Server` als deterministischer OpenAI-Mock.
 - [ ] Mindestens ein Integrationstest: Spieleraktion → Roll Request → bestätigter Wurf → Zustandsänderung.
 
 ### Frontend/E2E

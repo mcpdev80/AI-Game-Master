@@ -12,15 +12,21 @@ import (
 )
 
 type TTSClient struct {
+	provider   string
 	baseURL    string
 	model      string
+	apiKey     string
+	voice      string
 	httpClient *http.Client
 }
 
 func NewTTSClient(cfg Config) *TTSClient {
 	return &TTSClient{
-		baseURL: strings.TrimRight(cfg.TTSBaseURL, "/"),
-		model:   cfg.TTSModel,
+		provider: strings.ToLower(strings.TrimSpace(cfg.TTSProvider)),
+		baseURL:  strings.TrimRight(cfg.TTSBaseURL, "/"),
+		model:    cfg.TTSModel,
+		apiKey:   cfg.TTSAPIKey,
+		voice:    cfg.TTSVoice,
 		httpClient: &http.Client{
 			Timeout: 240 * time.Second,
 		},
@@ -34,7 +40,11 @@ func (c *TTSClient) Synthesize(ctx context.Context, text string, voiceID string,
 		"response_format": "wav",
 	}
 	if strings.TrimSpace(instructions) != "" {
-		payload["instruct"] = instructions
+		if c.provider == "openai" {
+			payload["instructions"] = instructions
+		} else {
+			payload["instruct"] = instructions
+		}
 	}
 	if strings.TrimSpace(c.model) != "" {
 		// Some providers ignore unknown fields; keep model for OpenAI-style backends.
@@ -51,6 +61,9 @@ func (c *TTSClient) Synthesize(ctx context.Context, text string, voiceID string,
 		return nil, "", err
 	}
 	request.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
@@ -71,4 +84,29 @@ func (c *TTSClient) Synthesize(ctx context.Context, text string, voiceID string,
 		contentType = "audio/mpeg"
 	}
 	return rawBody, contentType, nil
+}
+
+func (c *TTSClient) Provider() string { return c.provider }
+func (c *TTSClient) BaseURL() string  { return c.baseURL }
+func (c *TTSClient) Model() string    { return c.model }
+
+func (c *TTSClient) VoiceForProfile(profileID string) string {
+	if c.provider != "openai" {
+		return resolveLocalVoiceProviderID(profileID)
+	}
+	switch strings.ToLower(strings.TrimSpace(profileID)) {
+	case "npc-default":
+		return "marin"
+	case "orc-deep":
+		return "onyx"
+	case "elf-bright":
+		return "shimmer"
+	case "rules-neutral":
+		return "sage"
+	default:
+		if strings.TrimSpace(c.voice) != "" {
+			return strings.TrimSpace(c.voice)
+		}
+		return "cedar"
+	}
 }

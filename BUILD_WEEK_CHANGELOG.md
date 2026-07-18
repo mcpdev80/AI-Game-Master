@@ -41,3 +41,14 @@
 - Roll-request narration now respects the selected English/German locale and avoids repeating model-provided dice instructions.
 - Live verification passed end-to-end on July 18, 2026: OpenAI resolved the configured `gpt-5.6` alias to `gpt-5.6-sol` for both the generated session opening and the first structured player turn.
 - Fixed the production Next.js rewrite fallback from the removed `dungeon-master-api` hostname to the Compose service `api`; embedded rules and session lifecycle actions now reach the backend through the browser proxy.
+
+### OpenAI speech input and output
+
+- OpenAI is now the default speech provider: `gpt-4o-transcribe` for STT and `gpt-4o-mini-tts` for TTS.
+- Existing local Parakeet/Piper-compatible endpoints remain available through `STT_PROVIDER=local` and `TTS_PROVIDER=local`.
+- OpenAI credentials remain server-side; browser audio continues to use the existing application endpoints.
+- Transcriptions include the active `en`/`de` language and a compact tabletop-domain prompt for names, fantasy terms, punctuation, and dice notation.
+- Existing voice profiles map to OpenAI built-in voices, with `cedar` as the default narrator voice.
+- The Player Screen and Character Builder disclose that narration voices are AI-generated.
+- Deterministic mock tests verify authentication, multipart transcription fields, OpenAI TTS instructions, WAV responses, and voice mapping.
+- A live roundtrip generated a WAV with `gpt-4o-mini-tts` and transcribed it exactly with `gpt-4o-transcribe` on July 18, 2026.

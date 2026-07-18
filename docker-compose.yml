@@ -51,10 +51,18 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       LLM_MODEL: ${LLM_MODEL:-local-model}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      TTS_PROVIDER: ${TTS_PROVIDER:-openai}
+      OPENAI_TTS_MODEL: ${OPENAI_TTS_MODEL:-gpt-4o-mini-tts}
+      OPENAI_TTS_VOICE: ${OPENAI_TTS_VOICE:-cedar}
       TTS_BASE_URL: ${TTS_BASE_URL:-http://host.docker.internal:8091/v1}
       TTS_MODEL: ${TTS_MODEL:-piper}
+      TTS_API_KEY: ${TTS_API_KEY:-}
+      STT_PROVIDER: ${STT_PROVIDER:-openai}
+      OPENAI_STT_MODEL: ${OPENAI_STT_MODEL:-gpt-4o-transcribe}
+      OPENAI_STT_PROMPT: ${OPENAI_STT_PROMPT:-Tabletop role-playing game session. Preserve character names, fantasy terms, dice notation such as d20, and natural punctuation.}
       STT_BASE_URL: ${STT_BASE_URL:-http://host.docker.internal:8092/v1}
       STT_MODEL: ${STT_MODEL:-nvidia/parakeet-tdt-0.6b-v3}
+      STT_API_KEY: ${STT_API_KEY:-}
       VISION_BASE_URL: ${VISION_BASE_URL:-http://vision:8090}
       UPLOADS_DIR: ${UPLOADS_DIR:-/tmp/data/uploads}
     depends_on:

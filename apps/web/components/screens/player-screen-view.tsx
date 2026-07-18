@@ -230,13 +230,16 @@ async function blobToWav(blob: Blob): Promise<Blob> {
   }
 }
 
-async function uploadSTTBlob(blob: Blob, fallbackFilename: string): Promise<string> {
+async function uploadSTTBlob(blob: Blob, fallbackFilename: string, language?: string): Promise<string> {
   const formData = new FormData();
   try {
     const wavBlob = await blobToWav(blob);
     formData.append("file", wavBlob, fallbackFilename.replace(/\.[^.]+$/, ".wav"));
   } catch {
     formData.append("file", blob, fallbackFilename);
+  }
+  if (language) {
+    formData.append("language", language);
   }
   const result = await apiUploadRaw<{ text: string }>("/api/stt/transcriptions", formData);
   return String(result.text || "").trim();
@@ -794,7 +797,7 @@ export function PlayerScreenView({
 
   async function transcribeWakeBlob(blob: Blob, mimeType: string) {
     const extension = mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "mp4" : "webm";
-    return uploadSTTBlob(blob, `wake.${extension}`);
+    return uploadSTTBlob(blob, `wake.${extension}`, liveSession?.language);
   }
 
   async function finalizeWakeCapture(reason: "end_keyword" | "silence") {
@@ -1351,7 +1354,7 @@ export function PlayerScreenView({
         }
         setSTTPending(true);
         try {
-          const transcript = await uploadSTTBlob(blob, recorder.mimeType.includes("ogg") ? "speech.ogg" : recorder.mimeType.includes("mp4") ? "speech.mp4" : "speech.webm");
+          const transcript = await uploadSTTBlob(blob, recorder.mimeType.includes("ogg") ? "speech.ogg" : recorder.mimeType.includes("mp4") ? "speech.mp4" : "speech.webm", liveSession?.language);
           setSTTTranscript(transcript);
           setPromptInput(transcript);
         } catch (error) {
@@ -1416,6 +1419,7 @@ export function PlayerScreenView({
           </button>
           <div className="boot-screen__list">
             <span><Volume2 size={16} /> Audio freigeben</span>
+			<span>Die Erzählerstimme ist KI-generiert / AI-generated.</span>
             <span><Mic size={16} /> Mikrofon freigeben</span>
             <span><Camera size={16} /> Kamera freigeben</span>
             <span><Maximize size={16} /> Fullscreen optional</span>
@@ -1693,6 +1697,7 @@ export function PlayerScreenView({
               <div>
                 <p className="eyebrow">AI DM Voice Console</p>
                 <h2>{voiceConsoleState.title}</h2>
+				<p className="player-audio-note">KI-generierte Stimme / AI-generated voice</p>
               </div>
               <div className="voice-console__badge">{voiceConsoleState.mode}</div>
             </div>

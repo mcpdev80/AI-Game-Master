@@ -2,7 +2,7 @@
 
 A browser-based, 5E-compatible AI game master for shared tabletop sessions. The operator controls the adventure and releases information, while players join from their phones, speak or type actions, roll physical dice, and receive synchronized narration.
 
-> The Build Week implementation uses GPT-5.6 through the OpenAI Responses API. Encounter turns and camera-assisted dice results use strict, versioned Structured Outputs; a local OpenAI-compatible provider remains available as an optional fallback.
+> The Build Week implementation uses GPT-5.6 through the OpenAI Responses API, `gpt-4o-transcribe` for player speech, and `gpt-4o-mini-tts` for narrated output. Encounter turns and camera-assisted dice results use strict, versioned Structured Outputs; local providers remain available as optional fallbacks.
 
 ## Features
 
@@ -42,7 +42,9 @@ Default endpoints:
 - Vision health: `http://localhost:8090/health`
 - PostgreSQL: `localhost:5435`
 
-The default text provider is OpenAI with `OPENAI_MODEL=gpt-5.6`, `OPENAI_STORE=false`, and `POST /v1/responses`. The key is read only by the Go API and is never returned by the system configuration endpoints. Set `LLM_PROVIDER=local` to use the optional local OpenAI-compatible fallback. STT and TTS still use the local adapters at this stage.
+The default text provider is OpenAI with `OPENAI_MODEL=gpt-5.6`, `OPENAI_STORE=false`, and `POST /v1/responses`. Speech defaults to `gpt-4o-transcribe` through `POST /v1/audio/transcriptions` and `gpt-4o-mini-tts` through `POST /v1/audio/speech`, using the `cedar` narrator voice. The key is read only by the Go API and is never returned by system endpoints. Set the corresponding provider variable to `local` to use an optional local fallback.
+
+The UI identifies generated narration as an AI-generated voice, as required by OpenAI's usage policy.
 
 Do not commit `.env`, uploads, private campaign material, commercial rulebooks, personal voice recordings, or credentials.
 

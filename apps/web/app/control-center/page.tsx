@@ -6,6 +6,8 @@ type SummaryResponse = {
   services: { name: string; status: string }[];
   counts: Record<string, number>;
   llm: { base_url?: string; model?: string };
+	tts: { provider?: string; model?: string };
+	stt: { provider?: string; model?: string };
   llm_gateway?: LLMGatewayStatus;
 };
 
@@ -14,6 +16,8 @@ export default async function ControlCenterPage() {
     services: [],
     counts: {},
     llm: {},
+		tts: {},
+		stt: {},
     llm_gateway: undefined,
   }));
   const sessions = await fetchSessions().catch(() => []);
@@ -23,7 +27,7 @@ export default async function ControlCenterPage() {
 
   return (
     <StudioShell>
-      <ControlCenterScreen counts={summary.counts} llm={summary.llm} llmGateway={llmGateway ?? undefined} playerLinks={playerLinks} services={summary.services} sessions={sessions} />
+      <ControlCenterScreen counts={summary.counts} llm={summary.llm} llmGateway={llmGateway ?? undefined} playerLinks={playerLinks} services={summary.services} sessions={sessions} stt={summary.stt} tts={summary.tts} />
     </StudioShell>
   );
 }

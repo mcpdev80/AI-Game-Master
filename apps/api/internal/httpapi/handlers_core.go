@@ -72,12 +72,14 @@ func (h *Handler) systemSummary(c *gin.Context) {
 		},
 		"llm_gateway": gatewayStatus,
 		"tts": gin.H{
-			"base_url": envOrDefault("TTS_BASE_URL", "http://dungeon-master-speech-tts:8091/v1"),
-			"model":    envOrDefault("TTS_MODEL", "piper"),
+			"provider": h.ttsClient.Provider(),
+			"base_url": h.ttsClient.BaseURL(),
+			"model":    h.ttsClient.Model(),
 		},
 		"stt": gin.H{
-			"base_url": envOrDefault("STT_BASE_URL", "http://dungeon-master-speech-stt:8092/v1"),
-			"model":    envOrDefault("STT_MODEL", "nvidia/parakeet-tdt-0.6b-v3"),
+			"provider": h.sttClient.Provider(),
+			"base_url": h.sttClient.BaseURL(),
+			"model":    h.sttClient.Model(),
 		},
 	})
 }

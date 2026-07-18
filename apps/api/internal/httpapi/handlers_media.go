@@ -14,85 +14,87 @@ import (
 )
 
 func (h *Handler) listVoiceProfiles(c *gin.Context) {
+	provider := h.ttsClient.Provider()
+	model := h.ttsClient.Model()
 	c.JSON(http.StatusOK, gin.H{
 		"items": []gin.H{
 			{
 				"id":                "narrator-default",
 				"name":              "Narrator Default",
-				"language":          "de",
+				"language":          "multilingual",
 				"style":             "clear",
 				"role":              "narrator",
-				"provider":          "f5-tts-german",
-				"provider_model":    "F5-TTS-German",
-				"provider_voice_id": "narrator-default",
+				"provider":          provider,
+				"provider_model":    model,
+				"provider_voice_id": h.ttsClient.VoiceForProfile("narrator-default"),
 				"is_default":        true,
-				"description":       "Neutraler F5-Standard fuer Erzaehlung",
+				"description":       "Clear, immersive AI-generated narration voice",
 			},
 			{
 				"id":                "npc-default",
 				"name":              "NPC Default",
-				"language":          "de",
+				"language":          "multilingual",
 				"style":             "warm",
 				"role":              "npc",
-				"provider":          "piper",
-				"provider_model":    "piper",
-				"provider_voice_id": "de_DE-thorsten-medium",
+				"provider":          provider,
+				"provider_model":    model,
+				"provider_voice_id": h.ttsClient.VoiceForProfile("npc-default"),
 				"is_default":        false,
-				"description":       "Allgemeine Stimme fuer freundliche oder neutrale NPCs",
+				"description":       "Warm AI-generated voice for friendly or neutral NPCs",
 			},
 			{
 				"id":                "orc-deep",
 				"name":              "Orc Deep",
-				"language":          "de",
+				"language":          "multilingual",
 				"style":             "rough",
 				"role":              "monster",
-				"provider":          "piper",
-				"provider_model":    "piper",
-				"provider_voice_id": "de_DE-thorsten-low",
+				"provider":          provider,
+				"provider_model":    model,
+				"provider_voice_id": h.ttsClient.VoiceForProfile("orc-deep"),
 				"is_default":        false,
 				"description":       "Tiefe, raue Stimme fuer Orks oder brute Monsterrollen",
 			},
 			{
 				"id":                "elf-bright",
 				"name":              "Elf Bright",
-				"language":          "de",
+				"language":          "multilingual",
 				"style":             "light",
 				"role":              "npc",
-				"provider":          "piper",
-				"provider_model":    "piper",
-				"provider_voice_id": "de_DE-eva_k-x_low",
+				"provider":          provider,
+				"provider_model":    model,
+				"provider_voice_id": h.ttsClient.VoiceForProfile("elf-bright"),
 				"is_default":        false,
 				"description":       "Heller, weicher Klang fuer Elfen oder feinere Figuren",
 			},
 			{
 				"id":                "rules-neutral",
 				"name":              "Rules Neutral",
-				"language":          "de",
+				"language":          "multilingual",
 				"style":             "precise",
 				"role":              "rules",
-				"provider":          "piper",
-				"provider_model":    "piper",
-				"provider_voice_id": "de_DE-thorsten-medium",
+				"provider":          provider,
+				"provider_model":    model,
+				"provider_voice_id": h.ttsClient.VoiceForProfile("rules-neutral"),
 				"is_default":        false,
 				"description":       "Neutrale Stimme fuer Regelreferenzen und Systemhinweise",
 			},
 			{
 				"id":                "builder-friendly-male",
 				"name":              "Builder Friendly Male",
-				"language":          "de",
+				"language":          "multilingual",
 				"style":             "friendly",
 				"role":              "narrator",
-				"provider":          "f5-tts-german",
-				"provider_model":    "F5-TTS-German",
-				"provider_voice_id": "narrator-default",
+				"provider":          provider,
+				"provider_model":    model,
+				"provider_voice_id": h.ttsClient.VoiceForProfile("builder-friendly-male"),
 				"is_default":        false,
-				"description":       "Freundliche Builder-Stimme auf Basis des F5-Narrators",
+				"description":       "Friendly, clear AI-generated character-builder voice",
 			},
 		},
 	})
 }
 
-func resolveVoiceProviderID(profileID string) string {
+func resolveLocalVoiceProviderID(profileID string) string {
 	switch strings.TrimSpace(strings.ToLower(profileID)) {
 	case "narrator-default":
 		return "narrator-default"
@@ -111,7 +113,24 @@ func resolveVoiceProviderID(profileID string) string {
 	}
 }
 
-func voiceProfileInstruction(profileID string) string {
+func voiceProfileInstruction(profileID string, language string) string {
+	isGerman := strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de")
+	if !isGerman {
+		switch strings.TrimSpace(profileID) {
+		case "orc-deep":
+			return "Speak in English with a deep, rough, intimidating fantasy creature voice. Keep the delivery concise and forceful."
+		case "elf-bright":
+			return "Speak in English with a bright, soft, elegant fantasy voice."
+		case "rules-neutral":
+			return "Speak in English with a neutral, precise, calm delivery for a concise rules reference."
+		case "builder-friendly-male":
+			return "Speak in English with a friendly, calm, clear narrator voice. Sound empathetic and easy to understand."
+		case "npc-default":
+			return "Speak in English with a warm, clear, characterful NPC voice."
+		default:
+			return "Speak in English with a clear, immersive, well-paced fantasy narrator voice."
+		}
+	}
 	switch strings.TrimSpace(profileID) {
 	case "orc-deep":
 		return "Sprich auf Deutsch mit tiefer, rauer, orkischer Stimme. Kurz und druckvoll."
@@ -223,7 +242,7 @@ func (h *Handler) serveSessionTTSAudio(c *gin.Context) {
 		voiceID = "narrator-default"
 	}
 
-	audio, contentType, err := h.ttsClient.Synthesize(ttsCtx, text, resolveVoiceProviderID(voiceID), voiceProfileInstruction(voiceID))
+	audio, contentType, err := h.ttsClient.Synthesize(ttsCtx, text, h.ttsClient.VoiceForProfile(voiceID), voiceProfileInstruction(voiceID, session.Language))
 	if err != nil {
 		errorResponse(c, http.StatusBadGateway, "synthesize session speech", err)
 		return
@@ -249,7 +268,11 @@ func (h *Handler) serveTTSAudio(c *gin.Context) {
 	if voiceID == "" {
 		voiceID = "narrator-default"
 	}
-	audio, contentType, err := h.ttsClient.Synthesize(ttsCtx, text, resolveVoiceProviderID(voiceID), voiceProfileInstruction(voiceID))
+	language := strings.TrimSpace(c.Query("language"))
+	if language == "" {
+		language = "en"
+	}
+	audio, contentType, err := h.ttsClient.Synthesize(ttsCtx, text, h.ttsClient.VoiceForProfile(voiceID), voiceProfileInstruction(voiceID, language))
 	if err != nil {
 		errorResponse(c, http.StatusBadGateway, "synthesize speech", err)
 		return
@@ -284,15 +307,16 @@ func (h *Handler) transcribeAudio(c *gin.Context) {
 		return
 	}
 
-	text, err := h.sttClient.Transcribe(sttCtx, file.Filename, file.Header.Get("Content-Type"), data)
+	text, err := h.sttClient.Transcribe(sttCtx, file.Filename, file.Header.Get("Content-Type"), c.PostForm("language"), data)
 	if err != nil {
 		errorResponse(c, http.StatusBadGateway, "transcribe speech", err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"text":  text,
-		"model": envOrDefault("STT_MODEL", "nvidia/parakeet-tdt-0.6b-v3"),
+		"text":     text,
+		"model":    h.sttClient.Model(),
+		"provider": h.sttClient.Provider(),
 	})
 }
 

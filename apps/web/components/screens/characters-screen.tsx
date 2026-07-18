@@ -383,13 +383,16 @@ async function blobToWav(blob: Blob): Promise<Blob> {
   }
 }
 
-async function uploadSTTBlob(blob: Blob, fallbackFilename: string): Promise<string> {
+async function uploadSTTBlob(blob: Blob, fallbackFilename: string, language?: string): Promise<string> {
   const formData = new FormData();
   try {
     const wavBlob = await blobToWav(blob);
     formData.append("file", wavBlob, fallbackFilename.replace(/\.[^.]+$/, ".wav"));
   } catch {
     formData.append("file", blob, fallbackFilename);
+  }
+  if (language) {
+    formData.append("language", language);
   }
   const result = await apiUploadRaw<{ text: string }>("/api/stt/transcriptions", formData);
   return String(result.text || "").trim();
@@ -1794,7 +1797,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     setBuilderSpeechError(null);
     try {
       const response = await fetch(
-        `${apiBaseUrl}/api/tts-audio?voice=${encodeURIComponent("narrator-default")}&text=${encodeURIComponent(
+        `${apiBaseUrl}/api/tts-audio?voice=${encodeURIComponent("narrator-default")}&language=de&text=${encodeURIComponent(
           buildBuilderSpeechText(message.content)
         )}`,
         { cache: "no-store" }
@@ -1906,7 +1909,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
         setIsBuilderTranscribing(true);
         setBuilderSTTStatus("Spracherkennung läuft...");
         try {
-          const transcript = await uploadSTTBlob(blob, `builder.${extension}`);
+          const transcript = await uploadSTTBlob(blob, `builder.${extension}`, "de");
           if (!transcript) {
             throw new Error("Keine Sprache erkannt.");
           }
@@ -2457,6 +2460,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                               >
                                 Dein Browser kann die Character-Builder-Stimme nicht direkt abspielen.
                               </audio>
+							  <p className="player-audio-note">KI-generierte Stimme / AI-generated voice</p>
                               {builderSpeechActiveKey === speechKey && builderSpeechUrl ? (
                                 null
                               ) : null}
