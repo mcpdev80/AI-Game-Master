@@ -1,0 +1,1060 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/dnd-2024-character.schema.json",
+  "title": "DND 2024 Character Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ruleset",
+    "build",
+    "identity",
+    "progression",
+    "origin",
+    "abilities",
+    "proficiencies",
+    "combat",
+    "features",
+    "equipment",
+    "derived",
+    "validation"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "ruleset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edition", "label", "source"],
+      "properties": {
+        "edition": {
+          "type": "string",
+          "enum": ["dnd-2024", "dnd-2014", "custom"]
+        },
+        "label": {
+          "type": "string"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "url", "content_scope"],
+          "properties": {
+            "name": { "type": "string" },
+            "url": { "type": "string" },
+            "content_scope": {
+              "type": "string",
+              "enum": ["free-rules", "core-books", "srd", "custom"]
+            }
+          }
+        },
+        "house_rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/namedRule" },
+          "default": []
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "current_step", "completed_steps"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["draft", "in_progress", "complete", "invalid"]
+        },
+        "current_step": {
+          "type": "string",
+          "enum": [
+            "choose_class",
+            "determine_origin",
+            "determine_ability_scores",
+            "choose_alignment",
+            "fill_in_details",
+            "complete"
+          ]
+        },
+        "completed_steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "choose_class",
+              "determine_origin",
+              "determine_ability_scores",
+              "choose_alignment",
+              "fill_in_details",
+              "complete"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "audit_log": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/auditEntry" },
+          "default": []
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "alignment"],
+      "properties": {
+        "name": { "type": "string" },
+        "alignment": { "type": "string" },
+        "player_name": { "type": "string" },
+        "age": { "type": ["integer", "null"], "minimum": 0 },
+        "height": { "type": ["string", "null"] },
+        "weight": { "type": ["string", "null"] },
+        "eyes": { "type": ["string", "null"] },
+        "skin": { "type": ["string", "null"] },
+        "hair": { "type": ["string", "null"] },
+        "gender": { "type": ["string", "null"] },
+        "faith": { "type": ["string", "null"] },
+        "appearance": { "type": ["string", "null"] },
+        "personality_traits": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "ideals": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "bonds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "flaws": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "backstory": { "type": ["string", "null"] }
+      }
+    },
+    "progression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["character_level", "classes"],
+      "properties": {
+        "character_level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "classes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/classEntry" }
+        },
+        "multiclass": {
+          "type": "boolean",
+          "default": false
+        },
+        "xp": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["background", "species", "languages"],
+      "properties": {
+        "background": { "$ref": "#/$defs/backgroundEntry" },
+        "species": { "$ref": "#/$defs/speciesEntry" },
+        "languages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/languageEntry" },
+          "minItems": 1
+        }
+      }
+    },
+    "abilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generation_method", "scores"],
+      "properties": {
+        "generation_method": {
+          "type": "string",
+          "enum": ["standard_array", "point_buy", "rolled", "manual", "custom"]
+        },
+        "roll_log": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rollRecord" },
+          "default": []
+        },
+        "scores": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["STR", "DEX", "CON", "INT", "WIS", "CHA"],
+          "properties": {
+            "STR": { "$ref": "#/$defs/abilityScore" },
+            "DEX": { "$ref": "#/$defs/abilityScore" },
+            "CON": { "$ref": "#/$defs/abilityScore" },
+            "INT": { "$ref": "#/$defs/abilityScore" },
+            "WIS": { "$ref": "#/$defs/abilityScore" },
+            "CHA": { "$ref": "#/$defs/abilityScore" }
+          }
+        }
+      }
+    },
+    "proficiencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proficiency_bonus",
+        "saving_throws",
+        "skills",
+        "tools",
+        "weapons",
+        "armor"
+      ],
+      "properties": {
+        "proficiency_bonus": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6
+        },
+        "saving_throws": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/saveEntry" }
+        },
+        "skills": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/skillEntry" }
+        },
+        "tools": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/proficiencyEntry" },
+          "default": []
+        },
+        "weapons": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/proficiencyEntry" },
+          "default": []
+        },
+        "armor": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/proficiencyEntry" },
+          "default": []
+        },
+        "expertise": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expertiseEntry" },
+          "default": []
+        }
+      }
+    },
+    "combat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hp", "ac", "initiative", "speed", "senses", "attacks"],
+      "properties": {
+        "hp": { "$ref": "#/$defs/hpBlock" },
+        "ac": { "$ref": "#/$defs/acBlock" },
+        "initiative": { "$ref": "#/$defs/derivedBonus" },
+        "speed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["walk"],
+          "properties": {
+            "walk": { "$ref": "#/$defs/speedValue" },
+            "fly": { "$ref": "#/$defs/speedValue" },
+            "swim": { "$ref": "#/$defs/speedValue" },
+            "climb": { "$ref": "#/$defs/speedValue" },
+            "burrow": { "$ref": "#/$defs/speedValue" }
+          }
+        },
+        "senses": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/senseEntry" },
+          "default": []
+        },
+        "attacks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/attackEntry" },
+          "default": []
+        },
+        "death_saves": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "successes": { "type": "integer", "minimum": 0, "maximum": 3, "default": 0 },
+            "failures": { "type": "integer", "minimum": 0, "maximum": 3, "default": 0 }
+          },
+          "default": {
+            "successes": 0,
+            "failures": 0
+          }
+        }
+      }
+    },
+    "spellcasting": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/spellcastingBlock" },
+      "default": []
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["traits", "resources", "modifiers"],
+      "properties": {
+        "traits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/featureEntry" },
+          "default": []
+        },
+        "resources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/resourceEntry" },
+          "default": []
+        },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifierEntry" },
+          "default": []
+        }
+      }
+    },
+    "equipment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inventory", "currency", "equipped"],
+      "properties": {
+        "inventory": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/itemEntry" },
+          "default": []
+        },
+        "currency": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cp": { "type": "integer", "minimum": 0, "default": 0 },
+            "sp": { "type": "integer", "minimum": 0, "default": 0 },
+            "ep": { "type": "integer", "minimum": 0, "default": 0 },
+            "gp": { "type": "integer", "minimum": 0, "default": 0 },
+            "pp": { "type": "integer", "minimum": 0, "default": 0 }
+          }
+        },
+        "equipped": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "armor": { "type": ["string", "null"] },
+            "shield": { "type": ["string", "null"] },
+            "main_hand": { "type": ["string", "null"] },
+            "off_hand": { "type": ["string", "null"] },
+            "ranged": { "type": ["string", "null"] },
+            "focus": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "derived": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passive_perception", "carry_capacity"],
+      "properties": {
+        "passive_perception": { "$ref": "#/$defs/derivedScore" },
+        "carry_capacity": { "$ref": "#/$defs/derivedScore" },
+        "jump": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "long_jump_ft": { "$ref": "#/$defs/derivedScore" },
+            "high_jump_ft": { "$ref": "#/$defs/derivedScore" }
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["is_valid", "errors", "warnings", "checkpoints"],
+      "properties": {
+        "is_valid": { "type": "boolean" },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/validationIssue" },
+          "default": []
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/validationIssue" },
+          "default": []
+        },
+        "checkpoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/checkpoint" },
+          "default": []
+        }
+      }
+    }
+  },
+  "$defs": {
+    "namedRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "auditEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "action", "timestamp"],
+      "properties": {
+        "step": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "details": { "type": "string" }
+      }
+    },
+    "classEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "level",
+        "hit_die",
+        "primary_abilities",
+        "saving_throw_proficiencies",
+        "skill_choices",
+        "features"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "level": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "hit_die": { "type": "integer", "enum": [6, 8, 10, 12] },
+        "primary_abilities": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["STR", "DEX", "CON", "INT", "WIS", "CHA"] }
+        },
+        "saving_throw_proficiencies": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "string", "enum": ["STR", "DEX", "CON", "INT", "WIS", "CHA"] }
+        },
+        "skill_choices": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["choose", "from"],
+          "properties": {
+            "choose": { "type": "integer", "minimum": 0 },
+            "from": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "tool_proficiencies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "weapon_proficiencies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "armor_training": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "subclass": { "$ref": "#/$defs/subclassEntry" },
+        "features": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/featureEntry" }
+        },
+        "starting_equipment_options": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/equipmentOption" },
+          "default": []
+        }
+      }
+    },
+    "subclassEntry": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["name", "gained_at_level", "features"],
+      "properties": {
+        "name": { "type": "string" },
+        "gained_at_level": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "features": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/featureEntry" }
+        }
+      }
+    },
+    "backgroundEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "ability_score_increases",
+        "origin_feat",
+        "skill_proficiencies",
+        "tool_proficiency",
+        "equipment"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "ability_score_increases": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/abilityAdjustment" }
+        },
+        "origin_feat": { "$ref": "#/$defs/featureEntry" },
+        "skill_proficiencies": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "string" }
+        },
+        "tool_proficiency": { "type": "string" },
+        "equipment": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/itemEntry" }
+        },
+        "gold_alternative": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "speciesEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "creature_type", "size", "base_speed", "traits"],
+      "properties": {
+        "name": { "type": "string" },
+        "creature_type": { "type": "string" },
+        "size": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          ]
+        },
+        "base_speed": { "type": "integer", "minimum": 0 },
+        "life_span_note": { "type": ["string", "null"] },
+        "lineage": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "features": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/featureEntry" }
+            }
+          }
+        },
+        "traits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/featureEntry" }
+        }
+      }
+    },
+    "languageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
+    "rollRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["notation", "raw", "kept", "result"],
+      "properties": {
+        "notation": { "type": "string" },
+        "raw": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "kept": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "result": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "abilityScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "final", "modifier", "adjustments"],
+      "properties": {
+        "base": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "final": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "modifier": { "type": "integer", "minimum": -5, "maximum": 10 },
+        "adjustments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/abilityAdjustment" },
+          "default": []
+        }
+      }
+    },
+    "abilityAdjustment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ability", "value", "source"],
+      "properties": {
+        "ability": { "type": "string", "enum": ["STR", "DEX", "CON", "INT", "WIS", "CHA"] },
+        "value": { "type": "integer", "minimum": -10, "maximum": 10 },
+        "source": { "type": "string" }
+      }
+    },
+    "saveEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ability", "proficient", "modifier", "sources"],
+      "properties": {
+        "ability": { "type": "string", "enum": ["STR", "DEX", "CON", "INT", "WIS", "CHA"] },
+        "proficient": { "type": "boolean" },
+        "modifier": { "type": "integer" },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "skillEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "ability", "proficient", "expertise", "modifier", "sources"],
+      "properties": {
+        "name": { "type": "string" },
+        "ability": { "type": "string", "enum": ["STR", "DEX", "CON", "INT", "WIS", "CHA"] },
+        "proficient": { "type": "boolean" },
+        "expertise": { "type": "boolean" },
+        "modifier": { "type": "integer" },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "proficiencyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
+    "expertiseEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_type", "target_name", "source"],
+      "properties": {
+        "target_type": { "type": "string", "enum": ["skill", "tool"] },
+        "target_name": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
+    "hpBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max", "current", "temp", "hit_dice"],
+      "properties": {
+        "max": { "type": "integer", "minimum": 1 },
+        "current": { "type": "integer", "minimum": 0 },
+        "temp": { "type": "integer", "minimum": 0 },
+        "hit_dice": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/hitDieEntry" }
+        },
+        "calculation": { "type": "string" }
+      }
+    },
+    "hitDieEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "die", "count"],
+      "properties": {
+        "class": { "type": "string" },
+        "die": { "type": "integer", "enum": [6, 8, 10, 12] },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "acBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "formula", "sources"],
+      "properties": {
+        "value": { "type": "integer", "minimum": 1 },
+        "formula": { "type": "string" },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "derivedBonus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "formula"],
+      "properties": {
+        "value": { "type": "integer" },
+        "formula": { "type": "string" }
+      }
+    },
+    "speedValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "sources"],
+      "properties": {
+        "value": { "type": "integer", "minimum": 0 },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "senseEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "range_ft", "description", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "range_ft": { "type": ["integer", "null"], "minimum": 0 },
+        "description": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
+    "attackEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "attack_type",
+        "ability",
+        "to_hit",
+        "damage",
+        "properties",
+        "range"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "attack_type": {
+          "type": "string",
+          "enum": ["melee_weapon", "ranged_weapon", "unarmed", "spell_attack", "special"]
+        },
+        "ability": { "type": "string", "enum": ["STR", "DEX", "CON", "INT", "WIS", "CHA"] },
+        "to_hit": { "type": "integer" },
+        "damage": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/damageEntry" }
+        },
+        "properties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "normal_ft": { "type": ["integer", "null"] },
+            "long_ft": { "type": ["integer", "null"] },
+            "reach_ft": { "type": ["integer", "null"] }
+          }
+        },
+        "mastery_property": { "type": ["string", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "damageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dice", "type"],
+      "properties": {
+        "dice": { "type": "string" },
+        "type": { "type": "string" },
+        "bonus": { "type": "integer", "default": 0 }
+      }
+    },
+    "spellcastingBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "ability",
+        "spell_save_dc",
+        "spell_attack_bonus",
+        "preparation_mode",
+        "spells"
+      ],
+      "properties": {
+        "source": { "type": "string" },
+        "ability": { "type": "string", "enum": ["INT", "WIS", "CHA"] },
+        "spell_save_dc": { "type": "integer" },
+        "spell_attack_bonus": { "type": "integer" },
+        "preparation_mode": {
+          "type": "string",
+          "enum": ["prepared", "known", "always_prepared", "spellbook", "innate", "mixed"]
+        },
+        "spell_slots": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["max", "used"],
+            "properties": {
+              "max": { "type": "integer", "minimum": 0 },
+              "used": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "default": {}
+        },
+        "spells": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/spellEntry" },
+          "default": []
+        }
+      }
+    },
+    "spellEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "level", "source", "preparation_state"],
+      "properties": {
+        "name": { "type": "string" },
+        "level": { "type": "integer", "minimum": 0, "maximum": 9 },
+        "school": { "type": ["string", "null"] },
+        "source": { "type": "string" },
+        "preparation_state": {
+          "type": "string",
+          "enum": ["prepared", "known", "always_prepared", "in_spellbook", "available", "innate"]
+        },
+        "casting_ability_override": {
+          "type": ["string", "null"],
+          "enum": ["INT", "WIS", "CHA", null]
+        },
+        "uses_resource": { "type": ["string", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "featureEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source",
+        "source_type",
+        "granted_at_level",
+        "active",
+        "rules_text",
+        "effects"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" },
+        "source_type": {
+          "type": "string",
+          "enum": ["class", "subclass", "species", "lineage", "background", "feat", "item", "custom"]
+        },
+        "granted_at_level": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "active": { "type": "boolean" },
+        "rules_text": { "type": "string" },
+        "effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effectEntry" },
+          "default": []
+        },
+        "uses_resource": { "type": ["string", "null"] },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "effectEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "target", "value"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "sense",
+            "speed_bonus",
+            "speed_override",
+            "ac_bonus",
+            "ac_formula",
+            "hp_bonus",
+            "advantage",
+            "disadvantage",
+            "resistance",
+            "immunity",
+            "vulnerability",
+            "proficiency",
+            "expertise",
+            "spell_granted",
+            "spellcasting",
+            "resource_grant",
+            "critical_range",
+            "size_change",
+            "damage_bonus",
+            "condition_interaction",
+            "reroll",
+            "movement_without_oa",
+            "custom"
+          ]
+        },
+        "target": { "type": "string" },
+        "value": {},
+        "condition": { "type": ["string", "null"] },
+        "duration": { "type": ["string", "null"] }
+      }
+    },
+    "resourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "max", "current", "recovery"],
+      "properties": {
+        "name": { "type": "string" },
+        "max": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string" }
+          ]
+        },
+        "current": { "type": "integer", "minimum": 0 },
+        "recovery": {
+          "type": "string",
+          "enum": ["short_rest", "long_rest", "special", "none"]
+        },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "modifierEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_path", "operation", "value", "source"],
+      "properties": {
+        "target_path": { "type": "string" },
+        "operation": {
+          "type": "string",
+          "enum": ["add", "set", "override", "grant", "double"]
+        },
+        "value": {},
+        "source": { "type": "string" }
+      }
+    },
+    "itemEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "category", "quantity"],
+      "properties": {
+        "name": { "type": "string" },
+        "category": {
+          "type": "string",
+          "enum": [
+            "weapon",
+            "armor",
+            "shield",
+            "tool",
+            "focus",
+            "gear",
+            "pack",
+            "consumable",
+            "treasure",
+            "ammunition",
+            "other"
+          ]
+        },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "equipped": { "type": "boolean", "default": false },
+        "weight_lb": { "type": ["number", "null"], "minimum": 0 },
+        "properties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "ac_base": { "type": ["integer", "null"] },
+        "dex_cap": { "type": ["integer", "null"] },
+        "damage": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/damageEntry" },
+          "default": []
+        },
+        "range": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "normal_ft": { "type": ["integer", "null"] },
+            "long_ft": { "type": ["integer", "null"] },
+            "reach_ft": { "type": ["integer", "null"] }
+          }
+        },
+        "mastery_property": { "type": ["string", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "equipmentOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label"],
+      "properties": {
+        "label": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/itemEntry" },
+          "default": []
+        },
+        "gold": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "derivedScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "formula"],
+      "properties": {
+        "value": { "type": "number" },
+        "formula": { "type": "string" }
+      }
+    },
+    "validationIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "path": { "type": ["string", "null"] }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": { "type": "string" },
+        "passed": { "type": "boolean" },
+        "details": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,249 @@
+version: 1
+id: dnd-5e-character-builder
+source_license: CC-BY-4.0
+source_srd: "5.1"
+adapted: true
+ruleset_work: 5E
+ruleset_version: "2014"
+kind: character_builder_guide
+language: de
+status: example_wired
+edition_profile: 5e-2014
+
+builder:
+  purpose: KI-geführter Charakterbau für ein 5E-kompatibles SRD-5.1-Regelprofil
+  tone:
+    style: freundlich
+    role: kooperativer_charakterbauer
+    brevity: mittel
+  defaults:
+    output_language: de
+    save_mode: live_draft
+    finish_status: ready
+    starting_level: 1
+    system_priority: selected_rulebooks_first
+  constraints:
+    no_hallucinated_rules: true
+    ask_when_unsure: true
+    if_claimed_as_saved_must_emit_updates: true
+    keep_prompt_focus_on_selected_documents: true
+  hidden_validation:
+    apply_species_and_origin_bonuses_internally: true
+    validate_subclass_and_feature_timing: true
+    validate_derived_stats_internally: true
+    do_not_surface_validator_errors: true
+    silently_ignore_out_of_step_updates: true
+
+creation_order:
+  - id: concept
+    title: Konzept
+    purpose: Figurengrundidee und Spielstil festlegen
+    ask_for:
+      - figurentyp
+      - ton
+      - rolle_in_der_gruppe
+      - multiclass_absicht_optional
+    write_to:
+      - metadata.concept
+
+  - id: race
+    title: Volk
+    purpose: Volk und daraus folgende Grundwerte festlegen
+    ask_for:
+      - race
+    write_to:
+      - race
+
+  - id: class_and_level
+    title: Klasse und Stufe
+    purpose: Startklasse und Startlevel festlegen
+    ask_for:
+      - class_and_level
+    write_to:
+      - class_and_level
+
+  - id: background_and_alignment
+    title: Hintergrund und Gesinnung
+    purpose: Hintergrund und moralische Grundausrichtung festlegen
+    ask_for:
+      - background
+      - alignment_optional
+    write_to:
+      - background
+      - alignment
+
+  - id: ability_method
+    title: Attributsmethode
+    purpose: Standard Array, Point Buy oder Rolled festlegen
+    ask_for:
+      - creation_method
+    write_to:
+      - metadata.creation_method
+      - metadata.builder_stage
+
+  - id: ability_scores
+    title: Attribute
+    purpose: Attribute final verteilen und bestaetigen
+    ask_for:
+      - final_ability_assignment
+    write_to:
+      - abilities
+
+  - id: class_proficiencies_and_choices
+    title: Klassenentscheidungen
+    purpose: Rettungswuerfe, Skill-Auswahl, Proficiencies und Startoptionen festlegen
+    ask_for:
+      - skill_choices_if_choice_exists
+      - class_choice_if_choice_exists
+    write_to:
+      - metadata.skill_proficiencies
+      - metadata.saving_throw_proficiencies
+      - languages
+      - features
+
+  - id: hit_points_hit_dice_and_movement
+    title: Trefferpunkte und Bewegung
+    purpose: HP, Trefferwuerfel und Bewegung fuer Stufe 1 sauber festhalten
+    ask_for: []
+    write_to:
+      - hit_point_max
+      - metadata.hit_dice
+      - speed
+
+  - id: languages_senses_and_body
+    title: Sprache Sinne Koerper
+    purpose: Sprachen, Sinne und Koerperdaten festlegen
+    ask_for:
+      - name
+      - age_optional
+      - size_optional
+      - weight_optional
+      - eyes_optional
+      - skin_optional
+      - hair_optional
+      - language_choices_if_choice_exists
+      - senses_if_known
+    write_to:
+      - name
+      - languages
+      - metadata.age
+      - metadata.size
+      - metadata.weight
+      - metadata.eyes
+      - metadata.skin
+      - metadata.hair
+      - metadata.senses
+
+  - id: personality
+    title: Persoenlichkeit
+    purpose: Merkmale Ideale Bindungen Makel
+    ask_for:
+      - personality_traits
+      - ideals
+      - bonds
+      - flaws
+    write_to:
+      - metadata.personality_traits
+      - metadata.ideals
+      - metadata.bonds
+      - metadata.flaws
+
+  - id: equipment_and_money
+    title: Ausruestung und Geld
+    purpose: Startausruestung Wahloptionen und Geld sauber festhalten
+    ask_for:
+      - equipment_choices_if_rulebook_offers_options
+      - starting_money_if_player_chooses_money_over_package
+    write_to:
+      - metadata.starting_equipment
+      - metadata.tools_and_proficiencies
+      - metadata.weapon_notes
+      - metadata.combat_overview
+      - metadata.starting_money
+
+  - id: class_features_not_spells
+    title: Klassenmerkmale
+    purpose: Klassenmerkmale von Zaubern sauber trennen
+    ask_for: []
+    write_to:
+      - features
+
+  - id: spellcasting_if_available
+    title: Zauber und Magie
+    purpose: Nur wenn die aktuelle Klasse auf dieser Stufe wirklich Spellcasting hat
+    ask_for:
+      - spell_selection_if_class_has_spells_now
+    write_to:
+      - metadata.spells
+      - metadata.spell_notes
+      - metadata.spell_attacks
+
+  - id: derived_stats
+    title: Abgeleitete Werte
+    purpose: Automatisch berechenbare Werte ableiten und intern gegen die bereits festgelegten Herkunfts-, Klassen- und Ausruestungsdaten pruefen
+    ask_for: []
+    write_to:
+      - proficiency_bonus
+      - armor_class
+      - metadata.spell_save_dc
+      - metadata.spell_attack_bonus
+
+  - id: combat
+    title: Kampf
+    purpose: Waffen und Angriffe tabellarisch eintragen
+    ask_for: []
+    write_to:
+      - metadata.combat_attacks
+    formatting:
+      row_format: "Angriff | ÜB | ATTR | REICHWEITE | BONUS | SCHADEN | SCHADENTYP"
+      description_line: "Beschreibung: ..."
+
+  - id: review
+    title: Review
+    purpose: Alles kurz pruefen und abschliessen
+    ask_for:
+      - confirmation
+    write_to:
+      - metadata.builder_status
+      - metadata.builder_stage
+
+automation:
+  derive:
+    proficiency_bonus:
+      source: level
+    initiative:
+      source: dexterity_modifier
+    passive_perception:
+      source: wisdom_modifier_plus_perception_if_proficient
+    armor_class:
+      source: armor_shield_dex_spell_heuristic
+    movement:
+      source: race_default
+    hit_dice:
+      source: class_default
+    spell_save_dc:
+      source: "8 + proficiency_bonus + spellcasting_modifier"
+    spell_attack_bonus:
+      source: "proficiency_bonus + spellcasting_modifier"
+
+guardrails:
+  - name: class_features_are_not_spells
+    rule: Handauflegen, Divine Sense, Rage, Action Surge, Channel Divinity und aehnliche Klassenmerkmale sind keine Spells.
+  - name: class_features_are_not_attacks
+    rule: Dinge wie Handauflegen nicht als Waffen- oder Zauberangriff tabellarisch eintragen, wenn sie keine Angriffe sind.
+  - name: no_fake_spellcasting
+    rule: Wenn die Klasse auf der aktuellen Stufe noch keine Zauber nach Regelwerk hat, keine Zauber frei erfinden.
+  - name: selected_books_first
+    rule: Verwende primaer die ausgewaehlten Buecher und frage bei Unsicherheit nach.
+  - name: no_player_visible_validator_errors
+    rule: Regelkonflikte, Timing-Pruefungen und abgeleitete Korrekturen laufen intern. Spieler sehen nur normale Builder-Fragen oder eine stille Korrektur im Draft.
+
+ui_contract:
+  rolled_mode:
+    trigger_when:
+      metadata.creation_method: rolled
+      metadata.builder_stage: ability_scores
+    ui_action: open_roll_popup
+
+notes:
+  - Dieses Beispiel ist fest in der App verdrahtet und dient als Referenz fuer weitere Regelwerke.

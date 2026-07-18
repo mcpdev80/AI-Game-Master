@@ -1,0 +1,54 @@
+version: 1
+id: dnd-5e-level-up-guide
+source_license: CC-BY-4.0
+source_srd: "5.1"
+adapted: true
+ruleset_work: 5E
+ruleset_version: "2014"
+kind: level_up_guide
+language: de
+status: example_wired
+edition_profile: 5e-2014
+
+level_up:
+  purpose: Leitfaden für regelkonformes Stufenaufsteigen in einem 5E-kompatiblen SRD-5.1-Regelprofil
+  defaults:
+    output_language: de
+    system_priority: selected_rulebooks_first
+  constraints:
+    no_hallucinated_features: true
+    ask_when_choices_exist: true
+    if_claimed_as_saved_must_emit_updates: true
+
+order:
+  - verify_current_level_and_class_mix
+  - determine_target_level
+  - apply_hit_points_or_average
+  - apply_class_features
+  - apply_subclass_features_if_due
+  - apply_asi_or_feat_if_due
+  - apply_new_spells_if_spellcasting_class
+  - update_derived_stats
+  - review_and_confirm
+
+write_targets:
+  - class_and_level
+  - hit_point_max
+  - features
+  - abilities
+  - metadata.spells
+  - metadata.spell_notes
+  - metadata.combat_attacks
+  - metadata.spell_attacks
+  - metadata.builder_stage
+
+guardrails:
+  - name: multi_class_levels_separate
+    rule: Bei Multiclass die Stufe pro Klasse korrekt behandeln und Features nicht doppelt vergeben.
+  - name: hp_choice_must_be_explicit
+    rule: Wenn Hit Points nicht eindeutig festgelegt sind, nach Wurf oder Durchschnitt fragen.
+  - name: no_free_feat_without_rule_basis
+    rule: Feats nur geben, wenn der Stufenschritt oder eine Regelbasis das erlaubt.
+
+notes:
+  - Dieses Beispiel ist fest in der App verdrahtet und dient als Vorlage fuer spaetere Regelwerke.

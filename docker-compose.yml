@@ -1,0 +1,75 @@
+volumes:
+  postgres_data:
+  api_data:
+  redis_data:
+
+services:
+  vision:
+    build:
+      context: ./apps/vision
+    ports:
+      - "${VISION_PORT:-8090}:8090"
+
+  postgres:
+    image: postgres:18.3-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dungeon_master}
+      POSTGRES_USER: ${POSTGRES_USER:-dungeon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dungeon}
+    ports:
+      - "${POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dungeon} -d ${POSTGRES_DB:-dungeon_master}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4.8-bookworm
+    ports:
+      - "${REDIS_PORT:-6385}:6379"
+    volumes:
+      - redis_data:/data
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8080
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgres://dungeon:dungeon@postgres:5432/dungeon_master?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LLM_MODEL: ${LLM_MODEL:-local-model}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      TTS_BASE_URL: ${TTS_BASE_URL:-http://host.docker.internal:8091/v1}
+      TTS_MODEL: ${TTS_MODEL:-piper}
+      STT_BASE_URL: ${STT_BASE_URL:-http://host.docker.internal:8092/v1}
+      STT_MODEL: ${STT_MODEL:-nvidia/parakeet-tdt-0.6b-v3}
+      VISION_BASE_URL: ${VISION_BASE_URL:-http://vision:8090}
+      UPLOADS_DIR: ${UPLOADS_DIR:-/tmp/data/uploads}
+    depends_on:
+      vision:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "${API_PORT:-8085}:8080"
+    volumes:
+      - api_data:/tmp/data
+
+  web:
+    build:
+      context: ./apps/web
+    environment:
+      API_INTERNAL_BASE_URL: ${API_INTERNAL_BASE_URL:-http://api:8080}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:18085}
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3005}:3000"

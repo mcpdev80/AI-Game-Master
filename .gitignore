@@ -1,0 +1,62 @@
+# Dependencies and package-manager caches
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Generated build and test output
+.next/
+**/.next/
+dist/
+**/dist/
+build/
+**/build/
+tmp/
+coverage/
+**/coverage/
+*.tsbuildinfo
+*.out
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Runtime data and logs
+uploads/
+data/
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Python caches and virtual environments
+**/__pycache__/
+*.py[cod]
+.venv/
+**/.venv/
+
+# Compiled local backend artifacts
+apps/api/bin/
+apps/api/server
+
+# Private, licensed, or personal source material. Keep these files locally only.
+docs/adventures/
+docs/rules/
+docs/charackter/
+docs/voice/
+apps/speech-tts/voices/
+*.pdf
+*.zip
+*.wav
+*.mp3
+*.m4a
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
