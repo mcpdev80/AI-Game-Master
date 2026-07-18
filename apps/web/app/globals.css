@@ -147,12 +147,66 @@ pre {
 
 .studio-sidebar-status {
   margin-top: auto;
-  display: flex;
-  align-items: center;
+  display: grid;
   gap: 10px;
   padding: 12px 10px 0;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.studio-sidebar-status > div:first-child {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.language-switcher {
+  align-items: center;
+  background: rgba(9, 15, 19, 0.72);
+  border: 1px solid rgba(148, 174, 186, 0.22);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.language-switcher > svg {
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+.language-switcher button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 6px 9px;
+}
+
+.language-switcher button.is-active {
+  background: rgba(214, 164, 76, 0.2);
+  color: var(--gold-strong);
+}
+
+.studio-language-mobile {
+  display: none;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.sr-only {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 .status-dot {
@@ -3149,6 +3203,10 @@ pre {
 @media (max-width: 1099px) {
   .studio-main {
     padding-bottom: 100px;
+  }
+
+  .studio-language-mobile {
+    display: flex;
   }
 }
 

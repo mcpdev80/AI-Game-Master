@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { NotificationsProvider } from "../components/notifications-provider";
+import { I18nProvider } from "../lib/i18n";
 
 export const metadata: Metadata = {
   title: "AI Game Master",
-  description: "AI-led dungeon mastering with operator control, player portals, and cinematic session surfaces.",
+  description: "AI-led game mastering with operator control, player portals, and cinematic session surfaces.",
 };
 
 export default function RootLayout({
@@ -13,9 +14,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de">
+    <html lang="en">
       <body>
-        <NotificationsProvider>{children}</NotificationsProvider>
+        <I18nProvider>
+          <NotificationsProvider>{children}</NotificationsProvider>
+        </I18nProvider>
       </body>
     </html>
   );
