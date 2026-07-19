@@ -36,6 +36,13 @@ docker compose up -d --build --wait
 bash scripts/mvp_smoke_test.sh
 ```
 
+For internal HTTPS on your LAN with a self-signed certificate, use the local proxy profile described in [`docs/LOCAL_HTTPS.md`](docs/LOCAL_HTTPS.md). That path is intended for local device testing only:
+
+```bash
+./scripts/generate_local_https_cert.sh dungeon-master.local 192.168.178.50 30
+docker compose --profile https up -d --build --wait
+```
+
 The deterministic Golden Path needs no real OpenAI key. It starts an isolated
 Compose stack with a local OpenAI-compatible mock, creates a character through
 the AI builder, plays a complete roll-request/resolution turn, verifies the
@@ -52,6 +59,7 @@ finishes. Set `KEEP_TEST_STACK=true` only when debugging it locally.
 Default endpoints:
 
 - Web: `http://localhost:3005`
+- Local HTTPS proxy: `https://dungeon-master.local:3443` after enabling the `https` profile
 - API health: `http://localhost:8085/api/health`
 - Vision health: `http://localhost:8090/health`
 - PostgreSQL: `localhost:5435`
@@ -85,6 +93,13 @@ cp .env.example .env
 # OPENAI_API_KEY in .env eintragen
 docker compose up -d --build --wait
 bash scripts/mvp_smoke_test.sh
+```
+
+Lokales HTTPS im internen Netz mit Self-Signed-Zertifikat ist in [`docs/LOCAL_HTTPS.md`](docs/LOCAL_HTTPS.md) dokumentiert:
+
+```bash
+./scripts/generate_local_https_cert.sh dungeon-master.local 192.168.178.50 30
+docker compose --profile https up -d --build --wait
 ```
 
 Vollständiger, deterministischer Test inklusive Character Builder, Session,

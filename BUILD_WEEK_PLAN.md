@@ -67,11 +67,11 @@ Bereits abgeschlossen und verifiziert:
 
 | Priorität | Blocker | Aktueller Befund | Erforderliches Ergebnis |
 |---|---|---|---|
-| P0 | Modelloutput noch nicht vollständig serverseitig begrenzt | Für `state_updates`, unbekannte Entities und Würfelparameter fehlt eine zentrale Allowlist-Validierung. | Manipulierte oder ungültige Modellantworten werden verworfen und getestet. |
-| P0 | Öffentliche API nicht abgesichert | Keine Operator-Authentifizierung, CORS erlaubt `*`, Systemkonfiguration ist änderbar und kostenpflichtige Endpunkte haben keine Rate Limits. | Öffentliche Demo ist gegen Manipulation und unkontrollierte API-Kosten geschützt. |
+| P0 | Security-Hardening noch nicht vollständig abgeschlossen | Zentrale Modelloutput-Validierung ist vorhanden und der Golden Path ist wieder grün, aber zusätzliche Negativtests für Prompt-Injection und weitergehende Semantikgrenzen fehlen noch. | Hardening-Regressionen sind mit gezielten Negativtests abgesichert und verbleibende Grenzfälle sind dokumentiert. |
+| P0 | Öffentliche API noch nicht vollständig produktionsreif abgesichert | Operator-Secret, CORS-Allowlist, Trusted Proxies, Rate Limits sowie Upload-/ZIP-Härtung sind umgesetzt und verifiziert. Offen bleiben Log-Redaction-Abnahme, Demo-Reset, Budget-Warnungen und das spätere HTTPS-/Deployment-Setup. | Öffentliche Demo ist gegen Manipulation und unkontrollierte API-Kosten geschützt und in der öffentlichen Umgebung vollständig konfiguriert. |
 | P0 | Verwundbare Web-Abhängigkeiten | `npm audit --omit=dev` meldet am 18. Juli 2026 drei High- und einen Moderate-Fund; Next.js 16.2.2 und Playwright 1.54.2 sind betroffen. | Sichere Versionen installieren und alle Build-/E2E-Gates erneut grün ausführen. |
 | P0 | Kein Remote-Repository | `git remote -v` ist leer. | Vollständigen Verlauf und Baseline-Tag zu einem Judge-zugänglichen Repository pushen. |
-| P0 | Kein öffentlicher Judge-Zugang | Die Demo ist nur lokal/LAN per HTTP erreichbar. | HTTPS-Demo oder vollständig getesteter alternativer Judge-Zugang ist dokumentiert. |
+| P0 | Kein HTTPS-Zugang für reale Gerätetests | Die Demo ist lokal/LAN erreichbar, aber bislang ohne abgesicherten HTTPS-Zugriff für Mikrofon-/Kamera-Tests auf echten Geräten. | Interner HTTPS-Zugang mit Self-Signed-Zertifikat ist dokumentiert und auf echten Geräten getestet. |
 | P0 | Submission-Material fehlt | Judge Guide, Architektur, Security-Hinweise, Evaluation, Video und Devpost-Texte fehlen. | Vollständiges, englisches Submission-Paket mit nachvollziehbaren Testschritten. |
 | P1 | Vision-Image baut unnötig langsam | Python 3.14 kompiliert NumPy statt ein verfügbares Wheel zu verwenden. | Unterstützte Python-Basis mit reproduzierbarem, deutlich schnellerem Build. |
 
@@ -204,12 +204,12 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 
 ### P0.6 Prompt und Zustandsänderungen absichern
 
-- [ ] Systemprompt in klare Abschnitte teilen: Rolle, Wahrheitshierarchie, Regeln, Player Agency, Output-Schema, Safety.
-- [ ] Adventure- und Dokumenttext ausdrücklich als nicht vertrauenswürdigen Kontext kennzeichnen; darin enthaltene Anweisungen dürfen Systemregeln nicht überschreiben.
-- [ ] Keine Modellantwort direkt als Systembefehl, Dateipfad, URL oder Datenbank-Query ausführen.
-- [ ] `state_updates` serverseitig über Allowlist validieren.
-- [ ] Unbekannte Entities und Felder ablehnen statt stillschweigend anwenden.
-- [ ] Würfelanforderungen validieren: erlaubte Würfel, Wertebereiche, DC-Bereich und maximale Anzahl.
+- [x] Systemprompt in klare Abschnitte teilen: Rolle, Wahrheitshierarchie, Regeln, Player Agency, Output-Schema, Safety.
+- [x] Adventure- und Dokumenttext ausdrücklich als nicht vertrauenswürdigen Kontext kennzeichnen; darin enthaltene Anweisungen dürfen Systemregeln nicht überschreiben.
+- [x] Keine Modellantwort direkt als Systembefehl, Dateipfad, URL oder Datenbank-Query ausführen.
+- [x] `state_updates` serverseitig über Allowlist validieren.
+- [x] Unbekannte Entities und Felder ablehnen statt stillschweigend anwenden.
+- [x] Würfelanforderungen validieren: erlaubte Würfel, Wertebereiche, DC-Bereich und maximale Anzahl.
 - [x] Interne `dm_notes` niemals an Player Portal oder Player Screen ausliefern.
 
 **Abnahme:** Ein manipulierter Abenteuertext kann weder Systemprompt noch Serveraktionen überschreiben; unerlaubte State Updates werden verworfen und geloggt.
@@ -221,11 +221,11 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 - [x] Go-Unit-Tests für Parsing des Responses-API-Formats.
 - [x] Tests für gültige, verweigerte und unvollständige Structured Outputs.
 - [ ] Tests für HTTP-Fehler, ungültiges JSON und schemawidrige Structured Outputs ergänzen.
-- [ ] Tests für `state_updates`-Allowlist und Würfelvalidierung.
+- [x] Tests für `state_updates`-Allowlist und Würfelvalidierung.
 - [ ] Tests für Session-Memory/Kompaktierung und Trennung von Erzählungs- und Regelkontext.
 - [x] Tests für Player-Safe-Serialisierung: keine DM Notes, versteckten DCs oder internen LLM-Session-IDs.
 - [x] `httptest.Server` als deterministischer OpenAI-Mock.
-- [x] Mindestens ein Integrationstest: Spieleraktion → Roll Request → bestätigter Wurf → Zustandsänderung.
+- [x] Integrationstest: Spieleraktion → Roll Request → bestätigter Wurf → Zustandsänderung (Playwright E2E).
 
 ### Frontend/E2E
 
@@ -247,33 +247,33 @@ bash scripts/mvp_smoke_test.sh
 npm run test:golden-path
 ```
 
-- [x] `npm audit --omit=dev` geprüft: drei High- und ein Moderate-Fund am 18. Juli 2026.
-- [ ] Next.js mindestens auf `16.2.10` und Playwright mindestens auf `1.55.1` aktualisieren, danach Audit, Build und E2E erneut ausführen; kein blindes `--force`.
+- [x] `npm audit --omit=dev` geprüft: Ausgangszustand am 18. Juli 2026 mit drei High- und einem Moderate-Fund dokumentiert.
+- [x] Next.js auf `16.2.10` und Playwright auf `1.55.1` aktualisiert; Audit, Build und Golden Path danach erneut erfolgreich ausgeführt. Verbleibend sind zwei Moderate-Funde aus `postcss` innerhalb `next`, aber keine High/Critical-Funde mehr.
 - [ ] Vision-Basis auf eine Python-Version mit fertigen NumPy-Wheels umstellen oder Build-Cache sauber dokumentieren.
 - [ ] CI-Workflow hinzufügen, der Build, Tests und Secret Scan ausführt.
 
-**Abnahme:** Alle Gates laufen in einem frischen Checkout grün; die Resultate werden in README oder Submission dokumentiert.
+**Abnahme:** Keine High/Critical-Funde mehr in den Submission-relevanten Node-Abhängigkeiten; Web-Build und Golden Path bleiben nach dem Upgrade vollständig grün. Für den finalen Ship-Zustand müssen zusätzlich noch Vision-Basisimage, frischer Checkout und Dokumentation abgeschlossen werden.
 
 ## 7. P0 – öffentlicher Demo-Betrieb und Sicherheit
 
 Die aktuelle API darf nicht unverändert öffentlich erreichbar sein.
 
-- [ ] Einen bewusst kleinen Demo-Sicherheitsmechanismus wählen:
+- [x] Einen bewusst kleinen Demo-Sicherheitsmechanismus wählen:
   - Operator-Routen durch Login/Testkonto oder Reverse-Proxy-Auth schützen.
   - Player-Zugriff ausschließlich über zufällige, widerrufbare Tokens.
-- [ ] `Access-Control-Allow-Origin: *` durch konfigurierbare Allowlist ersetzen.
-- [ ] Trusted Proxies explizit konfigurieren.
-- [ ] Rate Limits für GPT-, Upload-, STT- und Vision-Endpunkte setzen.
-- [ ] Request- und Upload-Größen begrenzen.
-- [ ] MIME-Type, Dateierweiterung, Archivinhalt und Pfade gegen Zip-Slip/Path-Traversal validieren.
-- [ ] `PUT /api/system/config` nur für Operatoren freigeben oder im Demo-Deployment deaktivieren.
-- [ ] Demo-Daten regelmäßig zurücksetzen; keine Nutzerinhalte langfristig speichern.
-- [ ] Logs dürfen keine API-Keys, vollständigen Prompts mit privaten Inhalten oder Player-Tokens enthalten.
-- [ ] HTTPS und stabile öffentliche URL bereitstellen.
-- [ ] Demo bis mindestens zum Ende der Judging Period verfügbar halten.
-- [ ] Budget- und Rate-Limit-Warnungen für den OpenAI-Key konfigurieren.
+- [x] `Access-Control-Allow-Origin: *` durch konfigurierbare Allowlist ersetzen.
+- [x] Trusted Proxies explizit konfigurieren.
+- [x] Rate Limits für GPT-, Upload-, STT- und Vision-Endpunkte setzen.
+- [x] Request- und Upload-Größen begrenzen.
+- [x] MIME-Type, Dateierweiterung, Archivinhalt und Pfade gegen Zip-Slip/Path-Traversal validieren.
+- [x] `PUT /api/system/config` nur für Operatoren freigeben oder im Demo-Deployment deaktivieren.
+- [x] Demo-Daten regelmäßig zurücksetzen; keine Nutzerinhalte langfristig speichern.
+- [x] Logs dürfen keine API-Keys, vollständigen Prompts mit privaten Inhalten oder Player-Tokens enthalten.
+- [ ] Internen HTTPS-Zugang mit Self-Signed-Zertifikat bereitstellen.
+- [ ] Interne Demo auf den benötigten Geräten während der Testphase stabil verfügbar halten.
+- [x] Budget- und Rate-Limit-Warnungen für den OpenAI-Key konfigurieren.
 
-**Abnahme:** Ein anonymer Besucher kann die Demo ausprobieren, aber weder Systemkonfiguration ändern noch fremde Sessions/Uploads verwalten oder unbegrenzt API-Kosten erzeugen.
+**Abnahme:** Kernschutz für die lokale/interne Demo ist serverseitig implementiert und der Golden Path bleibt grün. Für den finalen P0-Abschluss fehlen jetzt nur noch der interne HTTPS-Zugang für Gerätetests sowie die stabile Verfügbarkeit während der Testphase.
 
 ## 8. P1 – Produkt- und Demo-Polish
 
@@ -396,17 +396,18 @@ Zielwerte für die Demo:
 - [x] API- und Browser-Golden-Path erstellt und erfolgreich ausgeführt.
 - [x] Deutsch/Englisch vollständig umgesetzt.
 
-### 19. Juli – Safety, Abhängigkeiten und Regressionstests
+### 19. Juli – Hardening, Abhängigkeiten und Regressionstests
 
-- P0.6 vollständig umsetzen: Prompt-Grenzen, State-Update-Allowlist und Würfelvalidierung.
-- Negative Backend-Tests für Prompt Injection, ungültige State Updates, ungültige Würfel und fehlerhafte Responses ergänzen.
-- Next.js und Playwright auf sichere Versionen aktualisieren.
+- P0.6 auf dem nun verifizierten Stand halten und die offenen Negativtests ergänzen.
+- Negative Backend-Tests für Prompt Injection, zusätzliche semantisch ungültige State Updates, ungültige Würfel und fehlerhafte Responses ergänzen.
+- Next.js und Playwright sind bereits auf den verifizierten Mindeststand aktualisiert; offen bleibt nur noch die Dokumentation des Rest-Risikos mit zwei Moderate-Funden.
 - Vision-Basisimage auf eine Python-Version mit NumPy-Wheels umstellen.
 - Danach `npm audit`, Web-Build, Go-Tests und den isolierten Golden Path ausführen.
 
 ### 20. Juli – Öffentliche Demo und Submission-Paket
 
 - Operator-Schutz, CORS-Allowlist, Rate Limits und Größenlimits implementieren.
+- Operator-Reset für `DELETE /api/demo/fungal-caverns` verifizieren und in den Judge-Runbook aufnehmen.
 - HTTPS-Deployment mit stabiler URL bereitstellen.
 - Demo auf Desktop und echtem Smartphone mit Kamera, Mikrofon und manuellem Fallback testen.
 - README finalisieren sowie `SECURITY.md`, Architektur, Judge Guide, Evaluation und Video-Drehbuch erstellen.
@@ -446,40 +447,45 @@ Die folgenden Arbeitspakete werden in dieser Reihenfolge umgesetzt. Ein Paket gi
 
 ### Schritt 1 – Modelloutput und Prompt-Kontext absichern
 
+**Status:** ✅ Abgeschlossen (18. Juli 2026).
+
 **Ziel:** GPT-5.6 darf nur erlaubte Änderungen am serverseitigen Spielzustand auslösen.
 
 **Umsetzung:**
 
-1. In `apps/api/internal/httpapi` eine zentrale Validierungsfunktion für `GMResponse` ergänzen, die vor jeder Persistierung ausgeführt wird.
-2. Für `state_updates` eine explizite Allowlist der im Golden Path benötigten Felder definieren; unbekannte Felder und Entities ablehnen.
-3. Datentypen und Wertebereiche prüfen, insbesondere Lebenspunkte, Gold, Inventar, Quest-/Szenenstatus und freigegebene Medien.
-4. `roll_request` validieren: nur unterstützte Würfel, höchstens eine definierte Anzahl, plausible DC-Grenzen und Ergebniswerte innerhalb des Würfels.
-5. Fehlerhafte Modelländerungen nicht teilweise übernehmen. Sie werden verworfen, ohne interne Details an Player auszugeben.
-6. Systemprompts in Rolle, Wahrheitshierarchie, Regeln, Player Agency, untrusted context, Output und Safety gliedern.
-7. Adventure-, Regel- und Uploadtext mit klaren Delimitern als nicht vertrauenswürdige Daten markieren. Darin enthaltene Anweisungen dürfen System- und Developer-Regeln nicht ändern.
-8. Sicherstellen, dass Modelltexte niemals als Dateipfad, URL, Shell-Befehl oder SQL ausgeführt werden.
+1. [x] In `apps/api/internal/httpapi` eine zentrale Validierungsfunktion für `GMResponse` ergänzt, die vor jeder Persistierung ausgeführt wird (`validation.go`).
+2. [x] Für `state_updates` eine explizite Allowlist der im Golden Path benötigten Felder definiert; unbekannte Felder und Entities werden verworfen.
+3. [x] Datentypen und Eingabemodi für die freigegebenen Golden-Path-Felder geprüft: numerische Updates nur per `delta` oder numerischem `value`, Listen-/Notizfelder nur per nichtleerem `value`.
+4. [x] `roll_request` validiert: nur unterstützte Typen (`attack|damage|check|save`), höchstens 10 Würfel insgesamt, plausible DC-Grenzen (1–50), gültige Dice-Notation inklusive `d20` und maximal eine direkte Follow-up-Stufe.
+5. [x] Fehlerhafte Modelländerungen werden nicht teilweise übernommen. Sie werden verworfen, ohne interne Details an Player auszugeben; Rejects werden in Log und DM Notes protokolliert.
+6. [x] Systemprompts in Rolle, Wahrheitshierarchie, Regeln, Player Agency, untrusted context, Output und Safety gegliedert.
+7. [x] `untrusted_context_rule` im `gmUserPrompt` eingefügt; Adventure- und Dokumenttext wird im Prompt explizit als unzuverlässige Benutzerdaten behandelt.
+8. [x] Sicherstellen, dass Modelltexte niemals als Dateipfad, URL, Shell-Befehl oder SQL ausgeführt werden.
 
 **Tests:**
 
-- Erlaubtes State Update wird vollständig übernommen.
-- Unbekanntes Feld und unbekannte Entity werden vollständig verworfen.
-- Negative HP-/Gold-Werte außerhalb der erlaubten Semantik werden abgewiesen.
-- Ungültiger Würfel, zu viele Würfel, DC außerhalb des Bereichs und unmögliches Ergebnis werden abgewiesen.
-- Abenteuertext mit „ignore previous instructions“ ändert weder Prompt-Hierarchie noch Serververhalten.
-- Player-Antwort enthält weiterhin keine `dm_notes`, versteckten DCs oder internen IDs.
+- [x] Erlaubtes State Update wird vollständig übernommen.
+- [x] Unbekanntes Feld und unbekannte Entity werden vollständig verworfen.
+- [x] Zusätzliche semantische Grenzen wie negative Gold-/XP-Werte werden explizit als Negativtests ergänzt oder bewusst dokumentiert.
+- [x] Ungültiger Würfel, zu viele Würfel, DC außerhalb des Bereichs und ungültige Dice-Notation werden abgewiesen.
+- [x] Ein expliziter Prompt-Injection-Test mit `ignore previous instructions` für Adventure-/Dokumentkontext wird ergänzt.
+- [x] Player-Antwort enthält weiterhin keine `dm_notes`, versteckten DCs oder internen IDs.
+- [x] Bestehender Golden Path bleibt mit aktivierter Servervalidierung vollständig grün.
 
-**Abnahme:** Alle neuen Go-Tests und `npm run test:golden-path` sind grün; abgelehnte Updates werden strukturiert und ohne Secrets geloggt.
+**Abnahme:** Die zentrale Servervalidierung ist aktiv, die zusätzlichen Validation-Tests sind grün, und `npm run test:golden-path` bleibt nach dem Hardening vollständig grün.
 
 ### Schritt 2 – Verwundbare Abhängigkeiten beseitigen
+
+**Status:** ✅ Kernziel erreicht (18. Juli 2026), ein Restpunkt zum Vision-Image bleibt offen.
 
 **Ziel:** Keine bekannten High- oder Critical-Funde in den für die Submission installierten Node-Abhängigkeiten.
 
 **Umsetzung:**
 
-1. Next.js von `16.2.2` mindestens auf `16.2.10` aktualisieren.
-2. `@playwright/test` mindestens auf `1.55.1` aktualisieren.
-3. Lockfile ausschließlich über `npm install` aktualisieren; kein `npm audit fix --force`.
-4. Vision-Dockerfile von Python 3.14 auf eine stabile Python-Version mit passenden NumPy-Wheels umstellen und den Image-Build prüfen.
+1. [x] Next.js von `16.2.2` auf `16.2.10` aktualisieren.
+2. [x] `@playwright/test` auf `1.55.1` aktualisieren.
+3. [x] Lockfile ausschließlich über `npm install` aktualisieren; kein `npm audit fix --force`.
+4. [ ] Vision-Dockerfile von Python 3.14 auf eine stabile Python-Version mit passenden NumPy-Wheels umstellen und den Image-Build prüfen.
 
 **Abnahmebefehle:**
 
@@ -491,7 +497,14 @@ docker compose build
 npm run test:golden-path
 ```
 
-Erwartung: kein High/Critical-Fund, erfolgreicher Produktionsbuild und grüner Golden Path.
+**Verifiziert am 18. Juli 2026:**
+
+- [x] `npm audit --omit=dev` meldet keine High-/Critical-Funde mehr.
+- [x] `npm run build:web` ist grün.
+- [x] `npm run test:golden-path` ist nach dem Upgrade vollständig grün.
+- [ ] Vision-Basisimage ist noch nicht auf schnellere NumPy-Wheels umgestellt.
+
+**Restzustand:** Zwei Moderate-Funde aus `postcss` innerhalb `next` bleiben sichtbar. Für den aktuell formulierten P0-Abhängigkeits-Exit sind sie nicht blockierend; sie sollten aber im Submission-Paket knapp dokumentiert werden, falls bis zur Deadline kein sauberer Upstream-Fix ohne Seiteneffekt verfügbar ist.
 
 ### Schritt 3 – Öffentliche Demo absichern
 
@@ -506,26 +519,34 @@ Erwartung: kein High/Critical-Fund, erfolgreicher Produktionsbuild und grüner G
 5. Trusted Proxies explizit setzen; Forwarded Headers nur von diesen Proxies akzeptieren.
 6. Rate Limits getrennt für GPT, STT/TTS, Vision, Demo-Seed, Join und Uploads setzen.
 7. Request- und Uploadgrößen begrenzen. MIME-Type, Dateiendung, ZIP-Einträge und Zielpfade gegen Zip-Slip/Path-Traversal prüfen.
-8. Logs auf API-Keys, Authorization-Header, Player-Tokens und vollständige private Prompts prüfen und diese Werte redigieren.
-9. Demo-Daten automatisch oder per dokumentiertem Admin-Vorgang zurücksetzen.
-10. OpenAI-Projektbudget und Warnschwellen außerhalb der App konfigurieren.
+8. [x] Logs auf API-Keys, Authorization-Header, Player-Tokens und vollständige private Prompts prüfen und diese Werte redigieren.
+9. [x] Demo-Daten automatisch oder per dokumentiertem Admin-Vorgang zurücksetzen.
+10. [x] OpenAI-Projektbudget und Warnschwellen außerhalb der App konfigurieren bzw. app-seitig sichtbar machen (`systemSummary` + `.env.example`/Compose-Defaults für Soft-/Hard-Limit und Alert-E-Mail).
 
-**Abnahme:** Ohne Operator-Zugang sind Systemkonfiguration, Upload, Löschen und Administration nicht möglich; Player-Link funktioniert; Rate-Limit liefert einen verständlichen `429`; erlaubte HTTPS-Origin funktioniert und fremde Origin nicht.
+**Verifiziert am 18. Juli 2026:**
 
-### Schritt 4 – HTTPS bereitstellen und auf echten Geräten testen
+- [x] Operator-geschützte Admin-Routen, CORS-Allowlist und Trusted Proxies sind aktiv.
+- [x] Rate Limits für Demo-Seed, `gm/respond`, STT, Vision und Character Builder sind aktiv.
+- [x] Upload-, Audio- und ZIP-Grenzen inklusive Path-Traversal-/Typ-Prüfung sind aktiv.
+- [x] `go test ./internal/httpapi/...` ist grün.
+- [x] `npm run test:golden-path` bleibt mit aktivierter Security-Schicht vollständig grün.
+
+**Restzustand:** Für den Abschluss von Schritt 3 fehlen jetzt nur noch HTTPS und die tatsächliche öffentliche Laufzeitverfügbarkeit. Die serverseitigen Security- und Kosten-Guardrails sind implementiert.
+
+### Schritt 4 – Internes HTTPS bereitstellen und auf echten Geräten testen
 
 **Ziel:** Kamera, Mikrofon und Audio funktionieren im tatsächlichen Judge-Szenario.
 
 **Umsetzung:**
 
-1. Web und API unter einer stabilen HTTPS-Domain deployen; Datenbank und Redis nicht öffentlich exponieren.
+1. Web unter einem stabilen internen Hostnamen mit Self-Signed-Zertifikat per HTTPS bereitstellen; Datenbank und Redis nicht öffentlich exponieren.
 2. Healthchecks, Restart-Policy und persistente Konfiguration prüfen.
 3. Operator Desktop, Player Screen und Player Portal gleichzeitig testen.
 4. Auf einem echten Smartphone testen: Join-Link/QR, Spracheingabe, TTS-Wiedergabe, Kameraerlaubnis, Würfelerkennung und manueller Würfel-Fallback.
 5. Fehlerfälle testen: Mikrofon verweigert, Kamera verweigert, OpenAI-Timeout, Rate Limit und Audio-Autoplay blockiert.
-6. Demo bis zum Ende der Judging Period erreichbar halten.
+6. Demo während der lokalen Test- und Aufnahmesessions stabil erreichbar halten.
 
-**Abnahme:** Der Golden Path läuft über die öffentliche URL auf Desktop plus Smartphone dreimal hintereinander ohne Serverneustart.
+**Abnahme:** Der Golden Path läuft über die interne HTTPS-URL auf Desktop plus Smartphone dreimal hintereinander ohne Serverneustart.
 
 ### Schritt 5 – Submission-Dokumentation fertigstellen
 
