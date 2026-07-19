@@ -252,6 +252,14 @@ func (h *Handler) createAdventurePackage(c *gin.Context) {
 		errorResponse(c, http.StatusBadRequest, "missing adventure pdf", err)
 		return
 	}
+	if err := ensureAllowedExtension(pdfHeader.Filename, allowedDocumentExtensions); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "invalid adventure pdf type", err)
+		return
+	}
+	if err := ensureUploadSize(pdfHeader, h.cfg.MaxUploadBytes); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "adventure pdf exceeds allowed size", err)
+		return
+	}
 
 	if err := os.MkdirAll(h.uploadsDir, 0o755); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "prepare uploads directory", err)
@@ -304,6 +312,14 @@ func (h *Handler) createAdventurePackage(c *gin.Context) {
 
 	zipHeader, err := c.FormFile("resources_zip")
 	if err == nil {
+		if err := ensureAllowedExtension(zipHeader.Filename, map[string]struct{}{".zip": {}}); err != nil {
+			errorResponse(c, uploadErrorStatus(err), "invalid resources archive type", err)
+			return
+		}
+		if err := ensureUploadSize(zipHeader, h.cfg.MaxZipUploadBytes); err != nil {
+			errorResponse(c, uploadErrorStatus(err), "resources archive exceeds allowed size", err)
+			return
+		}
 		importDir := filepath.Join(h.uploadsDir, "zip-uploads")
 		if err := os.MkdirAll(importDir, 0o755); err != nil {
 			errorResponse(c, http.StatusInternalServerError, "prepare zip uploads directory", err)
@@ -311,8 +327,12 @@ func (h *Handler) createAdventurePackage(c *gin.Context) {
 		}
 
 		targetPath := filepath.Join(importDir, fmt.Sprintf("%d-%s", time.Now().UTC().UnixNano(), sanitizeFilename(zipHeader.Filename)))
-		if err := c.SaveUploadedFile(zipHeader, targetPath); err != nil {
+		if err := saveUploadedFileChecked(zipHeader, targetPath, h.cfg.MaxZipUploadBytes); err != nil {
 			errorResponse(c, http.StatusInternalServerError, "store zip upload", err)
+			return
+		}
+		if err := validateZipArchive(targetPath, h.cfg.MaxZipEntries, h.cfg.MaxZipExtractBytes); err != nil {
+			errorResponse(c, uploadErrorStatus(err), "validate adventure resources archive", err)
 			return
 		}
 
@@ -348,6 +368,14 @@ func (h *Handler) uploadDocument(c *gin.Context) {
 	}
 	if !validDocumentType(documentType) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid document type"})
+		return
+	}
+	if err := ensureAllowedExtension(fileHeader.Filename, classifyUploadValidation(documentType)); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "invalid uploaded document type", err)
+		return
+	}
+	if err := ensureUploadSize(fileHeader, h.cfg.MaxUploadBytes); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "uploaded document exceeds allowed size", err)
 		return
 	}
 
@@ -400,7 +428,7 @@ func (h *Handler) uploadDocument(c *gin.Context) {
 	targetName := fmt.Sprintf("%d-%s", time.Now().UTC().UnixNano(), safeName)
 	targetPath := filepath.Join(h.uploadsDir, targetName)
 
-	if err := c.SaveUploadedFile(fileHeader, targetPath); err != nil {
+	if err := saveUploadedFileChecked(fileHeader, targetPath, h.cfg.MaxUploadBytes); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "store uploaded file", err)
 		return
 	}
@@ -425,6 +453,14 @@ func (h *Handler) uploadAsset(c *gin.Context) {
 		errorResponse(c, http.StatusBadRequest, "missing uploaded asset file", err)
 		return
 	}
+	if err := ensureAllowedExtension(fileHeader.Filename, allowedAssetExtensions); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "invalid uploaded asset type", err)
+		return
+	}
+	if err := ensureUploadSize(fileHeader, h.cfg.MaxUploadBytes); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "uploaded asset exceeds allowed size", err)
+		return
+	}
 
 	if err := os.MkdirAll(h.uploadsDir, 0o755); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "prepare uploads directory", err)
@@ -434,7 +470,7 @@ func (h *Handler) uploadAsset(c *gin.Context) {
 	safeName := sanitizeFilename(fileHeader.Filename)
 	targetName := fmt.Sprintf("%d-%s", time.Now().UTC().UnixNano(), safeName)
 	targetPath := filepath.Join(h.uploadsDir, targetName)
-	if err := c.SaveUploadedFile(fileHeader, targetPath); err != nil {
+	if err := saveUploadedFileChecked(fileHeader, targetPath, h.cfg.MaxUploadBytes); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "store uploaded asset", err)
 		return
 	}
@@ -473,6 +509,10 @@ func (h *Handler) importAdventureZip(c *gin.Context) {
 
 	if !strings.HasSuffix(strings.ToLower(fileHeader.Filename), ".zip") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file must be a zip archive"})
+		return
+	}
+	if err := ensureUploadSize(fileHeader, h.cfg.MaxZipUploadBytes); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "zip archive exceeds allowed size", err)
 		return
 	}
 
@@ -522,8 +562,12 @@ func (h *Handler) importAdventureZip(c *gin.Context) {
 	}
 
 	targetPath := filepath.Join(importDir, fmt.Sprintf("%d-%s", time.Now().UTC().UnixNano(), sanitizeFilename(fileHeader.Filename)))
-	if err := c.SaveUploadedFile(fileHeader, targetPath); err != nil {
+	if err := saveUploadedFileChecked(fileHeader, targetPath, h.cfg.MaxZipUploadBytes); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "store zip upload", err)
+		return
+	}
+	if err := validateZipArchive(targetPath, h.cfg.MaxZipEntries, h.cfg.MaxZipExtractBytes); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "validate zip archive", err)
 		return
 	}
 
@@ -572,7 +616,7 @@ func (h *Handler) persistUploadedDocument(c *gin.Context, fileHeader *multipart.
 	safeName := sanitizeFilename(fileHeader.Filename)
 	targetName := fmt.Sprintf("%d-%s", time.Now().UTC().UnixNano(), safeName)
 	targetPath := filepath.Join(h.uploadsDir, targetName)
-	if err := c.SaveUploadedFile(fileHeader, targetPath); err != nil {
+	if err := saveUploadedFileChecked(fileHeader, targetPath, h.cfg.MaxUploadBytes); err != nil {
 		return Document{}, err
 	}
 	return h.persistStoredDocument(c.Request.Context(), targetPath, req)

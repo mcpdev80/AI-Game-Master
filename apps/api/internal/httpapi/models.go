@@ -311,6 +311,17 @@ type FungalCavernsDemoResponse struct {
 	Reused          bool      `json:"reused"`
 }
 
+type ResetFungalCavernsDemoResponse struct {
+	Deleted          bool   `json:"deleted"`
+	CampaignID       string `json:"campaign_id,omitempty"`
+	AdventureID      string `json:"adventure_id,omitempty"`
+	SessionCount     int    `json:"session_count"`
+	CharacterCount   int    `json:"character_count"`
+	DocumentCount    int    `json:"document_count"`
+	AssetCount       int    `json:"asset_count"`
+	ArchivedLLMCount int    `json:"archived_llm_count"`
+}
+
 type CreateCharacterRequest struct {
 	CampaignID    *string        `json:"campaign_id"`
 	Name          string         `json:"name" binding:"required,min=2,max=160"`

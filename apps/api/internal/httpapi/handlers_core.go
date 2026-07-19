@@ -18,10 +18,11 @@ type Handler struct {
 	sttClient    *STTClient
 	visionClient *VisionClient
 	uploadsDir   string
+	cfg          Config
 }
 
-func newHandler(store *Store, llmClient *LLMClient, llmGateway *LLMGateway, ttsClient *TTSClient, sttClient *STTClient, visionClient *VisionClient, uploadsDir string) *Handler {
-	return &Handler{store: store, llmClient: llmClient, llmGateway: llmGateway, ttsClient: ttsClient, sttClient: sttClient, visionClient: visionClient, uploadsDir: uploadsDir}
+func newHandler(store *Store, llmClient *LLMClient, llmGateway *LLMGateway, ttsClient *TTSClient, sttClient *STTClient, visionClient *VisionClient, uploadsDir string, cfg Config) *Handler {
+	return &Handler{store: store, llmClient: llmClient, llmGateway: llmGateway, ttsClient: ttsClient, sttClient: sttClient, visionClient: visionClient, uploadsDir: uploadsDir, cfg: cfg}
 }
 
 func (h *Handler) health(c *gin.Context) {
@@ -81,6 +82,7 @@ func (h *Handler) systemSummary(c *gin.Context) {
 			"base_url": h.sttClient.BaseURL(),
 			"model":    h.sttClient.Model(),
 		},
+		"openai_safeguards": openAISafeguardsStatus(h.cfg),
 	})
 }
 
@@ -179,17 +181,21 @@ func (h *Handler) listLLMModels(c *gin.Context) {
 }
 
 func errorResponse(c *gin.Context, status int, message string, err error) {
+	details := "unknown error"
+	if err != nil {
+		details = redactSensitiveText(err.Error())
+	}
 	log.Printf(
 		"httpapi error: status=%d method=%s path=%s message=%q details=%v",
 		status,
 		c.Request.Method,
 		c.Request.URL.Path,
 		message,
-		err,
+		details,
 	)
 	c.JSON(status, gin.H{
 		"error":   message,
-		"details": err.Error(),
+		"details": details,
 	})
 }
 
@@ -217,4 +223,45 @@ func stringPtrOrNil(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func openAISafeguardsStatus(cfg Config) gin.H {
+	warnings := make([]string, 0, 4)
+	configured := true
+
+	if cfg.LLMProvider == "openai" || cfg.TTSProvider == "openai" || cfg.STTProvider == "openai" {
+		if cfg.OpenAIBudgetSoftLimitUSD <= 0 {
+			configured = false
+			warnings = append(warnings, "OPENAI_BUDGET_SOFT_LIMIT_USD is not configured")
+		}
+		if cfg.OpenAIBudgetHardLimitUSD <= 0 {
+			configured = false
+			warnings = append(warnings, "OPENAI_BUDGET_HARD_LIMIT_USD is not configured")
+		}
+		if cfg.OpenAIBudgetHardLimitUSD > 0 && cfg.OpenAIBudgetSoftLimitUSD > cfg.OpenAIBudgetHardLimitUSD {
+			configured = false
+			warnings = append(warnings, "OPENAI_BUDGET_SOFT_LIMIT_USD exceeds OPENAI_BUDGET_HARD_LIMIT_USD")
+		}
+		if strings.TrimSpace(cfg.OpenAIUsageAlertEmail) == "" {
+			configured = false
+			warnings = append(warnings, "OPENAI_USAGE_ALERT_EMAIL is not configured")
+		}
+	}
+
+	return gin.H{
+		"configured":                       configured,
+		"soft_limit_usd":                   cfg.OpenAIBudgetSoftLimitUSD,
+		"hard_limit_usd":                   cfg.OpenAIBudgetHardLimitUSD,
+		"usage_alert_email_configured":     strings.TrimSpace(cfg.OpenAIUsageAlertEmail) != "",
+		"public_rate_limit_window_seconds": cfg.PublicRateLimitWindowSecs,
+		"route_limits": gin.H{
+			"demo_seed":         cfg.RateLimitDemoSeed,
+			"gm_respond":        cfg.RateLimitGMRespond,
+			"stt":               cfg.RateLimitSTT,
+			"vision":            cfg.RateLimitVision,
+			"character_builder": cfg.RateLimitBuilder,
+		},
+		"warnings":           warnings,
+		"recommended_action": "Set OpenAI dashboard alerts plus app envs: soft/hard budget in USD and a usage alert email before public demo.",
+	}
 }

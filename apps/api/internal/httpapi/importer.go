@@ -11,6 +11,10 @@ import (
 )
 
 func importAdventureZip(ctx context.Context, store *Store, uploadsDir string, filePath string, adventure Adventure) (ZipImportReport, error) {
+	if err := validateZipArchive(filePath, 200, 120<<20); err != nil {
+		return ZipImportReport{}, err
+	}
+
 	reader, err := zip.OpenReader(filePath)
 	if err != nil {
 		return ZipImportReport{}, err
@@ -33,9 +37,15 @@ func importAdventureZip(ctx context.Context, store *Store, uploadsDir string, fi
 			continue
 		}
 
-		safeZipPath := sanitizeZipPath(file.Name)
+		safeZipPath, err := secureZipRelativePath(file.Name)
+		if err != nil {
+			return report, err
+		}
 		assetType, entityName, locationName, tags := classifyImportedPath(safeZipPath)
 		targetPath := filepath.Join(targetRoot, safeZipPath)
+		if err := ensurePathWithinRoot(targetRoot, targetPath); err != nil {
+			return report, err
+		}
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return report, err
 		}
@@ -136,16 +146,6 @@ func extractZipFile(file *zip.File, targetPath string) error {
 
 	_, err = io.Copy(target, reader)
 	return err
-}
-
-func sanitizeZipPath(path string) string {
-	parts := strings.FieldsFunc(path, func(r rune) bool {
-		return r == '/' || r == '\\'
-	})
-	for index, part := range parts {
-		parts[index] = sanitizeFilename(part)
-	}
-	return filepath.Join(parts...)
 }
 
 func classifyImportedPath(path string) (assetType string, entityName *string, locationName *string, tags []string) {

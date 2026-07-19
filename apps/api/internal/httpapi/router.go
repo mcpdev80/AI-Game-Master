@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -45,9 +44,13 @@ func NewServer(cfg Config) *Server {
 	visionClient := NewVisionClient(cfg)
 
 	engine := gin.New()
-	engine.Use(gin.Logger(), gin.Recovery(), corsMiddleware())
+	engine.MaxMultipartMemory = max(cfg.MaxUploadBytes, max(cfg.MaxAudioUploadBytes, cfg.MaxZipUploadBytes))
+	if err := engine.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		panic(fmt.Errorf("set trusted proxies: %w", err))
+	}
+	engine.Use(gin.Logger(), gin.Recovery(), corsMiddleware(cfg.CORSAllowedOrigins), jsonBodyLimitMiddleware(cfg.MaxJSONBodyBytes))
 
-	registerRoutes(engine, newHandler(store, llmClient, llmGateway, ttsClient, sttClient, visionClient, cfg.UploadsDir))
+	registerRoutes(engine, newHandler(store, llmClient, llmGateway, ttsClient, sttClient, visionClient, cfg.UploadsDir, cfg), cfg)
 
 	return &Server{
 		engine: engine,
@@ -59,21 +62,26 @@ func (s *Server) Run(addr string) error {
 	return s.engine.Run(addr)
 }
 
-func registerRoutes(router *gin.Engine, handler *Handler) {
+func registerRoutes(router *gin.Engine, handler *Handler, cfg Config) {
+	operatorOnly := requireOperatorMiddleware(cfg.DemoOperatorSecret)
+	limiter := newFixedWindowRateLimiter()
+	window := time.Duration(max(1, cfg.PublicRateLimitWindowSecs)) * time.Second
+
 	router.GET("/api/health", handler.health)
 	router.GET("/api/system/summary", handler.systemSummary)
 	router.GET("/api/system/llm-gateway/status", handler.llmGatewayStatus)
-	router.GET("/api/system/config", handler.getSystemConfig)
-	router.PUT("/api/system/config", handler.updateSystemConfig)
-	router.POST("/api/system/llm-test", handler.testLLMConnection)
-	router.POST("/api/system/llm-models", handler.listLLMModels)
-	router.POST("/api/demo/fungal-caverns", handler.createFungalCavernsDemo)
+	router.GET("/api/system/config", operatorOnly, handler.getSystemConfig)
+	router.PUT("/api/system/config", operatorOnly, handler.updateSystemConfig)
+	router.POST("/api/system/llm-test", operatorOnly, handler.testLLMConnection)
+	router.POST("/api/system/llm-models", operatorOnly, handler.listLLMModels)
+	router.POST("/api/demo/fungal-caverns", rateLimitMiddleware(limiter, "demo-seed", cfg.RateLimitDemoSeed, window), handler.createFungalCavernsDemo)
+	router.DELETE("/api/demo/fungal-caverns", operatorOnly, handler.resetFungalCavernsDemo)
 	router.GET("/api/campaigns", handler.listCampaigns)
-	router.POST("/api/campaigns", handler.createCampaign)
+	router.POST("/api/campaigns", operatorOnly, handler.createCampaign)
 	router.GET("/api/adventures", handler.listAdventures)
-	router.POST("/api/adventures", handler.createAdventure)
-	router.POST("/api/adventures/create-package", handler.createAdventurePackage)
-	router.DELETE("/api/adventures/:id", handler.deleteAdventure)
+	router.POST("/api/adventures", operatorOnly, handler.createAdventure)
+	router.POST("/api/adventures/create-package", operatorOnly, handler.createAdventurePackage)
+	router.DELETE("/api/adventures/:id", operatorOnly, handler.deleteAdventure)
 	router.GET("/api/sessions", handler.listSessions)
 	router.GET("/api/sessions/:id", handler.getSession)
 	router.GET("/api/sessions/:id/events", handler.listSessionEvents)
@@ -86,57 +94,42 @@ func registerRoutes(router *gin.Engine, handler *Handler) {
 	router.PUT("/api/sessions/:id/runtime-state", handler.updateSessionRuntimeState)
 	router.GET("/api/sessions/:id/tts-audio", handler.serveSessionTTSAudio)
 	router.GET("/api/tts-audio", handler.serveTTSAudio)
-	router.POST("/api/stt/transcriptions", handler.transcribeAudio)
+	router.POST("/api/stt/transcriptions", rateLimitMiddleware(limiter, "stt", cfg.RateLimitSTT, window), handler.transcribeAudio)
 	router.GET("/api/sessions/join/:token", handler.getJoinSessionPreview)
 	router.POST("/api/sessions/join/:token", handler.joinSession)
 	router.GET("/api/sessions/:id/player-links", handler.listPlayerLinks)
 	router.POST("/api/sessions/:id/player-links", handler.createPlayerLink)
 	router.PUT("/api/player-slots/:playerSlotId/character", handler.updatePlayerSlotCharacter)
 	router.PUT("/api/player-slots/:playerSlotId/status", handler.updatePlayerSlotStatus)
-	router.PUT("/api/player-slots/:playerSlotId/regenerate-link", handler.regeneratePlayerLink)
-	router.PUT("/api/player-slots/:playerSlotId/link-state", handler.setPlayerLinkState)
+	router.PUT("/api/player-slots/:playerSlotId/regenerate-link", operatorOnly, handler.regeneratePlayerLink)
+	router.PUT("/api/player-slots/:playerSlotId/link-state", operatorOnly, handler.setPlayerLinkState)
 	router.PUT("/api/player-slots/:playerSlotId/visible-state", handler.updatePlayerVisibleState)
 	router.GET("/api/documents", handler.listDocuments)
 	router.GET("/api/documents/:id/file", handler.serveDocumentFile)
-	router.POST("/api/documents", handler.createDocument)
-	router.POST("/api/documents/upload", handler.uploadDocument)
-	router.POST("/api/documents/:id/reindex-monsters", handler.reindexDocumentMonsters)
-	router.DELETE("/api/documents/:id", handler.deleteDocument)
-	router.POST("/api/adventures/import-zip", handler.importAdventureZip)
+	router.POST("/api/documents", operatorOnly, handler.createDocument)
+	router.POST("/api/documents/upload", operatorOnly, handler.uploadDocument)
+	router.POST("/api/documents/:id/reindex-monsters", operatorOnly, handler.reindexDocumentMonsters)
+	router.DELETE("/api/documents/:id", operatorOnly, handler.deleteDocument)
+	router.POST("/api/adventures/import-zip", operatorOnly, handler.importAdventureZip)
 	router.GET("/api/assets", handler.listAssets)
 	router.GET("/api/assets/:id/file", handler.serveAssetFile)
-	router.POST("/api/assets/upload", handler.uploadAsset)
-	router.DELETE("/api/assets/:id", handler.deleteAsset)
+	router.POST("/api/assets/upload", operatorOnly, handler.uploadAsset)
+	router.DELETE("/api/assets/:id", operatorOnly, handler.deleteAsset)
 	router.GET("/api/characters", handler.listCharacters)
 	router.POST("/api/characters", handler.createCharacter)
 	router.PUT("/api/characters/:id", handler.updateCharacter)
 	router.DELETE("/api/characters/:id", handler.deleteCharacter)
-	router.POST("/api/characters/builder/start", handler.startCharacterBuilder)
-	router.POST("/api/characters/:id/builder/message", handler.characterBuilderMessage)
+	router.POST("/api/characters/builder/start", rateLimitMiddleware(limiter, "builder-start", cfg.RateLimitBuilder, window), handler.startCharacterBuilder)
+	router.POST("/api/characters/:id/builder/message", rateLimitMiddleware(limiter, "builder-message", cfg.RateLimitBuilder, window), handler.characterBuilderMessage)
 	router.POST("/api/characters/:id/builder/apply", handler.applyCharacterBuilderPatch)
 	router.POST("/api/characters/:id/builder/finish", handler.finishCharacterBuilder)
 	router.POST("/api/characters/import-sheet", handler.importCharacterSheet)
 	router.POST("/api/characters/ability-scores/resolve", handler.resolveAbilityScores)
 	router.POST("/api/characters/ability-scores/validate-assignment", handler.validateAbilityAssignment)
-	router.POST("/api/vision/dice/detect", handler.detectDice)
-	router.POST("/api/vision/dice/stabilize", handler.stabilizeDiceFrames)
+	router.POST("/api/vision/dice/detect", rateLimitMiddleware(limiter, "vision-detect", cfg.RateLimitVision, window), handler.detectDice)
+	router.POST("/api/vision/dice/stabilize", rateLimitMiddleware(limiter, "vision-stabilize", cfg.RateLimitVision, window), handler.stabilizeDiceFrames)
 	router.POST("/api/player-portal/join/:token", handler.playerPortalJoin)
 	router.GET("/api/player-portal/me", handler.playerPortalMe)
-	router.POST("/api/gm/respond", handler.gmRespond)
+	router.POST("/api/gm/respond", rateLimitMiddleware(limiter, "gm-respond", cfg.RateLimitGMRespond, window), handler.gmRespond)
 	router.GET("/api/voice-profiles", handler.listVoiceProfiles)
-}
-
-func corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		c.Next()
-	}
 }

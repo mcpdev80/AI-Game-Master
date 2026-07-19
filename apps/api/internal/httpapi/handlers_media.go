@@ -293,6 +293,18 @@ func (h *Handler) transcribeAudio(c *gin.Context) {
 		errorResponse(c, http.StatusBadRequest, "audio file is required", err)
 		return
 	}
+	if err := ensureAllowedExtension(file.Filename, allowedAudioExtensions); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "invalid audio upload type", err)
+		return
+	}
+	if err := ensureUploadSize(file, h.cfg.MaxAudioUploadBytes); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "audio upload exceeds allowed size", err)
+		return
+	}
+	if !allowedAudioContentType(file.Header.Get("Content-Type")) {
+		errorResponse(c, http.StatusBadRequest, "invalid audio upload type", errUploadTypeRejected)
+		return
+	}
 
 	src, err := file.Open()
 	if err != nil {
@@ -304,6 +316,10 @@ func (h *Handler) transcribeAudio(c *gin.Context) {
 	data, err := io.ReadAll(src)
 	if err != nil {
 		errorResponse(c, http.StatusBadRequest, "read uploaded audio", err)
+		return
+	}
+	if h.cfg.MaxAudioUploadBytes > 0 && int64(len(data)) > h.cfg.MaxAudioUploadBytes {
+		errorResponse(c, uploadErrorStatus(errUploadTooLarge), "audio upload exceeds allowed size", errUploadTooLarge)
 		return
 	}
 

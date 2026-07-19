@@ -380,6 +380,17 @@ func (s *Store) CreateCampaign(ctx context.Context, req CreateCampaignRequest) (
 	return item, err
 }
 
+func (s *Store) DeleteCampaign(ctx context.Context, id string) error {
+	commandTag, err := s.pool.Exec(ctx, `DELETE FROM campaigns WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
 func (s *Store) ListAdventures(ctx context.Context) ([]Adventure, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id::text, campaign_id::text, name, description, language, metadata_json, created_at
@@ -751,6 +762,17 @@ func (s *Store) ArchiveLLMSessionsByScope(ctx context.Context, scopeType string,
 		WHERE scope_type = $1 AND scope_id = $2 AND status <> 'archived'
 	`, scopeType, scopeID)
 	return err
+}
+
+func (s *Store) DeleteLLMSessionsByScope(ctx context.Context, scopeType string, scopeID string) (int64, error) {
+	commandTag, err := s.pool.Exec(ctx, `
+		DELETE FROM llm_sessions
+		WHERE scope_type = $1 AND scope_id = $2
+	`, scopeType, scopeID)
+	if err != nil {
+		return 0, err
+	}
+	return commandTag.RowsAffected(), nil
 }
 
 func (s *Store) ArchiveLLMSessionsForInactiveSessions(ctx context.Context) error {

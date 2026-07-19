@@ -38,6 +38,15 @@ func (h *Handler) createFungalCavernsDemo(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+func (h *Handler) resetFungalCavernsDemo(c *gin.Context) {
+	response, err := h.deleteFungalCavernsDemo(c.Request.Context())
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "reset Fungal Caverns demo", err)
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}
+
 func (h *Handler) seedFungalCavernsDemo(ctx context.Context, language string) (FungalCavernsDemoResponse, error) {
 	campaign, campaignReused, err := h.ensureFungalDemoCampaign(ctx)
 	if err != nil {
@@ -271,6 +280,124 @@ func (h *Handler) ensureFungalDemoSession(ctx context.Context, campaign Campaign
 	return session, false, nil
 }
 
+func (h *Handler) deleteFungalCavernsDemo(ctx context.Context) (ResetFungalCavernsDemoResponse, error) {
+	response := ResetFungalCavernsDemoResponse{Deleted: true}
+
+	sessions, err := h.store.ListSessions(ctx)
+	if err != nil {
+		return response, err
+	}
+	for _, session := range sessions {
+		if !isFungalDemoSession(session) {
+			continue
+		}
+		if response.AdventureID == "" && session.AdventureID != nil {
+			response.AdventureID = strings.TrimSpace(*session.AdventureID)
+		}
+		deleted, deleteErr := h.store.DeleteLLMSessionsByScope(ctx, "session", session.ID)
+		if deleteErr != nil {
+			return response, deleteErr
+		}
+		response.ArchivedLLMCount += int(deleted)
+		if err := h.store.DeleteSession(ctx, session.ID); err != nil {
+			return response, err
+		}
+		response.SessionCount++
+	}
+
+	characters, err := h.store.ListCharacters(ctx)
+	if err != nil {
+		return response, err
+	}
+	for _, character := range characters {
+		if !isFungalDemoCharacter(character) {
+			continue
+		}
+		if response.CampaignID == "" && character.CampaignID != nil {
+			response.CampaignID = strings.TrimSpace(*character.CampaignID)
+		}
+		if err := h.store.DeleteCharacter(ctx, character.ID); err != nil {
+			return response, err
+		}
+		response.CharacterCount++
+	}
+
+	assets, err := h.store.ListAssets(ctx)
+	if err != nil {
+		return response, err
+	}
+	for _, asset := range assets {
+		if !isFungalDemoAsset(asset) {
+			continue
+		}
+		if response.AdventureID == "" && asset.AdventureID != nil {
+			response.AdventureID = strings.TrimSpace(*asset.AdventureID)
+		}
+		filePath := asset.FilePath
+		if err := h.store.DeleteAsset(ctx, asset.ID); err != nil {
+			return response, err
+		}
+		removeLocalFile(&filePath)
+		response.AssetCount++
+	}
+
+	documents, err := h.store.ListDocuments(ctx)
+	if err != nil {
+		return response, err
+	}
+	for _, document := range documents {
+		if !isFungalDemoDocument(document) {
+			continue
+		}
+		if response.AdventureID == "" && document.AdventureID != nil {
+			response.AdventureID = strings.TrimSpace(*document.AdventureID)
+		}
+		if err := h.store.DeleteDocument(ctx, document.ID); err != nil {
+			return response, err
+		}
+		removeLocalFile(document.SourceFilePath)
+		response.DocumentCount++
+	}
+
+	adventures, err := h.store.ListAdventures(ctx)
+	if err != nil {
+		return response, err
+	}
+	for _, adventure := range adventures {
+		if !isFungalDemoAdventure(adventure) {
+			continue
+		}
+		if response.AdventureID == "" {
+			response.AdventureID = adventure.ID
+		}
+		if response.CampaignID == "" && adventure.CampaignID != nil {
+			response.CampaignID = strings.TrimSpace(*adventure.CampaignID)
+		}
+		if err := h.store.DeleteAdventure(ctx, adventure.ID); err != nil {
+			return response, err
+		}
+	}
+
+	campaigns, err := h.store.ListCampaigns(ctx)
+	if err != nil {
+		return response, err
+	}
+	for _, campaign := range campaigns {
+		if !isFungalDemoCampaign(campaign) {
+			continue
+		}
+		if response.CampaignID == "" {
+			response.CampaignID = campaign.ID
+		}
+		if err := h.store.DeleteCampaign(ctx, campaign.ID); err != nil {
+			return response, err
+		}
+	}
+
+	removeDemoUploadDirectory(filepath.Join(h.uploadsDir, "demo", fungalCavernsDemoID))
+	return response, nil
+}
+
 func writeEmbeddedDemoFile(directory, name string) (string, error) {
 	content, err := fungalCavernsDemoFiles.ReadFile("demo_content/fungal-caverns/" + name)
 	if err != nil {
@@ -286,4 +413,39 @@ func writeEmbeddedDemoFile(directory, name string) (string, error) {
 func metadataString(metadata map[string]any, key string) string {
 	value, _ := metadata[key].(string)
 	return strings.TrimSpace(value)
+}
+
+func isFungalDemoCampaign(campaign Campaign) bool {
+	return strings.TrimSpace(campaign.Name) == "Build Week Demo — The Fungal Caverns"
+}
+
+func isFungalDemoAdventure(adventure Adventure) bool {
+	return metadataString(adventure.Metadata, "demo_id") == fungalCavernsDemoID
+}
+
+func isFungalDemoSession(session Session) bool {
+	if session.AdventureID != nil && strings.TrimSpace(*session.AdventureID) != "" {
+		return strings.HasPrefix(strings.TrimSpace(session.Name), "Fungal Caverns Demo")
+	}
+	return false
+}
+
+func isFungalDemoCharacter(character Character) bool {
+	return metadataString(character.Metadata, "demo_id") == fungalCavernsDemoID
+}
+
+func isFungalDemoDocument(document Document) bool {
+	return metadataString(document.Metadata, "demo_id") == fungalCavernsDemoID
+}
+
+func isFungalDemoAsset(asset Asset) bool {
+	return metadataString(asset.Metadata, "demo_id") == fungalCavernsDemoID
+}
+
+func removeDemoUploadDirectory(path string) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return
+	}
+	_ = os.RemoveAll(trimmed)
 }

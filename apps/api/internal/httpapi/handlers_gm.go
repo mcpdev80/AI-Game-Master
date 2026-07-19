@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -817,6 +818,40 @@ func (h *Handler) gmRespond(c *gin.Context) {
 		}
 	}
 	response.ContextChunks = contextChunks
+
+	// --- server-side validation of model output (P0.6) ---
+	// Build a set of known character IDs from the active characters list.
+	knownIDs := make(map[string]struct{})
+	for _, ch := range activeCharacters {
+		if id, ok := ch["id"].(string); ok {
+			knownIDs[id] = struct{}{}
+		}
+	}
+
+	// Validate state_updates against the allowlist.
+	validatedUpdates, stateErrors := validateStateUpdates(response.StateUpdates, knownIDs)
+	if len(stateErrors) > 0 {
+		for _, se := range stateErrors {
+			log.Printf("httpapi state_update rejected: %s", redactSensitiveText(se.Error()))
+		}
+		response.DMNotes = append(response.DMNotes, fmt.Sprintf("state_updates rejected: %d invalid update(s) filtered", len(stateErrors)))
+	}
+	response.StateUpdates = validatedUpdates
+
+	// Validate roll_request.
+	if response.RollRequest != nil {
+		cleanedRoll, rollErrors := ValidateRollRequest(response.RollRequest)
+		if len(rollErrors) > 0 {
+			for _, re := range rollErrors {
+				log.Printf("httpapi roll_request rejected: %s", redactSensitiveText(re))
+			}
+			response.DMNotes = append(response.DMNotes, fmt.Sprintf("roll_request invalid: %d error(s) filtered", len(rollErrors)))
+			response.RollRequest = nil
+		} else {
+			response.RollRequest = cleanedRoll
+		}
+	}
+
 	response.RollRequest = ensureAttackFollowUpRollRequest(req.PlayerInput, activeCharacters, response.RollRequest)
 	response.RollRequest = sanitizeInvalidCombatRollRequest(response.RollRequest)
 	response.RollRequest = sanitizeRollRequestForDisplay(response.RollRequest)

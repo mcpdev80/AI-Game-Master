@@ -161,6 +161,14 @@ func (h *Handler) importCharacterSheet(c *gin.Context) {
 		errorResponse(c, http.StatusBadRequest, "missing uploaded character sheet", err)
 		return
 	}
+	if err := ensureAllowedExtension(fileHeader.Filename, allowedCharacterSheetExtensions); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "invalid character sheet type", err)
+		return
+	}
+	if err := ensureUploadSize(fileHeader, h.cfg.MaxUploadBytes); err != nil {
+		errorResponse(c, uploadErrorStatus(err), "character sheet exceeds allowed size", err)
+		return
+	}
 
 	name := c.PostForm("name")
 	if name == "" {
