@@ -1544,8 +1544,8 @@ export function PlayerScreenView({
                   </div>
                 ) : null}
               </div>
-              <button className="studio-button" disabled={!enableState.cam} onClick={() => setPopupVisible(true)} type="button">
-                {tr("Open Camera", "Kamera öffnen")}
+              <button className="studio-button" onClick={() => setPopupVisible(true)} type="button">
+                {enableState.cam ? tr("Open Camera", "Kamera öffnen") : tr("Open Roll", "Wurf öffnen")}
               </button>
             </div>
           ) : (

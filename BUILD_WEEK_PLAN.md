@@ -220,9 +220,9 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 
 - [x] Go-Unit-Tests für Parsing des Responses-API-Formats.
 - [x] Tests für gültige, verweigerte und unvollständige Structured Outputs.
-- [ ] Tests für HTTP-Fehler, ungültiges JSON und schemawidrige Structured Outputs ergänzen.
+- [x] Tests für HTTP-Fehler, ungültiges JSON und schemawidrige Structured Outputs ergänzen.
 - [x] Tests für `state_updates`-Allowlist und Würfelvalidierung.
-- [ ] Tests für Session-Memory/Kompaktierung und Trennung von Erzählungs- und Regelkontext.
+- [x] Tests für Session-Memory/Kompaktierung und Trennung von Erzählungs- und Regelkontext.
 - [x] Tests für Player-Safe-Serialisierung: keine DM Notes, versteckten DCs oder internen LLM-Session-IDs.
 - [x] `httptest.Server` als deterministischer OpenAI-Mock.
 - [x] Integrationstest: Spieleraktion → Roll Request → bestätigter Wurf → Zustandsänderung (Playwright E2E).
@@ -231,8 +231,10 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 
 - [x] Playwright einrichten.
 - [x] Golden Path testen: Demo öffnen, Charakter erstellen, Player beitreten, Turn senden, Wurf bestätigen, Narration und State Update sehen.
-- [ ] Kamera-Verweigerung und manuellen Würfel-Fallback testen.
+- [x] Kamera-Verweigerung und manuellen Würfel-Fallback testen.
 - [ ] Lade-, Fehler-, Rate-Limit- und LLM-Fallback-Zustände sichtbar und verständlich darstellen.
+  - [x] Sichtbarer Rate-Limit-Fehler im Player Screen per Playwright abgesichert.
+  - [ ] Ladezustand, generischer Fehlerzustand und klarer LLM-Fallback-Text noch als eigene UI-Abnahmen prüfen.
 - [ ] Responsive Test für Operator Desktop und Player Smartphone.
 
 ### Build-Gates
@@ -269,7 +271,7 @@ Die aktuelle API darf nicht unverändert öffentlich erreichbar sein.
 - [x] `PUT /api/system/config` nur für Operatoren freigeben oder im Demo-Deployment deaktivieren.
 - [x] Demo-Daten regelmäßig zurücksetzen; keine Nutzerinhalte langfristig speichern.
 - [x] Logs dürfen keine API-Keys, vollständigen Prompts mit privaten Inhalten oder Player-Tokens enthalten.
-- [ ] Internen HTTPS-Zugang mit Self-Signed-Zertifikat bereitstellen.
+- [x] Internen HTTPS-Zugang mit Self-Signed-Zertifikat bereitstellen.
 - [ ] Interne Demo auf den benötigten Geräten während der Testphase stabil verfügbar halten.
 - [x] Budget- und Rate-Limit-Warnungen für den OpenAI-Key konfigurieren.
 
@@ -325,11 +327,11 @@ Zusätzliche Dateien:
 - [x] `LICENSE` – MIT-Lizenz für den eigenen Quellcode; Drittinhalte bleiben unter ihren jeweiligen Lizenzen.
 - [x] `BUILD_WEEK_CHANGELOG.md` – Baseline versus neue Arbeit.
 - [x] `THIRD_PARTY_NOTICES.md` – verwendete Assets und Lizenzen.
-- [ ] `SECURITY.md` – verantwortliche Meldung und Demo-Grenzen.
-- [ ] `docs/architecture.md` – kompakte System- und Datenflussgrafik.
-- [ ] `docs/judge-testing.md` – fünfminütiger Testablauf und Zugangsdaten.
-- [ ] `docs/demo-script.md` – finales Video-Drehbuch.
-- [ ] `docs/evals.md` – Testfälle und Ergebnisse für GPT-5.6-Turns.
+- [x] `SECURITY.md` – verantwortliche Meldung und Demo-Grenzen.
+- [x] `docs/architecture.md` – kompakte System- und Datenflussgrafik.
+- [x] `docs/judge-testing.md` – fünfminütiger Testablauf und Zugangsdaten.
+- [x] `docs/demo-script.md` – finales Video-Drehbuch.
+- [x] `docs/evals.md` – Testfälle und Ergebnisse für GPT-5.6-Turns.
 
 ## 10. P1 – kleine, aussagekräftige GPT-5.6-Evaluation
 
@@ -547,6 +549,8 @@ npm run test:golden-path
 6. Demo während der lokalen Test- und Aufnahmesessions stabil erreichbar halten.
 
 **Abnahme:** Der Golden Path läuft über die interne HTTPS-URL auf Desktop plus Smartphone dreimal hintereinander ohne Serverneustart.
+
+**Status 20. Juli 2026:** Self-Signed-HTTPS unter `https://dungeon-master.local:3443` ist lokal aufgebaut und per Healthcheck verifiziert. Offen sind die realen Gerätetests über Desktop/Smartphone sowie die dreifache störungsfreie End-to-End-Abnahme.
 
 ### Schritt 5 – Submission-Dokumentation fertigstellen
 

@@ -105,6 +105,81 @@ func TestResponsesCompletionSurfacesIncompleteReason(t *testing.T) {
 	}
 }
 
+func TestResponsesCompletionSurfacesRateLimitError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"rate limit exceeded"}}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(Config{
+		LLMProvider: "openai",
+		LLMBaseURL:  server.URL,
+		LLMModel:    "gpt-5.6",
+	})
+
+	_, _, err := client.responsesCompletion(context.Background(), []map[string]string{{"role": "user", "content": "test"}}, 100, nil)
+	var responseErr *OpenAIResponseError
+	if !errors.As(err, &responseErr) || responseErr.Kind != "rate_limit" || responseErr.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("expected rate_limit error, got %v", err)
+	}
+}
+
+func TestResponsesCompletionSurfacesInvalidSchemaError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"schema validation failed"}}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(Config{
+		LLMProvider: "openai",
+		LLMBaseURL:  server.URL,
+		LLMModel:    "gpt-5.6",
+	})
+
+	_, _, err := client.responsesCompletion(context.Background(), []map[string]string{{"role": "user", "content": "test"}}, 100, encounterTurnSchema())
+	var responseErr *OpenAIResponseError
+	if !errors.As(err, &responseErr) || responseErr.Kind != "invalid_schema" || responseErr.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected invalid_schema error, got %v", err)
+	}
+}
+
+func TestResponsesCompletionRejectsInvalidJSONBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"gpt-5.6","status":"completed","output":[`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(Config{
+		LLMProvider: "openai",
+		LLMBaseURL:  server.URL,
+		LLMModel:    "gpt-5.6",
+	})
+
+	_, _, err := client.responsesCompletion(context.Background(), []map[string]string{{"role": "user", "content": "test"}}, 100, nil)
+	var responseErr *OpenAIResponseError
+	if !errors.As(err, &responseErr) || responseErr.Kind != "invalid_response" {
+		t.Fatalf("expected invalid_response error, got %v", err)
+	}
+}
+
+func TestResponsesCompletionRejectsCompletedResponseWithoutOutputText(t *testing.T) {
+	client, closeServer := openAITestClient(t, `{
+      "model":"gpt-5.6",
+      "status":"completed",
+      "output":[{"type":"message","content":[{"type":"tool_result","text":"ignored"}]}]
+    }`)
+	defer closeServer()
+
+	_, _, err := client.responsesCompletion(context.Background(), []map[string]string{{"role": "user", "content": "test"}}, 100, nil)
+	var responseErr *OpenAIResponseError
+	if !errors.As(err, &responseErr) || responseErr.Kind != "invalid_response" {
+		t.Fatalf("expected invalid_response error, got %v", err)
+	}
+}
+
 func openAITestClient(t *testing.T, responseBody string) (*LLMClient, func()) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
