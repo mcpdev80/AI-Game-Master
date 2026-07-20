@@ -49,13 +49,34 @@ type builderRaceRule struct {
 	NotableTraits            []string
 }
 
+type builderEquipmentAdvice struct {
+	Options        []string
+	Recommendation []string
+	WeaponNotes    string
+	CombatOverview string
+}
+
+type builderFeatureAdvice struct {
+	Options        []string
+	Recommendation []string
+}
+
+type builderSpellAdvice struct {
+	Options           []string
+	Recommendation    []string
+	SpellNotes        string
+	SpellAttacks      []string
+	SpellSaveDC       string
+	SpellAttackBonus  string
+}
+
 var builderCanonicalSkills = []struct {
 	Name    string
 	Aliases []string
 }{
 	{Name: "Akrobatik", Aliases: []string{"akrobatik", "acrobatics"}},
 	{Name: "Arkane Kunde", Aliases: []string{"arkane kunde", "arcana"}},
-	{Name: "Athletik", Aliases: []string{"athletik", "athletics"}},
+	{Name: "Athletik", Aliases: []string{"athletik", "athletics", "athletic"}},
 	{Name: "Auftreten", Aliases: []string{"auftreten", "performance"}},
 	{Name: "Einschüchtern", Aliases: []string{"einschuchtern", "einschüchtern", "intimidation"}},
 	{Name: "Fingerfertigkeit", Aliases: []string{"fingerfertigkeit", "sleight of hand"}},
@@ -63,14 +84,14 @@ var builderCanonicalSkills = []struct {
 	{Name: "Heilkunde", Aliases: []string{"heilkunde", "medicine"}},
 	{Name: "Heimlichkeit", Aliases: []string{"heimlichkeit", "stealth"}},
 	{Name: "Mit Tieren umgehen", Aliases: []string{"mit tieren umgehen", "animal handling"}},
-	{Name: "Motiv erkennen", Aliases: []string{"motiv erkennen", "insight"}},
+	{Name: "Motiv erkennen", Aliases: []string{"motiv erkennen", "motive erkennen", "motiv erkenne", "insight"}},
 	{Name: "Nachforschungen", Aliases: []string{"nachforschungen", "investigation"}},
 	{Name: "Naturkunde", Aliases: []string{"naturkunde", "nature"}},
 	{Name: "Religion", Aliases: []string{"religion"}},
 	{Name: "Täuschung", Aliases: []string{"taeuschung", "täuschung", "deception"}},
 	{Name: "Überlebenskunst", Aliases: []string{"uberlebenskunst", "überlebenskunst", "survival"}},
 	{Name: "Überzeugen", Aliases: []string{"uberzeugen", "überzeugen", "persuasion"}},
-	{Name: "Wahrnehmung", Aliases: []string{"wahrnehmung", "perception"}},
+	{Name: "Wahrnehmung", Aliases: []string{"wahrnehmung", "wahrnemung", "warhnemung", "perception"}},
 }
 
 var builderCoreClassRules = []builderClassRule{
@@ -368,7 +389,7 @@ func (h *Handler) characterBuilderMessage(c *gin.Context) {
 
 	currentStage := currentBuilderStage(character, &llmSession)
 	sanitizeCharacterBuilderPatchForStage(&completion.Patch, currentStage)
-	if isBuilderStoryTransferMessage(req.Message) {
+	if isBuilderStoryTransferMessage(req.Message, latestBuilderAssistantReply(messages)) {
 		applyBuilderStoryTransferPatch(&completion.Patch, latestBuilderStoryDraft(messages, completion.Reply))
 	}
 	assistantMessage := CharacterBuilderMessage{
@@ -550,7 +571,7 @@ func (h *Handler) completeCharacterBuilder(ctx context.Context, character *Chara
 		if storyCompletion, ok := builderDeterministicStorySelectionCompletion(character, latestUserMessage, latestStoryOptions); ok {
 			return storyCompletion, nil
 		}
-		if guidedCompletion, ok := builderDeterministicGuidedChoiceCompletion(character, builderStage, latestUserMessage); ok {
+		if guidedCompletion, ok := builderDeterministicGuidedChoiceCompletion(character, builderStage, latestUserMessage, previousAssistant); ok {
 			return guidedCompletion, nil
 		}
 	}
@@ -618,9 +639,9 @@ func (h *Handler) completeCharacterBuilder(ctx context.Context, character *Chara
 		return characterBuilderCompletion{Reply: builderFallbackReply(builderStage, character, language), Patch: CharacterBuilderPatch{}}, nil
 	}
 
-	if language == "de" && (builderStoryDraftRequested(latestUserMessage) || builderStoryTransferRequested(latestUserMessage)) {
+	if language == "de" && (builderStoryDraftRequested(latestUserMessage) || builderStoryTransferRequested(latestUserMessage, previousAssistant)) {
 		switch {
-		case builderStoryTransferRequested(latestUserMessage) && !builderReplyLooksLikeStoryDraft(previousAssistant):
+		case builderStoryTransferRequested(latestUserMessage, previousAssistant) && !builderReplyLooksLikeStoryDraft(previousAssistant):
 			parsed.Reply = builderStoryProposalFallback(character)
 			parsed.Updates = CharacterBuilderPatch{}
 		case builderShouldOfferStoryProposals(latestUserMessage, previousAssistant) && !builderReplyLooksLikeStoryOptions(parsed.Reply):
@@ -631,9 +652,9 @@ func (h *Handler) completeCharacterBuilder(ctx context.Context, character *Chara
 			parsed.Updates = CharacterBuilderPatch{}
 		}
 	}
-	if builderStoryDraftRequested(latestUserMessage) || builderStoryTransferRequested(latestUserMessage) {
+	if builderStoryDraftRequested(latestUserMessage) || builderStoryTransferRequested(latestUserMessage, previousAssistant) {
 		stripBuilderStoryPatch(&parsed.Updates)
-		if builderStoryTransferRequested(latestUserMessage) {
+		if builderStoryTransferRequested(latestUserMessage, previousAssistant) {
 			applyBuilderStoryTransferPatch(&parsed.Updates, latestBuilderStoryDraft(transcript, parsed.Reply))
 		}
 	}
@@ -874,23 +895,30 @@ func builderStoryDraftRequested(message string) bool {
 		return false
 	}
 	return strings.Contains(message, "hintergrundgeschichte") ||
-		strings.Contains(message, "hintergrund") ||
-		strings.Contains(message, "geschichte") ||
+		strings.Contains(message, "backstory") ||
+		strings.Contains(message, "story") ||
+		strings.Contains(message, "hintergrundtext") ||
+		strings.Contains(message, "ausformulier") ||
+		strings.Contains(message, "ausschm") ||
+		(strings.Contains(message, "geschichte") && !strings.Contains(message, "geschichte und")) ||
 		strings.Contains(message, "story") ||
 		strings.Contains(message, "entwurf") ||
-		strings.Contains(message, "backstory") ||
-		strings.Contains(message, "konzept") ||
-		strings.Contains(message, "persoenlich") ||
-		strings.Contains(message, "personlich")
+		strings.Contains(message, "charaktergeschichte")
 }
 
-func builderStoryTransferRequested(message string) bool {
-	return isBuilderStoryTransferMessage(message)
+func builderStoryTransferRequested(message string, previousAssistant string) bool {
+	return isBuilderStoryTransferMessage(message, previousAssistant)
 }
 
-func isBuilderStoryTransferMessage(message string) bool {
+func isBuilderStoryTransferMessage(message string, previousAssistant string) bool {
 	message = normalizeBuilderIntentText(message)
 	if message == "" {
+		return false
+	}
+	storyContext := builderStoryDraftRequested(message) ||
+		builderReplyLooksLikeStoryOptions(previousAssistant) ||
+		builderReplyLooksLikeStoryDraft(previousAssistant)
+	if !storyContext {
 		return false
 	}
 	keywords := []string{
@@ -1041,7 +1069,7 @@ func builderShouldOfferStoryProposals(message string, previousAssistant string) 
 	if message == "" {
 		return false
 	}
-	if !builderStoryDraftRequested(message) || builderStoryTransferRequested(message) {
+	if !builderStoryDraftRequested(message) || builderStoryTransferRequested(message, previousAssistant) {
 		return false
 	}
 	if builderReplyLooksLikeStoryOptions(previousAssistant) || builderReplyLooksLikeStoryDraft(previousAssistant) {
@@ -1056,7 +1084,7 @@ func builderShouldOfferStoryProposals(message string, previousAssistant string) 
 
 func builderShouldWriteFullStory(message string, previousAssistant string) bool {
 	message = normalizeBuilderIntentText(message)
-	if message == "" || builderStoryTransferRequested(message) {
+	if message == "" || builderStoryTransferRequested(message, previousAssistant) {
 		return false
 	}
 	if builderReplyLooksLikeStoryDraft(previousAssistant) {
@@ -1230,7 +1258,7 @@ func builderDeterministicStorySelectionCompletion(character *Character, latestUs
 		Reply: reply,
 		Patch: CharacterBuilderPatch{},
 	}
-	if builderStoryTransferRequested(latestUserMessage) {
+	if builderStoryTransferRequested(latestUserMessage, storyOptions) {
 		completion.Patch.Metadata = map[string]any{
 			"backstory": reply,
 		}
@@ -1257,9 +1285,9 @@ func builderStoryDraftForOption(character *Character, optionIndex int) string {
 	}
 }
 
-func builderDeterministicGuidedChoiceCompletion(character *Character, stage string, latestUserMessage string) (characterBuilderCompletion, bool) {
-	if reply, ok := builderDeterministicLanguageReply(*character, latestUserMessage); ok {
-		return characterBuilderCompletion{Reply: reply, Patch: CharacterBuilderPatch{}}, true
+func builderDeterministicGuidedChoiceCompletion(character *Character, stage string, latestUserMessage string, previousAssistant string) (characterBuilderCompletion, bool) {
+	if reply, patch, ok := builderDeterministicSkillRepairReply(*character, stage, latestUserMessage, previousAssistant); ok {
+		return characterBuilderCompletion{Reply: reply, Patch: patch}, true
 	}
 	if reply, ok := builderDeterministicStageAdviceReply(*character, stage, latestUserMessage); ok {
 		return characterBuilderCompletion{Reply: reply, Patch: CharacterBuilderPatch{}}, true
@@ -1270,7 +1298,7 @@ func builderDeterministicGuidedChoiceCompletion(character *Character, stage stri
 			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
 		}
 	case "class_proficiencies_and_choices":
-		if reply, patch, ok := builderDeterministicSkillChoiceReply(*character, latestUserMessage); ok {
+		if reply, patch, ok := builderDeterministicSkillChoiceReply(*character, latestUserMessage, previousAssistant); ok {
 			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
 		}
 		if builderQuestionLooksLikeListRequest(latestUserMessage) || strings.Contains(normalizeBuilderIntentText(latestUserMessage), "fertigkeit") {
@@ -1279,6 +1307,9 @@ func builderDeterministicGuidedChoiceCompletion(character *Character, stage stri
 			}
 		}
 	case "background_and_alignment":
+		if reply, patch, ok := builderDeterministicBackgroundChoiceReply(*character, latestUserMessage); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+		}
 		if reply, ok := builderDeterministicBackgroundReply(*character, latestUserMessage); ok {
 			return characterBuilderCompletion{Reply: reply, Patch: CharacterBuilderPatch{}}, true
 		}
@@ -1287,7 +1318,34 @@ func builderDeterministicGuidedChoiceCompletion(character *Character, stage stri
 			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
 		}
 	case "languages_senses_and_body":
+		if reply, ok := builderDeterministicLanguageReply(*character, latestUserMessage); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: CharacterBuilderPatch{}}, true
+		}
 		if reply, patch, ok := builderDeterministicSensesAndBodyReply(*character, latestUserMessage); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+		}
+	case "equipment_and_money":
+		if reply, patch, ok := builderDeterministicEquipmentReply(*character, latestUserMessage, previousAssistant); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+		}
+	case "class_features_not_spells":
+		if reply, patch, ok := builderDeterministicClassFeatureReply(*character, latestUserMessage, previousAssistant); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+		}
+	case "spellcasting_if_available":
+		if reply, patch, ok := builderDeterministicSpellcastingReply(*character, latestUserMessage, previousAssistant); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+		}
+	case "derived_stats":
+		if reply, patch, ok := builderDeterministicDerivedStatsReply(*character, latestUserMessage); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+		}
+	case "combat":
+		if reply, patch, ok := builderDeterministicCombatReply(*character, latestUserMessage, previousAssistant); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+		}
+	case "review":
+		if reply, patch, ok := builderDeterministicReviewReply(*character, latestUserMessage); ok {
 			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
 		}
 	}
@@ -1315,9 +1373,15 @@ func builderDeterministicStageAdviceReply(character Character, stage string, lat
 	case "personality":
 		return "Jetzt geht es um Persönlichkeit. Sinnvoll sind jeweils kurze Entscheidungen für Merkmal, Ideal, Bindung und Makel. Für einen disziplinierten Ritter würden zum Beispiel Pflichtbewusstsein, Ehre, Treue zum Lehnsherrn und Stolz gut passen. Nenne jetzt diese vier Punkte oder bitte mich um drei passende Vorschlagssets.", true
 	case "equipment_and_money":
-		return "Jetzt sind Ausrüstung und Geld dran. Sinnvoll ist zuerst das Klassenpaket, danach der Hintergrundanteil und zuletzt das Startgeld. Wenn du möchtest, nenne ich dir die naheliegende Standardausrüstung für diesen Build und empfehle dann die beste Wahl.", true
+		return builderDeterministicEquipmentAdviceReply(character, message)
+	case "class_features_not_spells":
+		return builderDeterministicClassFeatureAdviceReply(character, message)
+	case "spellcasting_if_available":
+		return builderDeterministicSpellcastingAdviceReply(character, message)
+	case "derived_stats":
+		return builderDeterministicDerivedStatsAdviceReply(character, message)
 	case "combat":
-		return "Jetzt fehlen nur noch die Kampfdaten. Ich kann die Angriffe sauber aus Waffen, Attributen und Übungsbonus ableiten; sinnvoll ist zuerst Hauptwaffe, dann Fernkampfoption, dann Schadensnotiz. Nenne jetzt die ausgerüsteten Waffen oder bitte mich um einen kampffertigen Vorschlag.", true
+		return builderDeterministicCombatAdviceReply(character, message)
 	default:
 		return "", false
 	}
@@ -1383,19 +1447,39 @@ func builderDeterministicClassChoicesReply(character Character) (string, bool) {
 	return strings.Join(parts, " "), true
 }
 
-func builderDeterministicSkillChoiceReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
+func builderDeterministicSkillChoiceReply(character Character, latestUserMessage string, previousAssistant string) (string, CharacterBuilderPatch, bool) {
 	classRule, ok := builderClassRuleForCharacter(character)
 	if !ok {
 		return "", CharacterBuilderPatch{}, false
 	}
 	raceRule, hasRace := builderRaceRuleForCharacter(character)
-	selected := uniqueCanonicalSkills(append(
-		stringListFromAny(defaultMetadata(character.Metadata)["skill_proficiencies"]),
-		parseSkillChoicesFromMessage(latestUserMessage)...,
-	))
-	if len(selected) == 0 {
+	metadata := defaultMetadata(character.Metadata)
+	backgroundSkills := uniqueCanonicalSkills(stringListFromAny(metadata["background_skill_proficiencies"]))
+	selectedClassSkills := uniqueCanonicalSkills(stringListFromAny(metadata["class_skill_proficiencies"]))
+	legacyCombinedSkills := uniqueCanonicalSkills(stringListFromAny(metadata["skill_proficiencies"]))
+	if len(backgroundSkills) == 0 && len(selectedClassSkills) == 0 && len(legacyCombinedSkills) > 0 {
+		backgroundSkills = legacyCombinedSkills
+	}
+
+	parsedChoices := parseSkillChoicesFromMessage(latestUserMessage)
+	if len(parsedChoices) == 0 && builderMessageConfirmsPreviousSuggestion(latestUserMessage) {
+		parsedChoices = builderSuggestedSkillsFromAssistantReply(previousAssistant)
+	}
+	if len(parsedChoices) == 0 {
 		return "", CharacterBuilderPatch{}, false
 	}
+	lockedSkillSet := make(map[string]bool, len(backgroundSkills))
+	for _, skill := range backgroundSkills {
+		lockedSkillSet[skill] = true
+	}
+	newClassChoices := make([]string, 0, len(parsedChoices))
+	for _, skill := range parsedChoices {
+		if lockedSkillSet[skill] {
+			continue
+		}
+		newClassChoices = append(newClassChoices, skill)
+	}
+	selected := uniqueCanonicalSkills(append(selectedClassSkills, newClassChoices...))
 
 	required := classRule.SkillChoiceCount
 	if hasRace {
@@ -1407,29 +1491,39 @@ func builderDeterministicSkillChoiceReply(character Character, latestUserMessage
 	if len(selected) > required {
 		selected = selected[:required]
 	}
+	allSkills := uniqueCanonicalSkills(append(backgroundSkills, selected...))
 
 	patch := CharacterBuilderPatch{
 		Metadata: map[string]any{
-			"skill_proficiencies":        selected,
+			"class_skill_proficiencies":  selected,
+			"skill_proficiencies":        allSkills,
 			"saving_throw_proficiencies": classRule.SavingThrows,
 		},
 	}
 
 	if len(selected) >= required {
 		patch.Metadata["builder_stage"] = "hit_points_hit_dice_and_movement"
-		reply := fmt.Sprintf("Die Fertigkeiten sind jetzt festgelegt: %s. Rettungswürfe %s sind damit ebenfalls gesetzt. Als Nächstes leite ich Trefferpunkte, Trefferwürfel und Bewegungsrate aus Klasse, Volk und Attributen ab.", joinGermanList(selected), joinGermanList(classRule.SavingThrows))
+		reply := fmt.Sprintf("Die Fertigkeiten sind jetzt festgelegt: %s. Rettungswürfe %s sind damit ebenfalls gesetzt. Als Nächstes leite ich Trefferpunkte, Trefferwürfel und Bewegungsrate aus Klasse, Volk und Attributen ab.", joinGermanList(allSkills), joinGermanList(classRule.SavingThrows))
 		return reply, patch, true
 	}
 
 	if len(selected) < classRule.SkillChoiceCount {
 		remaining := classRule.SkillChoiceCount - len(selected)
-		reply := fmt.Sprintf("Bisher festgelegt: %s. Für %s fehlen noch %d Klassen-Fertigkeiten aus %s. Nenne jetzt die verbleibenden Fertigkeiten.", joinGermanList(selected), classRule.ClassName, remaining, joinGermanList(classRule.SkillChoices))
+		known := allSkills
+		if len(known) == 0 {
+			known = selected
+		}
+		reply := fmt.Sprintf("Bisher festgelegt: %s. Für %s fehlen noch %d Klassen-Fertigkeiten aus %s. Nenne jetzt die verbleibenden Fertigkeiten.", joinGermanList(known), classRule.ClassName, remaining, joinGermanList(classRule.SkillChoices))
 		return reply, patch, true
 	}
 
 	extraRemaining := required - len(selected)
 	if hasRace && raceRule.ExtraSkillChoiceCount > 0 && extraRemaining > 0 {
-		reply := fmt.Sprintf("Die %s-Fertigkeiten sind festgelegt: %s. Als %s fehlen noch %d zusätzliche Fertigkeiten nach Wahl. Nenne jetzt diese Fertigkeiten.", classRule.ClassName, joinGermanList(selected[:classRule.SkillChoiceCount]), raceRule.RaceName, extraRemaining)
+		classSkills := selected
+		if len(classSkills) > classRule.SkillChoiceCount {
+			classSkills = classSkills[:classRule.SkillChoiceCount]
+		}
+		reply := fmt.Sprintf("Die %s-Fertigkeiten sind festgelegt: %s. Als %s fehlen noch %d zusätzliche Fertigkeiten nach Wahl. Nenne jetzt diese Fertigkeiten.", classRule.ClassName, joinGermanList(classSkills), raceRule.RaceName, extraRemaining)
 		return reply, patch, true
 	}
 
@@ -1457,6 +1551,27 @@ func builderDeterministicBackgroundReply(character Character, latestUserMessage 
 		return strings.Join(parts, " "), true
 	}
 	return "", false
+}
+
+func builderDeterministicBackgroundChoiceReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
+	backgroundName := strings.TrimSpace(character.Background)
+	if backgroundName == "" {
+		backgroundName = builderBackgroundNameFromMessage(latestUserMessage)
+	}
+	skills := parseSkillChoicesFromMessage(latestUserMessage)
+	if backgroundName == "" || len(skills) < 2 {
+		return "", CharacterBuilderPatch{}, false
+	}
+	selected := uniqueCanonicalSkills(skills[:2])
+	patch := CharacterBuilderPatch{
+		Background: &backgroundName,
+		Metadata: map[string]any{
+			"background_skill_proficiencies": selected,
+			"skill_proficiencies":            selected,
+		},
+	}
+	reply := fmt.Sprintf("Der Hintergrund %s ist festgelegt. Die Hintergrund-Fertigkeiten sind jetzt als %s eingetragen. Wähle jetzt insgesamt noch zwei Sprachen oder Werkzeugübungen für den Hintergrund; danach legen wir die Gesinnung fest.", backgroundName, joinGermanList(selected))
+	return reply, patch, true
 }
 
 func builderDeterministicRaceAdviceReply(character Character, message string) (string, bool) {
@@ -1510,6 +1625,995 @@ func builderDeterministicLanguageReply(character Character, latestUserMessage st
 		parts = append(parts, "Lege jetzt nur noch die offenen Sinne oder Körperdaten fest.")
 	}
 	return strings.Join(parts, " "), true
+}
+
+func builderDeterministicEquipmentReply(character Character, latestUserMessage string, previousAssistant string) (string, CharacterBuilderPatch, bool) {
+	advice, ok := builderEquipmentAdviceForCharacter(character)
+	if !ok {
+		return "", CharacterBuilderPatch{}, false
+	}
+	message := normalizeBuilderIntentText(latestUserMessage)
+	if builderQuestionLooksLikeListRequest(message) || builderQuestionLooksLikeRecommendationRequest(message) {
+		reply, ok := builderDeterministicEquipmentAdviceReply(character, latestUserMessage)
+		return reply, CharacterBuilderPatch{}, ok
+	}
+	if builderMessageConfirmsPreviousSuggestion(latestUserMessage) || strings.Contains(message, "empfehl") || strings.Contains(message, "standard") {
+		if !strings.Contains(normalizeBuilderIntentText(previousAssistant), "kettenhemd") &&
+			!strings.Contains(normalizeBuilderIntentText(previousAssistant), "chain mail") &&
+			!strings.Contains(normalizeBuilderIntentText(previousAssistant), "martial weapon") &&
+			!strings.Contains(normalizeBuilderIntentText(previousAssistant), "langschwert") {
+			return "", CharacterBuilderPatch{}, false
+		}
+		patch := CharacterBuilderPatch{
+			Metadata: map[string]any{
+				"starting_equipment": advice.Recommendation,
+				"current_inventory":  advice.Recommendation,
+				"weapon_notes":       advice.WeaponNotes,
+				"combat_overview":    advice.CombatOverview,
+			},
+		}
+		reply := fmt.Sprintf("Ich nehme den Standardvorschlag: %s. Für deinen eigenen Hintergrund „Ritter“ ist im SRD kein festes Ausrüstungspaket definiert; das ergänzen wir bei Bedarf separat oder kaufen später mit Geld dazu. Als Nächstes halte ich die Klassenmerkmale der 1. Stufe fest.", joinGermanList(advice.Recommendation))
+		return reply, patch, true
+	}
+	return "", CharacterBuilderPatch{}, false
+}
+
+func builderDeterministicEquipmentAdviceReply(character Character, latestUserMessage string) (string, bool) {
+	advice, ok := builderEquipmentAdviceForCharacter(character)
+	if !ok {
+		return "", false
+	}
+	parts := []string{
+		fmt.Sprintf("Für %s auf Stufe 1 stehen im SRD 5.1 diese Startausrüstungsoptionen zur Verfügung: %s.", classNameOrFallback(character), joinGermanList(advice.Options)),
+	}
+	if len(advice.Recommendation) > 0 {
+		parts = append(parts, fmt.Sprintf("Für deinen arkanen Klingenkämpfer empfehle ich als Standardauswahl %s.", joinGermanList(advice.Recommendation)))
+	}
+	parts = append(parts, "Wenn du möchtest, übernehme ich genau diese Auswahl direkt.")
+	return strings.Join(parts, " "), true
+}
+
+func builderDeterministicClassFeatureReply(character Character, latestUserMessage string, previousAssistant string) (string, CharacterBuilderPatch, bool) {
+	advice, ok := builderFeatureAdviceForCharacter(character)
+	if !ok {
+		return "", CharacterBuilderPatch{}, false
+	}
+	message := normalizeBuilderIntentText(latestUserMessage)
+	if builderQuestionLooksLikeListRequest(message) || builderQuestionLooksLikeRecommendationRequest(message) {
+		reply, ok := builderDeterministicClassFeatureAdviceReply(character, latestUserMessage)
+		return reply, CharacterBuilderPatch{}, ok
+	}
+	if builderMessageConfirmsPreviousSuggestion(latestUserMessage) || strings.Contains(message, "übernimm") || strings.Contains(message, "nimm die") {
+		patch := CharacterBuilderPatch{
+			Features: advice.Recommendation,
+			Metadata: map[string]any{
+				"class_features": advice.Recommendation,
+			},
+		}
+		reply := fmt.Sprintf("Ich übernehme die empfohlenen Klassenmerkmale: %s.", joinGermanList(advice.Recommendation))
+		if builderHasLevelOneSpellcasting(character) {
+			reply += " Als Nächstes gehen wir die Zauberoptionen durch."
+		} else {
+			reply += " Als Nächstes ziehe ich die abgeleiteten Werte wie RK und Übungsbonus gerade."
+		}
+		return reply, patch, true
+	}
+	if strings.TrimSpace(previousAssistant) != "" && builderMessageConfirmsPreviousSuggestion(latestUserMessage) {
+		patch := CharacterBuilderPatch{Features: advice.Recommendation}
+		return fmt.Sprintf("Ich trage jetzt %s als Klassenmerkmale ein.", joinGermanList(advice.Recommendation)), patch, true
+	}
+	return "", CharacterBuilderPatch{}, false
+}
+
+func builderDeterministicClassFeatureAdviceReply(character Character, latestUserMessage string) (string, bool) {
+	advice, ok := builderFeatureAdviceForCharacter(character)
+	if !ok {
+		return "", false
+	}
+	parts := []string{
+		fmt.Sprintf("Auf Stufe 1 sind für %s im SRD 5.1 diese Klassenmerkmale relevant: %s.", classNameOrFallback(character), joinGermanList(advice.Options)),
+	}
+	if len(advice.Recommendation) > 0 {
+		parts = append(parts, fmt.Sprintf("Für diesen Build empfehle ich %s.", joinGermanList(advice.Recommendation)))
+	}
+	parts = append(parts, "Wenn du möchtest, übernehme ich genau diese Auswahl direkt.")
+	return strings.Join(parts, " "), true
+}
+
+func builderDeterministicSpellcastingReply(character Character, latestUserMessage string, previousAssistant string) (string, CharacterBuilderPatch, bool) {
+	advice, ok := builderSpellAdviceForCharacter(character)
+	if !ok {
+		return "", CharacterBuilderPatch{}, false
+	}
+	message := normalizeBuilderIntentText(latestUserMessage)
+	if builderQuestionLooksLikeListRequest(message) || builderQuestionLooksLikeRecommendationRequest(message) {
+		reply, ok := builderDeterministicSpellcastingAdviceReply(character, latestUserMessage)
+		return reply, CharacterBuilderPatch{}, ok
+	}
+	if builderMessageConfirmsPreviousSuggestion(latestUserMessage) || strings.Contains(message, "übernimm") {
+		patch := CharacterBuilderPatch{
+			Metadata: map[string]any{
+				"spells":            advice.Recommendation,
+				"spell_notes":       advice.SpellNotes,
+				"spell_attacks":     advice.SpellAttacks,
+				"spell_save_dc":     advice.SpellSaveDC,
+				"spell_attack_bonus": advice.SpellAttackBonus,
+			},
+		}
+		reply := fmt.Sprintf("Ich übernehme die empfohlenen Zauber: %s. Damit kann ich im nächsten Schritt die abgeleiteten Werte direkt festziehen.", joinGermanList(advice.Recommendation))
+		return reply, patch, true
+	}
+	_ = previousAssistant
+	return "", CharacterBuilderPatch{}, false
+}
+
+func builderDeterministicSpellcastingAdviceReply(character Character, latestUserMessage string) (string, bool) {
+	advice, ok := builderSpellAdviceForCharacter(character)
+	if !ok {
+		return "", false
+	}
+	parts := []string{
+		fmt.Sprintf("Für %s auf Stufe 1 stehen im SRD 5.1 diese sinnvollen Zauberoptionen bereit: %s.", classNameOrFallback(character), joinGermanList(advice.Options)),
+		fmt.Sprintf("Empfohlene Standardauswahl: %s.", joinGermanList(advice.Recommendation)),
+		advice.SpellNotes,
+	}
+	if len(advice.SpellAttacks) > 0 {
+		parts = append(parts, fmt.Sprintf("Wichtige Zauberangriffe oder SG-Werte: %s.", joinGermanList(advice.SpellAttacks)))
+	}
+	parts = append(parts, "Wenn du möchtest, übernehme ich genau diese Auswahl direkt.")
+	return strings.Join(parts, " "), true
+}
+
+func builderDeterministicDerivedStatsReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
+	if !builderLooksLikeContinueIntent(normalizeBuilderIntentText(latestUserMessage)) &&
+		!builderQuestionLooksLikeListRequest(latestUserMessage) &&
+		!builderQuestionLooksLikeRecommendationRequest(latestUserMessage) {
+		return "", CharacterBuilderPatch{}, false
+	}
+	ac := builderDerivedArmorClass(character)
+	prof := deriveCharacterProficiencyBonus(character)
+	hitPointMax := builderDerivedHitPointMax(character)
+	speed := builderDerivedSpeed(character)
+	patch := CharacterBuilderPatch{
+		ArmorClass:  &ac,
+		HitPointMax: &hitPointMax,
+		Speed:       &speed,
+	}
+	if prof > 0 {
+		profStr := fmt.Sprintf("+%d", prof)
+		patch.Proficiency = &profStr
+	}
+	if patch.Metadata == nil {
+		patch.Metadata = map[string]any{}
+	}
+	patch.Metadata["builder_stage"] = "combat"
+	if spellAdvice, ok := builderSpellAdviceForCharacter(character); ok {
+		patch.Metadata["spell_save_dc"] = spellAdvice.SpellSaveDC
+		patch.Metadata["spell_attack_bonus"] = spellAdvice.SpellAttackBonus
+	}
+	reply := fmt.Sprintf("Die abgeleiteten Werte sind jetzt fest: Rüstungsklasse %d, Trefferpunkte %d, Bewegungsrate %s und Übungsbonus +%d.", ac, hitPointMax, speed, prof)
+	if spellAdvice, ok := builderSpellAdviceForCharacter(character); ok && spellAdvice.SpellSaveDC != "" && spellAdvice.SpellAttackBonus != "" {
+		reply += fmt.Sprintf(" Für Zauber gilt SG %s und Zauberangriffsbonus %s.", spellAdvice.SpellSaveDC, spellAdvice.SpellAttackBonus)
+	}
+	reply += " Als Nächstes trage ich die konkreten Angriffe und Kampfdaten ein."
+	return reply, patch, true
+}
+
+func builderDeterministicDerivedStatsAdviceReply(character Character, latestUserMessage string) (string, bool) {
+	ac := builderDerivedArmorClass(character)
+	prof := deriveCharacterProficiencyBonus(character)
+	parts := []string{
+		fmt.Sprintf("Aus Klasse, Attributen und empfohlener Ausrüstung ergeben sich aktuell RK %d und Übungsbonus +%d.", ac, prof),
+	}
+	if spellAdvice, ok := builderSpellAdviceForCharacter(character); ok {
+		parts = append(parts, fmt.Sprintf("Für Zauber ergeben sich aktuell SG %s und Zauberangriffsbonus %s.", spellAdvice.SpellSaveDC, spellAdvice.SpellAttackBonus))
+	}
+	parts = append(parts, "Wenn du möchtest, übernehme ich diese abgeleiteten Werte jetzt direkt.")
+	return strings.Join(parts, " "), true
+}
+
+func builderDeterministicCombatReply(character Character, latestUserMessage string, previousAssistant string) (string, CharacterBuilderPatch, bool) {
+	message := normalizeBuilderIntentText(latestUserMessage)
+	if builderQuestionLooksLikeListRequest(message) || builderQuestionLooksLikeRecommendationRequest(message) {
+		reply, ok := builderDeterministicCombatAdviceReply(character, latestUserMessage)
+		return reply, CharacterBuilderPatch{}, ok
+	}
+	if builderMessageConfirmsPreviousSuggestion(latestUserMessage) || strings.Contains(message, "übernimm") {
+		attacks := builderCombatAttackRecommendations(character)
+		attackTable := builderCombatAttackTable(character)
+		patch := CharacterBuilderPatch{
+			Metadata: map[string]any{
+				"combat_attacks": attackTable,
+				"builder_stage":  "review",
+			},
+		}
+		if character.ArmorClass == nil || *character.ArmorClass == 0 {
+			ac := builderDerivedArmorClass(character)
+			patch.ArmorClass = &ac
+		}
+		if character.HitPointMax == nil || *character.HitPointMax <= 0 {
+			hp := builderDerivedHitPointMax(character)
+			patch.HitPointMax = &hp
+		}
+		if strings.TrimSpace(character.Speed) == "" {
+			speed := builderDerivedSpeed(character)
+			patch.Speed = &speed
+		}
+		if strings.TrimSpace(character.Proficiency) == "" {
+			prof := fmt.Sprintf("+%d", deriveCharacterProficiencyBonus(character))
+			patch.Proficiency = &prof
+		}
+		reply := fmt.Sprintf("Ich übernehme die Kampfdaten jetzt direkt: %s. Der Draft ist damit bereit für die Abschlussprüfung.", joinGermanList(attacks))
+		return reply, patch, true
+	}
+	_ = previousAssistant
+	return "", CharacterBuilderPatch{}, false
+}
+
+func builderDeterministicCombatAdviceReply(character Character, latestUserMessage string) (string, bool) {
+	attacks := builderCombatAttackRecommendations(character)
+	if len(attacks) == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("Mit der aktuellen Standardausrüstung ergeben sich diese Kampfdaten: %s. Wenn du möchtest, übernehme ich genau diese Einträge direkt.", joinGermanList(attacks)), true
+}
+
+func builderDeterministicReviewReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
+	message := normalizeBuilderIntentText(latestUserMessage)
+	metadata := defaultMetadata(character.Metadata)
+	missingCombatAttacks := strings.TrimSpace(fmt.Sprint(metadata["combat_attacks"])) == ""
+	needsRepair := missingCombatAttacks ||
+		character.ArmorClass == nil || *character.ArmorClass <= 0 ||
+		character.HitPointMax == nil || *character.HitPointMax <= 0 ||
+		strings.TrimSpace(character.Speed) == "" ||
+		strings.TrimSpace(character.Proficiency) == ""
+	if !needsRepair {
+		return "", CharacterBuilderPatch{}, false
+	}
+	if !strings.Contains(message, "angriff") &&
+		!strings.Contains(message, "attack") &&
+		!strings.Contains(message, "fehlt") &&
+		!strings.Contains(message, "nicht") &&
+		!strings.Contains(message, "0") &&
+		!builderLooksLikeContinueIntent(message) &&
+		!builderMessageConfirmsPreviousSuggestion(latestUserMessage) {
+		return "", CharacterBuilderPatch{}, false
+	}
+
+	patch := CharacterBuilderPatch{
+		Metadata: map[string]any{
+			"builder_stage": "review",
+		},
+	}
+	fixes := make([]string, 0, 5)
+	if missingCombatAttacks {
+		if attackTable := builderCombatAttackTable(character); strings.TrimSpace(attackTable) != "" {
+			patch.Metadata["combat_attacks"] = attackTable
+			fixes = append(fixes, "die Angriffstabelle")
+		}
+	}
+	if character.ArmorClass == nil || *character.ArmorClass <= 0 {
+		ac := builderDerivedArmorClass(character)
+		patch.ArmorClass = &ac
+		fixes = append(fixes, fmt.Sprintf("RK %d", ac))
+	}
+	if character.HitPointMax == nil || *character.HitPointMax <= 0 {
+		hp := builderDerivedHitPointMax(character)
+		patch.HitPointMax = &hp
+		fixes = append(fixes, fmt.Sprintf("maximale Trefferpunkte %d", hp))
+	}
+	if strings.TrimSpace(character.Speed) == "" {
+		speed := builderDerivedSpeed(character)
+		patch.Speed = &speed
+		fixes = append(fixes, fmt.Sprintf("Bewegungsrate %s", speed))
+	}
+	if strings.TrimSpace(character.Proficiency) == "" {
+		prof := fmt.Sprintf("+%d", deriveCharacterProficiencyBonus(character))
+		patch.Proficiency = &prof
+		fixes = append(fixes, fmt.Sprintf("Übungsbonus %s", prof))
+	}
+	if len(fixes) == 0 {
+		return "", CharacterBuilderPatch{}, false
+	}
+	reply := fmt.Sprintf("Ich habe %s jetzt direkt nachgetragen. Prüfe den Bogen noch einmal; wenn alles passt, kannst du den Draft danach abschließen.", joinGermanList(fixes))
+	return reply, patch, true
+}
+
+func builderEquipmentAdviceForCharacter(character Character) (builderEquipmentAdvice, bool) {
+	classRule, ok := builderClassRuleForCharacter(character)
+	if !ok {
+		return builderEquipmentAdvice{}, false
+	}
+	switch classRule.ClassName {
+	case "Barbar":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Waffenwahl: eine Großaxt oder eine beliebige Kriegs-Nahkampfwaffe",
+				"Zweitwaffe: zwei Handäxte oder eine beliebige einfache Waffe",
+				"Paket: Entdeckerausrüstung",
+				"Zusätzlich: vier Wurfspeere",
+			},
+			Recommendation: []string{
+				"Großaxt",
+				"zwei Handäxte",
+				"Entdeckerausrüstung",
+				"vier Wurfspeere",
+			},
+			WeaponNotes:    "Großaxt für maximalen frühen Nahkampfschaden, Handäxte und Wurfspeere als flexible Ergänzung.",
+			CombatOverview: "Klassischer Barbar-Start mit schwerer Zweihandwaffe und soliden Wurfoptionen.",
+		}, true
+	case "Barde":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Waffenwahl: Rapier, Langschwert oder eine beliebige einfache Waffe",
+				"Paket: Diplomatenausrüstung oder Unterhaltungskünstlerausrüstung",
+				"Instrument: Laute oder ein anderes Musikinstrument",
+				"Zusätzlich: Lederrüstung und ein Dolch",
+			},
+			Recommendation: []string{
+				"Rapier",
+				"Diplomatenausrüstung",
+				"Laute",
+				"Lederrüstung",
+				"Dolch",
+			},
+			WeaponNotes:    "Rapier für solide Finesse-Nahkampfangriffe, Dolch als Reservewaffe.",
+			CombatOverview: "Vielseitiger Barden-Start mit brauchbarer Nahkampfwaffe, Fokus auf soziale und mobile Szenen.",
+		}, true
+	case "Kleriker":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Waffenwahl: Streitkolben oder Kriegshammer, falls geübt",
+				"Rüstung: Schuppenpanzer, Lederrüstung oder Kettenhemd, falls geübt",
+				"Fernkampf: leichte Armbrust mit 20 Bolzen oder eine beliebige einfache Waffe",
+				"Paket: Priesterpack oder Entdeckerausrüstung",
+				"Zusätzlich: Schild und heiliges Symbol",
+			},
+			Recommendation: []string{
+				"Streitkolben",
+				"Schuppenpanzer",
+				"leichte Armbrust mit 20 Bolzen",
+				"Priesterpack",
+				"Schild",
+				"heiliges Symbol",
+			},
+			WeaponNotes:    "Streitkolben und Schild für solide Front, leichte Armbrust für Distanz.",
+			CombatOverview: "Defensiver Kleriker-Start mit ordentlicher Rüstung, Schild und sicherer Fernkampfreserve.",
+		}, true
+	case "Druide":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Erste Wahl: Holzschild oder eine beliebige einfache Waffe",
+				"Zweite Wahl: Krummsäbel oder eine beliebige einfache Nahkampfwaffe",
+				"Zusätzlich: Lederrüstung, Entdeckerausrüstung und druidischer Fokus",
+			},
+			Recommendation: []string{
+				"Holzschild",
+				"Krummsäbel",
+				"Lederrüstung",
+				"Entdeckerausrüstung",
+				"druidischer Fokus",
+			},
+			WeaponNotes:    "Krummsäbel für verlässlichen Nahkampf, Holzschild für frühe Defensive.",
+			CombatOverview: "Stabiler Druiden-Start mit Fokus auf Schutz, Zauberwirken und einfache Feldtauglichkeit.",
+		}, true
+	case "Kämpfer":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Rüstungswahl: Kettenhemd oder Lederüstung, Langbogen und 20 Pfeile",
+				"Waffenwahl: eine Kriegswaffe und Schild oder zwei Kriegswaffen",
+				"Zusatzwaffen: leichte Armbrust mit 20 Bolzen oder zwei Handäxte",
+				"Paket: Verlieserkunderausrüstung oder Entdeckerausrüstung",
+			},
+			Recommendation: []string{
+				"Kettenhemd",
+				"Langschwert und Schild",
+				"leichte Armbrust mit 20 Bolzen",
+				"Entdeckerausrüstung",
+			},
+			WeaponNotes:    "Langschwert und Schild als Hauptausrüstung, leichte Armbrust als Fernkampfoption.",
+			CombatOverview: "Defensiver Kämpfer-Start mit Schild, solider Nahkampfwaffe und Fernkampf-Backup.",
+		}, true
+	case "Mönch":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Waffenwahl: Kurzschwert oder eine beliebige einfache Waffe",
+				"Paket: Verlieserkunderausrüstung oder Entdeckerausrüstung",
+				"Zusätzlich: 10 Wurfpfeile",
+			},
+			Recommendation: []string{
+				"Kurzschwert",
+				"Entdeckerausrüstung",
+				"10 Wurfpfeile",
+			},
+			WeaponNotes:    "Kurzschwert als solide frühe Waffe, Wurfpfeile für Reichweite ohne Ausrüstungslast.",
+			CombatOverview: "Leichter, mobiler Mönch-Start mit Fokus auf Beweglichkeit und flexiblem Nah-/Fernkampf.",
+		}, true
+	case "Paladin":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Waffenwahl: eine Kriegswaffe und Schild oder zwei Kriegswaffen",
+				"Zusatzwahl: fünf Wurfspeere oder eine beliebige einfache Nahkampfwaffe",
+				"Paket: Priesterpack oder Entdeckerausrüstung",
+				"Zusätzlich: Kettenhemd und heiliges Symbol",
+			},
+			Recommendation: []string{
+				"Langschwert und Schild",
+				"fünf Wurfspeere",
+				"Entdeckerausrüstung",
+				"Kettenhemd",
+				"heiliges Symbol",
+			},
+			WeaponNotes:    "Schwert-und-Schild-Start für hohe Rüstungsklasse, Wurfspeere als Distanzoption.",
+			CombatOverview: "Klassischer Paladin-Start mit hoher Defensive und guten Voraussetzungen für Frontkampf.",
+		}, true
+	case "Waldläufer":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Rüstung: Schuppenpanzer oder Lederrüstung",
+				"Nahkampfwaffen: zwei Kurzschwerter oder zwei einfache Nahkampfwaffen",
+				"Paket: Verlieserkunderausrüstung oder Entdeckerausrüstung",
+				"Zusätzlich: Langbogen und Köcher mit 20 Pfeilen",
+			},
+			Recommendation: []string{
+				"Lederrüstung",
+				"zwei Kurzschwerter",
+				"Entdeckerausrüstung",
+				"Langbogen und Köcher mit 20 Pfeilen",
+			},
+			WeaponNotes:    "Langbogen für starke Fernkampferöffnung, zwei Kurzschwerter für flexible Nahkampfrunden.",
+			CombatOverview: "Vielseitiger Waldläufer-Start mit sauberer Mischung aus Fernkampf, Mobilität und Nahkampfflexibilität.",
+		}, true
+	case "Schurke":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Waffenwahl: Rapier oder Kurzschwert",
+				"Fernkampf: Kurzbogen mit Köcher und 20 Pfeilen oder Kurzschwert",
+				"Paket: Einbrecherpack, Verlieserkunderausrüstung oder Entdeckerausrüstung",
+				"Zusätzlich: Lederrüstung, zwei Dolche und Diebeswerkzeug",
+			},
+			Recommendation: []string{
+				"Rapier",
+				"Kurzbogen mit Köcher und 20 Pfeilen",
+				"Einbrecherpack",
+				"Lederrüstung",
+				"zwei Dolche",
+				"Diebeswerkzeug",
+			},
+			WeaponNotes:    "Rapier für Finesse im Nahkampf, Kurzbogen für verlässliche Hinterhaltsangriffe auf Distanz.",
+			CombatOverview: "Klassischer Schurken-Start mit Finesse-Waffe, Stealth-tauglicher Ausrüstung und vollem Utility-Paket.",
+		}, true
+	case "Zauberer":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Fernkampf oder Waffe: leichte Armbrust mit 20 Bolzen oder eine beliebige einfache Waffe",
+				"Zauberfokus: Komponentenbeutel oder arkane Fokuskomponente",
+				"Paket: Verlieserkunderausrüstung oder Entdeckerausrüstung",
+				"Zusätzlich: zwei Dolche",
+			},
+			Recommendation: []string{
+				"leichte Armbrust mit 20 Bolzen",
+				"arkaner Fokus",
+				"Entdeckerausrüstung",
+				"zwei Dolche",
+			},
+			WeaponNotes:    "Leichte Armbrust für frühen Fernkampfschaden, Dolche als Notfallreserve.",
+			CombatOverview: "Pragmatischer Zauberer-Start mit Zauberfokus, etwas Reichweite und minimaler Selbstverteidigung.",
+		}, true
+	case "Hexenmeister":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Fernkampf oder Waffe: leichte Armbrust mit 20 Bolzen oder eine beliebige einfache Waffe",
+				"Zauberfokus: Komponentenbeutel oder arkane Fokuskomponente",
+				"Paket: Gelehrtenpack oder Verlieserkunderausrüstung",
+				"Zusätzlich: Lederrüstung, eine beliebige einfache Waffe und zwei Dolche",
+			},
+			Recommendation: []string{
+				"leichte Armbrust mit 20 Bolzen",
+				"arkaner Fokus",
+				"Gelehrtenpack",
+				"Lederrüstung",
+				"Quarterstaff",
+				"zwei Dolche",
+			},
+			WeaponNotes:    "Leichte Armbrust für frühe Distanz, einfacher Stab und Dolche als Backup.",
+			CombatOverview: "Stabiler Hexenmeister-Start mit Fokus auf Zauberwirken, brauchbarer Reichweite und etwas Reserveausrüstung.",
+		}, true
+	case "Magier":
+		return builderEquipmentAdvice{
+			Options: []string{
+				"Waffenwahl: Quarterstaff oder Dolch",
+				"Zauberfokus: Komponentenbeutel oder arkane Fokuskomponente",
+				"Paket: Gelehrtenpack oder Entdeckerausrüstung",
+				"Zusätzlich: Zauberbuch",
+			},
+			Recommendation: []string{
+				"Quarterstaff",
+				"arkaner Fokus",
+				"Gelehrtenpack",
+				"Zauberbuch",
+			},
+			WeaponNotes:    "Quarterstaff als einfache Nahkampf-Notlösung, Fokus und Zauberbuch für den Kern des Builds.",
+			CombatOverview: "Klassischer Magier-Start mit vollem Zauber-Setup und minimaler, aber ausreichender Reserveausrüstung.",
+		}, true
+	default:
+		return builderEquipmentAdvice{}, false
+	}
+}
+
+func builderFeatureAdviceForCharacter(character Character) (builderFeatureAdvice, bool) {
+	classRule, ok := builderClassRuleForCharacter(character)
+	if !ok {
+		return builderFeatureAdvice{}, false
+	}
+	switch classRule.ClassName {
+	case "Barbar":
+		return builderFeatureAdvice{Options: []string{"Raserei", "Unarmored Defense"}, Recommendation: []string{"Raserei", "Unarmored Defense"}}, true
+	case "Barde":
+		return builderFeatureAdvice{Options: []string{"Zauberwirken", "Bardic Inspiration"}, Recommendation: []string{"Zauberwirken", "Bardic Inspiration"}}, true
+	case "Kleriker":
+		return builderFeatureAdvice{Options: []string{"Zauberwirken", "Göttliche Domäne"}, Recommendation: []string{"Zauberwirken", "Göttliche Domäne: Leben"}}, true
+	case "Druide":
+		return builderFeatureAdvice{Options: []string{"Zauberwirken", "Druidic"}, Recommendation: []string{"Zauberwirken", "Druidic"}}, true
+	case "Kämpfer":
+		return builderFeatureAdvice{Options: []string{"Fighting Style", "Second Wind"}, Recommendation: []string{"Fighting Style: Defense", "Second Wind"}}, true
+	case "Mönch":
+		return builderFeatureAdvice{Options: []string{"Unarmored Defense", "Martial Arts"}, Recommendation: []string{"Unarmored Defense", "Martial Arts"}}, true
+	case "Paladin":
+		return builderFeatureAdvice{Options: []string{"Divine Sense", "Lay on Hands"}, Recommendation: []string{"Divine Sense", "Lay on Hands"}}, true
+	case "Waldläufer":
+		return builderFeatureAdvice{Options: []string{"Favored Enemy", "Natural Explorer"}, Recommendation: []string{"Favored Enemy: Monstrositäten", "Natural Explorer: Wald"}}, true
+	case "Schurke":
+		return builderFeatureAdvice{Options: []string{"Expertise", "Sneak Attack", "Thieves' Cant"}, Recommendation: []string{"Expertise: Wahrnehmung und Heimlichkeit", "Sneak Attack", "Thieves' Cant"}}, true
+	case "Zauberer":
+		return builderFeatureAdvice{Options: []string{"Zauberwirken", "Sorcerous Origin"}, Recommendation: []string{"Zauberwirken", "Sorcerous Origin: Draconic Bloodline"}}, true
+	case "Hexenmeister":
+		return builderFeatureAdvice{Options: []string{"Otherworldly Patron", "Pact Magic"}, Recommendation: []string{"Otherworldly Patron: Fiend", "Pact Magic"}}, true
+	case "Magier":
+		return builderFeatureAdvice{Options: []string{"Zauberwirken", "Arcane Recovery"}, Recommendation: []string{"Zauberwirken", "Arcane Recovery"}}, true
+	default:
+		return builderFeatureAdvice{}, false
+	}
+}
+
+func builderHasLevelOneSpellcasting(character Character) bool {
+	classRule, ok := builderClassRuleForCharacter(character)
+	if !ok {
+		return false
+	}
+	switch classRule.ClassName {
+	case "Barde", "Kleriker", "Druide", "Zauberer", "Hexenmeister", "Magier":
+		return true
+	default:
+		return false
+	}
+}
+
+func builderSpellAdviceForCharacter(character Character) (builderSpellAdvice, bool) {
+	if !builderHasLevelOneSpellcasting(character) {
+		return builderSpellAdvice{}, false
+	}
+	prof := deriveCharacterProficiencyBonus(character)
+	if prof <= 0 {
+		prof = 2
+	}
+	classRule, _ := builderClassRuleForCharacter(character)
+	switch classRule.ClassName {
+	case "Barde":
+		mod := abilityModifierFromAny(character.Abilities["charisma"])
+		return builderSpellAdvice{
+			Options:          []string{"Cantrips wie Vicious Mockery, Mage Hand, Minor Illusion, Dancing Lights", "Zauber 1. Grades wie Healing Word, Faerie Fire, Dissonant Whispers, Tasha's Hideous Laughter"},
+			Recommendation:   []string{"Vicious Mockery", "Mage Hand", "Healing Word", "Faerie Fire", "Dissonant Whispers", "Tasha's Hideous Laughter"},
+			SpellNotes:       "Als Barde auf Stufe 1 kennst du 2 Zaubertricks und 4 Zauber des 1. Grades, mit 2 Zauberplätzen des 1. Grades.",
+			SpellAttacks:     []string{fmt.Sprintf("Zauber-SG %d", 8+prof+mod), fmt.Sprintf("Zauberangriff +%d", prof+mod)},
+			SpellSaveDC:      fmt.Sprintf("%d", 8+prof+mod),
+			SpellAttackBonus: fmt.Sprintf("+%d", prof+mod),
+		}, true
+	case "Kleriker":
+		mod := abilityModifierFromAny(character.Abilities["wisdom"])
+		prepared := maxInt(1, 1+mod)
+		return builderSpellAdvice{
+			Options:          []string{"Cantrips wie Sacred Flame, Guidance, Thaumaturgy, Light", "Vorbereitbare Zauber wie Bless, Cure Wounds, Healing Word, Guiding Bolt, Sanctuary"},
+			Recommendation:   []string{"Sacred Flame", "Guidance", "Thaumaturgy", "Bless", "Cure Wounds", "Healing Word", "Guiding Bolt"},
+			SpellNotes:       fmt.Sprintf("Als Kleriker auf Stufe 1 kennst du 3 Zaubertricks und bereitest %d Zauber vor; dazu hast du 2 Zauberplätze des 1. Grades.", prepared),
+			SpellAttacks:     []string{fmt.Sprintf("Zauber-SG %d", 8+prof+mod), fmt.Sprintf("Zauberangriff +%d", prof+mod)},
+			SpellSaveDC:      fmt.Sprintf("%d", 8+prof+mod),
+			SpellAttackBonus: fmt.Sprintf("+%d", prof+mod),
+		}, true
+	case "Druide":
+		mod := abilityModifierFromAny(character.Abilities["wisdom"])
+		prepared := maxInt(1, 1+mod)
+		return builderSpellAdvice{
+			Options:          []string{"Cantrips wie Guidance, Produce Flame, Shillelagh, Resistance", "Vorbereitbare Zauber wie Entangle, Faerie Fire, Cure Wounds, Healing Word, Thunderwave"},
+			Recommendation:   []string{"Guidance", "Produce Flame", "Entangle", "Faerie Fire", "Cure Wounds", "Healing Word"},
+			SpellNotes:       fmt.Sprintf("Als Druide auf Stufe 1 kennst du 2 Zaubertricks und bereitest %d Zauber vor; dazu hast du 2 Zauberplätze des 1. Grades.", prepared),
+			SpellAttacks:     []string{fmt.Sprintf("Zauber-SG %d", 8+prof+mod), fmt.Sprintf("Zauberangriff +%d", prof+mod)},
+			SpellSaveDC:      fmt.Sprintf("%d", 8+prof+mod),
+			SpellAttackBonus: fmt.Sprintf("+%d", prof+mod),
+		}, true
+	case "Zauberer":
+		mod := abilityModifierFromAny(character.Abilities["charisma"])
+		return builderSpellAdvice{
+			Options:          []string{"Cantrips wie Fire Bolt, Prestidigitation, Mage Hand, Ray of Frost", "Zauber 1. Grades wie Shield, Magic Missile, Sleep, Mage Armor"},
+			Recommendation:   []string{"Fire Bolt", "Prestidigitation", "Mage Hand", "Ray of Frost", "Shield", "Magic Missile"},
+			SpellNotes:       "Als Zauberer auf Stufe 1 kennst du 4 Zaubertricks, 2 Zauber des 1. Grades und hast 2 Zauberplätze des 1. Grades.",
+			SpellAttacks:     []string{fmt.Sprintf("Zauber-SG %d", 8+prof+mod), fmt.Sprintf("Zauberangriff +%d", prof+mod)},
+			SpellSaveDC:      fmt.Sprintf("%d", 8+prof+mod),
+			SpellAttackBonus: fmt.Sprintf("+%d", prof+mod),
+		}, true
+	case "Hexenmeister":
+		mod := abilityModifierFromAny(character.Abilities["charisma"])
+		return builderSpellAdvice{
+			Options:          []string{"Cantrips wie Eldritch Blast, Mage Hand, Minor Illusion", "Zauber 1. Grades wie Hex, Armor of Agathys, Hellish Rebuke"},
+			Recommendation:   []string{"Eldritch Blast", "Mage Hand", "Hex", "Armor of Agathys"},
+			SpellNotes:       "Als Hexenmeister auf Stufe 1 kennst du 2 Zaubertricks, 2 Zauber des 1. Grades und hast 1 Zauberplatz des 1. Grades.",
+			SpellAttacks:     []string{fmt.Sprintf("Zauber-SG %d", 8+prof+mod), fmt.Sprintf("Zauberangriff +%d", prof+mod)},
+			SpellSaveDC:      fmt.Sprintf("%d", 8+prof+mod),
+			SpellAttackBonus: fmt.Sprintf("+%d", prof+mod),
+		}, true
+	case "Magier":
+		mod := abilityModifierFromAny(character.Abilities["intelligence"])
+		prepared := maxInt(1, 1+mod)
+		return builderSpellAdvice{
+			Options:          []string{"Cantrips wie Fire Bolt, Mage Hand, Prestidigitation, Minor Illusion", "Zauberbuch-Einträge wie Magic Missile, Shield, Sleep, Detect Magic, Mage Armor, Thunderwave"},
+			Recommendation:   []string{"Fire Bolt", "Mage Hand", "Prestidigitation", "Magic Missile", "Shield", "Sleep", "Detect Magic", "Mage Armor"},
+			SpellNotes:       fmt.Sprintf("Als Magier auf Stufe 1 kennst du 3 Zaubertricks, startest mit 6 Zaubern im Zauberbuch und bereitest %d davon vor; dazu hast du 2 Zauberplätze des 1. Grades.", prepared),
+			SpellAttacks:     []string{fmt.Sprintf("Zauber-SG %d", 8+prof+mod), fmt.Sprintf("Zauberangriff +%d", prof+mod)},
+			SpellSaveDC:      fmt.Sprintf("%d", 8+prof+mod),
+			SpellAttackBonus: fmt.Sprintf("+%d", prof+mod),
+		}, true
+	default:
+		return builderSpellAdvice{}, false
+	}
+}
+
+func builderDerivedArmorClass(character Character) int {
+	items := metadataStringList(defaultMetadata(character.Metadata)["current_inventory"])
+	if len(items) == 0 {
+		items = metadataStringList(defaultMetadata(character.Metadata)["starting_equipment"])
+	}
+	joined := strings.ToLower(strings.Join(items, " | "))
+	dex := abilityModifierFromAny(character.Abilities["dexterity"])
+	con := abilityModifierFromAny(character.Abilities["constitution"])
+	wis := abilityModifierFromAny(character.Abilities["wisdom"])
+	ac := 10 + dex
+	if strings.Contains(joined, "kettenhemd") {
+		ac = 16
+	} else if strings.Contains(joined, "schuppenpanzer") {
+		ac = 14 + minInt(dex, 2)
+	} else if strings.Contains(joined, "lederrüstung") || strings.Contains(joined, "lederüstung") || strings.Contains(joined, "leather armor") {
+		ac = 11 + dex
+	}
+	if classRule, ok := builderClassRuleForCharacter(character); ok {
+		switch classRule.ClassName {
+		case "Barbar":
+			if 10+dex+con > ac {
+				ac = 10 + dex + con
+			}
+		case "Mönch":
+			if 10+dex+wis > ac {
+				ac = 10 + dex + wis
+			}
+		}
+	}
+	if strings.Contains(joined, "schild") || strings.Contains(joined, "shield") || strings.Contains(joined, "holzschild") {
+		ac += 2
+	}
+	if containsStringFold(character.Features, "Fighting Style: Defense") {
+		ac += 1
+	}
+	return ac
+}
+
+func builderDerivedHitPointMax(character Character) int {
+	classRule, ok := builderClassRuleForCharacter(character)
+	if !ok || strings.TrimSpace(classRule.HitDie) == "" {
+		if character.HitPointMax != nil {
+			return *character.HitPointMax
+		}
+		return 0
+	}
+	hitDieText := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(classRule.HitDie)), "W")
+	hitDieValue, err := strconv.Atoi(hitDieText)
+	if err != nil || hitDieValue <= 0 {
+		if character.HitPointMax != nil {
+			return *character.HitPointMax
+		}
+		return 0
+	}
+	return hitDieValue + abilityModifierFromAny(character.Abilities["constitution"])
+}
+
+func builderDerivedSpeed(character Character) string {
+	if strings.TrimSpace(character.Speed) != "" {
+		return strings.TrimSpace(character.Speed)
+	}
+	if raceRule, ok := builderRaceRuleForCharacter(character); ok && strings.TrimSpace(raceRule.Speed) != "" {
+		return strings.TrimSpace(raceRule.Speed)
+	}
+	return ""
+}
+
+func builderCombatAttackRecommendations(character Character) []string {
+	classRule, ok := builderClassRuleForCharacter(character)
+	if !ok {
+		return nil
+	}
+	prof := deriveCharacterProficiencyBonus(character)
+	if prof <= 0 {
+		prof = 2
+	}
+	strMod := abilityModifierFromAny(character.Abilities["strength"])
+	dexMod := abilityModifierFromAny(character.Abilities["dexterity"])
+	switch classRule.ClassName {
+	case "Barbar":
+		return []string{
+			fmt.Sprintf("Großaxt: Angriff +%d, Schaden 1W12+%d Hiebschaden", prof+strMod, strMod),
+			fmt.Sprintf("Wurfspeer: Angriff +%d, Schaden 1W6+%d Stichschaden", prof+strMod, strMod),
+		}
+	case "Barde":
+		finesse := maxInt(dexMod, abilityModifierFromAny(character.Abilities["strength"]))
+		return []string{fmt.Sprintf("Rapier: Angriff +%d, Schaden 1W8+%d Stichschaden", prof+finesse, finesse)}
+	case "Kleriker":
+		return []string{
+			fmt.Sprintf("Streitkolben: Angriff +%d, Schaden 1W6+%d Wuchtschaden", prof+strMod, strMod),
+			fmt.Sprintf("Leichte Armbrust: Angriff +%d, Schaden 1W8+%d Stichschaden", prof+dexMod, dexMod),
+		}
+	case "Druide":
+		finesse := maxInt(dexMod, abilityModifierFromAny(character.Abilities["strength"]))
+		return []string{
+			fmt.Sprintf("Krummsäbel: Angriff +%d, Schaden 1W6+%d Hiebschaden", prof+finesse, finesse),
+			"Produce Flame oder ein anderer Angriffszauber nach Zauberwahl",
+		}
+	case "Kämpfer":
+		return []string{
+			fmt.Sprintf("Langschwert: Angriff +%d, Schaden 1W8+%d Hiebschaden", prof+strMod, strMod),
+			fmt.Sprintf("Leichte Armbrust: Angriff +%d, Schaden 1W8+%d Stichschaden", prof+dexMod, dexMod),
+		}
+	case "Mönch":
+		finesse := maxInt(strMod, dexMod)
+		return []string{
+			fmt.Sprintf("Kurzschwert: Angriff +%d, Schaden 1W6+%d Stichschaden", prof+finesse, finesse),
+			fmt.Sprintf("Wurfpfeile: Angriff +%d, Schaden 1W4+%d Stichschaden", prof+dexMod, dexMod),
+		}
+	case "Paladin":
+		return []string{
+			fmt.Sprintf("Langschwert: Angriff +%d, Schaden 1W8+%d Hiebschaden", prof+strMod, strMod),
+			fmt.Sprintf("Wurfspeer: Angriff +%d, Schaden 1W6+%d Stichschaden", prof+strMod, strMod),
+		}
+	case "Waldläufer":
+		finesse := maxInt(strMod, dexMod)
+		return []string{
+			fmt.Sprintf("Langbogen: Angriff +%d, Schaden 1W8+%d Stichschaden", prof+dexMod, dexMod),
+			fmt.Sprintf("Kurzschwert: Angriff +%d, Schaden 1W6+%d Stichschaden", prof+finesse, finesse),
+		}
+	case "Schurke":
+		finesse := maxInt(strMod, dexMod)
+		return []string{
+			fmt.Sprintf("Rapier: Angriff +%d, Schaden 1W8+%d Stichschaden", prof+finesse, finesse),
+			fmt.Sprintf("Kurzbogen: Angriff +%d, Schaden 1W6+%d Stichschaden", prof+dexMod, dexMod),
+		}
+	case "Zauberer":
+		return []string{
+			fmt.Sprintf("Leichte Armbrust: Angriff +%d, Schaden 1W8+%d Stichschaden", prof+dexMod, dexMod),
+			"Fire Bolt oder ein anderer Angriffszauber nach Zauberwahl",
+		}
+	case "Hexenmeister":
+		chaMod := abilityModifierFromAny(character.Abilities["charisma"])
+		return []string{
+			fmt.Sprintf("Leichte Armbrust: Angriff +%d, Schaden 1W8+%d Stichschaden", prof+dexMod, dexMod),
+			fmt.Sprintf("Eldritch Blast: Zauberangriff +%d, Schaden 1W10 Kraftschaden", prof+chaMod),
+		}
+	case "Magier":
+		intMod := abilityModifierFromAny(character.Abilities["intelligence"])
+		return []string{
+			fmt.Sprintf("Quarterstaff: Angriff +%d, Schaden 1W6+%d Wuchtschaden", prof+strMod, strMod),
+			fmt.Sprintf("Fire Bolt: Zauberangriff +%d, Schaden 1W10 Feuerschaden", prof+intMod),
+		}
+	default:
+		return nil
+	}
+}
+
+func builderCombatAttackTable(character Character) string {
+	classRule, ok := builderClassRuleForCharacter(character)
+	if !ok {
+		return ""
+	}
+	prof := deriveCharacterProficiencyBonus(character)
+	if prof <= 0 {
+		prof = 2
+	}
+	strMod := abilityModifierFromAny(character.Abilities["strength"])
+	dexMod := abilityModifierFromAny(character.Abilities["dexterity"])
+	switch classRule.ClassName {
+	case "Barbar":
+		return strings.Join([]string{
+			fmt.Sprintf("Großaxt | +%d | STR | 5 ft | +%d | 1W12+%d | Hieb", prof, prof+strMod, strMod),
+			"Beschreibung: Standard-Nahkampfangriff mit der Hauptwaffe.",
+			fmt.Sprintf("Wurfspeer | +%d | STR | 20/60 ft | +%d | 1W6+%d | Stich", prof, prof+strMod, strMod),
+			"Beschreibung: Nah- oder Wurfwaffe für Distanz bis 60 Fuß.",
+		}, "\n")
+	case "Barde":
+		finesse := maxInt(dexMod, strMod)
+		return strings.Join([]string{
+			fmt.Sprintf("Rapier | +%d | %s | 5 ft | +%d | 1W8+%d | Stich", prof, abilityShortLabelForModChoice(dexMod, strMod), prof+finesse, finesse),
+			"Beschreibung: Finesse-Nahkampfangriff mit der empfohlenen Standardwaffe.",
+		}, "\n")
+	case "Kleriker":
+		return strings.Join([]string{
+			fmt.Sprintf("Streitkolben | +%d | STR | 5 ft | +%d | 1W6+%d | Wucht", prof, prof+strMod, strMod),
+			"Beschreibung: Robuste Nahkampfoption des Klerikers.",
+			fmt.Sprintf("Leichte Armbrust | +%d | DEX | 80/320 ft | +%d | 1W8+%d | Stich", prof, prof+dexMod, dexMod),
+			"Beschreibung: Solide Distanzwaffe für den SRD-Standardstart.",
+		}, "\n")
+	case "Druide":
+		finesse := maxInt(dexMod, strMod)
+		return strings.Join([]string{
+			fmt.Sprintf("Krummsäbel | +%d | %s | 5 ft | +%d | 1W6+%d | Hieb", prof, abilityShortLabelForModChoice(dexMod, strMod), prof+finesse, finesse),
+			"Beschreibung: Empfohlene Nahkampfwaffe für den SRD-Druidenstart.",
+		}, "\n")
+	case "Kämpfer":
+		return strings.Join([]string{
+			fmt.Sprintf("Langschwert | +%d | STR | 5 ft | +%d | 1W8+%d | Hieb", prof, prof+strMod, strMod),
+			"Beschreibung: Einhändig mit Schild geführt; Standardschaden ohne Zweihandhaltung.",
+			fmt.Sprintf("Leichte Armbrust | +%d | DEX | 80/320 ft | +%d | 1W8+%d | Stich", prof, prof+dexMod, dexMod),
+			"Beschreibung: Standard-Fernkampfwaffe mit 20 Bolzen.",
+		}, "\n")
+	case "Mönch":
+		finesse := maxInt(strMod, dexMod)
+		return strings.Join([]string{
+			fmt.Sprintf("Kurzschwert | +%d | %s | 5 ft | +%d | 1W6+%d | Stich", prof, abilityShortLabelForModChoice(dexMod, strMod), prof+finesse, finesse),
+			"Beschreibung: Finesse-Nahkampfangriff mit der Hauptwaffe.",
+			fmt.Sprintf("Wurfpfeile | +%d | DEX | 20/60 ft | +%d | 1W4+%d | Stich", prof, prof+dexMod, dexMod),
+			"Beschreibung: Leichte Distanzoption für den Start.",
+		}, "\n")
+	case "Paladin":
+		return strings.Join([]string{
+			fmt.Sprintf("Langschwert | +%d | STR | 5 ft | +%d | 1W8+%d | Hieb", prof, prof+strMod, strMod),
+			"Beschreibung: Standardschlag mit Schild in der Nebenhand.",
+			fmt.Sprintf("Wurfspeer | +%d | STR | 20/60 ft | +%d | 1W6+%d | Stich", prof, prof+strMod, strMod),
+			"Beschreibung: Nah- oder Distanzoption für kurze Reichweiten.",
+		}, "\n")
+	case "Waldläufer":
+		finesse := maxInt(strMod, dexMod)
+		return strings.Join([]string{
+			fmt.Sprintf("Langbogen | +%d | DEX | 150/600 ft | +%d | 1W8+%d | Stich", prof, prof+dexMod, dexMod),
+			"Beschreibung: Primäre Distanzwaffe des Standard-Builds.",
+			fmt.Sprintf("Kurzschwert | +%d | %s | 5 ft | +%d | 1W6+%d | Stich", prof, abilityShortLabelForModChoice(dexMod, strMod), prof+finesse, finesse),
+			"Beschreibung: Fallback für Nahkampfreichweite.",
+		}, "\n")
+	case "Schurke":
+		finesse := maxInt(strMod, dexMod)
+		return strings.Join([]string{
+			fmt.Sprintf("Rapier | +%d | %s | 5 ft | +%d | 1W8+%d | Stich", prof, abilityShortLabelForModChoice(dexMod, strMod), prof+finesse, finesse),
+			"Beschreibung: Finesse-Waffe für präzise Nahkampfangriffe.",
+			fmt.Sprintf("Kurzbogen | +%d | DEX | 80/320 ft | +%d | 1W6+%d | Stich", prof, prof+dexMod, dexMod),
+			"Beschreibung: Standard-Fernkampfwaffe des Schurkenstarts.",
+		}, "\n")
+	case "Zauberer":
+		return strings.Join([]string{
+			fmt.Sprintf("Leichte Armbrust | +%d | DEX | 80/320 ft | +%d | 1W8+%d | Stich", prof, prof+dexMod, dexMod),
+			"Beschreibung: Nichtmagische Distanzoption für frühe Kämpfe.",
+		}, "\n")
+	case "Hexenmeister":
+		chaMod := abilityModifierFromAny(character.Abilities["charisma"])
+		return strings.Join([]string{
+			fmt.Sprintf("Leichte Armbrust | +%d | DEX | 80/320 ft | +%d | 1W8+%d | Stich", prof, prof+dexMod, dexMod),
+			"Beschreibung: Standard-Fernkampfwaffe ohne Zauberverbrauch.",
+			fmt.Sprintf("Eldritch Blast | +%d | CHA | 120 ft | +%d | 1W10 | Kraft", prof, prof+chaMod),
+			"Beschreibung: Haupt-Zauberangriff, falls als Zaubertrick gewählt.",
+		}, "\n")
+	case "Magier":
+		intMod := abilityModifierFromAny(character.Abilities["intelligence"])
+		return strings.Join([]string{
+			fmt.Sprintf("Quarterstaff | +%d | STR | 5 ft | +%d | 1W6+%d | Wucht", prof, prof+strMod, strMod),
+			"Beschreibung: Einfache Nahkampfreserve für den Notfall.",
+			fmt.Sprintf("Fire Bolt | +%d | INT | 120 ft | +%d | 1W10 | Feuer", prof, prof+intMod),
+			"Beschreibung: Standard-Zauberangriff, falls als Zaubertrick gewählt.",
+		}, "\n")
+	default:
+		return ""
+	}
+}
+
+func abilityShortLabelForModChoice(primary int, secondary int) string {
+	if primary >= secondary {
+		return "DEX"
+	}
+	return "STR"
+}
+
+func containsStringFold(items []string, needle string) bool {
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func classNameOrFallback(character Character) string {
+	if classRule, ok := builderClassRuleForCharacter(character); ok {
+		return classRule.ClassName
+	}
+	if value := strings.TrimSpace(character.ClassAndLevel); value != "" {
+		return value
+	}
+	return "die Klasse"
+}
+
+func builderDeterministicSkillRepairReply(character Character, stage string, latestUserMessage string, previousAssistant string) (string, CharacterBuilderPatch, bool) {
+	message := normalizeBuilderIntentText(latestUserMessage)
+	if !strings.Contains(message, "markier") &&
+		!strings.Contains(message, "markiert") &&
+		!strings.Contains(message, "geubt") &&
+		!strings.Contains(message, "geübt") &&
+		!strings.Contains(message, "noch nicht") {
+		return "", CharacterBuilderPatch{}, false
+	}
+	classRule, ok := builderClassRuleForCharacter(character)
+	if !ok || classRule.SkillChoiceCount <= 0 {
+		return "", CharacterBuilderPatch{}, false
+	}
+	backgroundSkills, classSkills, _ := builderSkillSources(character)
+	selected := parseSkillChoicesFromMessage(latestUserMessage)
+	if len(selected) == 0 && builderMessageConfirmsPreviousSuggestion(latestUserMessage) {
+		selected = builderSuggestedSkillsFromAssistantReply(previousAssistant)
+	}
+	if len(selected) == 0 {
+		return "", CharacterBuilderPatch{}, false
+	}
+	backgroundSet := map[string]bool{}
+	for _, skill := range backgroundSkills {
+		backgroundSet[skill] = true
+	}
+	classAllowed := map[string]bool{}
+	for _, skill := range classRule.SkillChoices {
+		classAllowed[skill] = true
+	}
+	newClassSkills := append([]string{}, classSkills...)
+	for _, skill := range selected {
+		if backgroundSet[skill] || !classAllowed[skill] {
+			continue
+		}
+		newClassSkills = append(newClassSkills, skill)
+	}
+	newClassSkills = uniqueCanonicalSkills(newClassSkills)
+	if len(newClassSkills) == len(classSkills) {
+		return "", CharacterBuilderPatch{}, false
+	}
+	if len(newClassSkills) > classRule.SkillChoiceCount {
+		newClassSkills = newClassSkills[:classRule.SkillChoiceCount]
+	}
+	allSkills := uniqueCanonicalSkills(append(backgroundSkills, newClassSkills...))
+	patch := CharacterBuilderPatch{
+		Metadata: map[string]any{
+			"class_skill_proficiencies": selectedOrNil(newClassSkills),
+			"skill_proficiencies":       allSkills,
+		},
+	}
+	if normalizeBuilderStage(stage) == "class_proficiencies_and_choices" && len(newClassSkills) >= classRule.SkillChoiceCount {
+		patch.Metadata["builder_stage"] = "hit_points_hit_dice_and_movement"
+		reply := fmt.Sprintf("Ich habe %s jetzt zusätzlich als Klassen-Fertigkeiten markiert. Insgesamt sind damit %s als geübt eingetragen. Als Nächstes leite ich Trefferpunkte, Trefferwürfel und Bewegungsrate ab.", joinGermanList(newClassSkills), joinGermanList(allSkills))
+		return reply, patch, true
+	}
+	reply := fmt.Sprintf("Ich habe %s jetzt zusätzlich als Klassen-Fertigkeiten markiert. Insgesamt sind damit %s als geübt eingetragen. Der aktuelle Schritt bleibt %s.", joinGermanList(newClassSkills), joinGermanList(allSkills), builderStageTitle(stage))
+	return reply, patch, true
 }
 
 func builderDeterministicPostHitPointsReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
@@ -1726,6 +2830,75 @@ func parseSkillChoicesFromMessage(message string) []string {
 	return uniqueCanonicalSkills(found)
 }
 
+func builderMessageConfirmsPreviousSuggestion(message string) bool {
+	normalized := normalizeBuilderIntentText(message)
+	if normalized == "" {
+		return false
+	}
+	if len(parseSkillChoicesFromMessage(message)) > 0 {
+		return false
+	}
+	confirmationPhrases := []string{
+		"ja nimm",
+		"nimm die",
+		"die beiden",
+		"ja die",
+		"mach das",
+		"nehme die",
+		"nehme ich",
+		"passt so",
+	}
+	for _, phrase := range confirmationPhrases {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func builderSuggestedSkillsFromAssistantReply(reply string) []string {
+	reply = strings.TrimSpace(reply)
+	if reply == "" {
+		return []string{}
+	}
+	recommendationPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)bietet sich\s+(.+?)\s+an`),
+		regexp.MustCompile(`(?i)empfehle(?:\s+ich)?\s+(.+?)(?:\.|$)`),
+		regexp.MustCompile(`(?i)vorschlag(?:\s+ist|\s+wäre|:)?\s+(.+?)(?:\.|$)`),
+	}
+	for _, pattern := range recommendationPatterns {
+		match := pattern.FindStringSubmatch(reply)
+		if len(match) < 2 {
+			continue
+		}
+		skills := parseSkillChoicesFromMessage(match[1])
+		if len(skills) == 2 {
+			return skills
+		}
+	}
+	sentences := regexp.MustCompile(`[.!?]`).Split(reply, -1)
+	for i := len(sentences) - 1; i >= 0; i-- {
+		candidate := strings.TrimSpace(sentences[i])
+		if candidate == "" {
+			continue
+		}
+		skills := parseSkillChoicesFromMessage(candidate)
+		if len(skills) == 2 {
+			return skills
+		}
+	}
+	for _, match := range regexp.MustCompile(`„([^“]+)“`).FindAllStringSubmatch(reply, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		skills := parseSkillChoicesFromMessage(match[1])
+		if len(skills) == 2 {
+			return skills
+		}
+	}
+	return []string{}
+}
+
 func uniqueCanonicalSkills(items []string) []string {
 	seen := map[string]bool{}
 	result := make([]string, 0, len(items))
@@ -1756,6 +2929,52 @@ func uniquePreserveOrder(items []string) []string {
 		result = append(result, item)
 	}
 	return result
+}
+
+func selectedOrNil(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	return items
+}
+
+func builderSkillSources(character Character) ([]string, []string, []string) {
+	metadata := defaultMetadata(character.Metadata)
+	backgroundSkills := uniqueCanonicalSkills(stringListFromAny(metadata["background_skill_proficiencies"]))
+	classSkills := uniqueCanonicalSkills(stringListFromAny(metadata["class_skill_proficiencies"]))
+	allSkills := uniqueCanonicalSkills(stringListFromAny(metadata["skill_proficiencies"]))
+	if len(backgroundSkills) == 0 && len(classSkills) == 0 && len(allSkills) > 0 {
+		backgroundSkills = allSkills
+	}
+	if len(allSkills) == 0 {
+		allSkills = uniqueCanonicalSkills(append(backgroundSkills, classSkills...))
+	}
+	return backgroundSkills, classSkills, allSkills
+}
+
+func builderBackgroundNameFromMessage(message string) string {
+	for _, line := range strings.Split(message, "\n") {
+		candidate := strings.TrimSpace(line)
+		if candidate == "" {
+			continue
+		}
+		if len(parseSkillChoicesFromMessage(candidate)) > 0 {
+			continue
+		}
+		normalized := normalizeBuilderIntentText(candidate)
+		if strings.Contains(normalized, "hintergrund") ||
+			strings.Contains(normalized, "welche") ||
+			strings.Contains(normalized, "sprache") ||
+			strings.Contains(normalized, "werkzeug") ||
+			strings.Contains(normalized, "fertigkeit") {
+			continue
+		}
+		if len([]rune(candidate)) > 96 {
+			continue
+		}
+		return normalizeBackground(candidate)
+	}
+	return ""
 }
 
 func parseAbilityChoiceKeys(message string) []string {
@@ -2420,7 +3639,18 @@ func nextBuilderStage(stage string) string {
 
 func inferBuilderStageFromCharacter(character Character) string {
 	metadata := defaultMetadata(character.Metadata)
-	if strings.TrimSpace(fmt.Sprint(metadata["concept"])) == "" {
+	metadataHasText := func(key string) bool {
+		value, ok := metadata[key]
+		if !ok || value == nil {
+			return false
+		}
+		text := strings.TrimSpace(fmt.Sprint(value))
+		return text != "" && text != "<nil>" && text != "[]" && text != "{}"
+	}
+	metadataHasList := func(key string) bool {
+		return len(stringListFromAny(metadata[key])) > 0
+	}
+	if !metadataHasText("concept") {
 		return "concept"
 	}
 	if strings.TrimSpace(character.Race) == "" {
@@ -2432,7 +3662,7 @@ func inferBuilderStageFromCharacter(character Character) string {
 	if strings.TrimSpace(character.Background) == "" || strings.TrimSpace(character.Alignment) == "" {
 		return "background_and_alignment"
 	}
-	if strings.TrimSpace(fmt.Sprint(metadata["creation_method"])) == "" {
+	if !metadataHasText("creation_method") {
 		return "ability_method"
 	}
 	if len(character.Abilities) == 0 {
@@ -2441,42 +3671,42 @@ func inferBuilderStageFromCharacter(character Character) string {
 	if builderHasPendingRaceChoice(character) {
 		return "ability_scores"
 	}
-	if strings.TrimSpace(fmt.Sprint(metadata["skill_proficiencies"])) == "" || strings.TrimSpace(fmt.Sprint(metadata["saving_throw_proficiencies"])) == "" {
+	if !metadataHasList("skill_proficiencies") || !metadataHasList("saving_throw_proficiencies") {
 		return "class_proficiencies_and_choices"
 	}
-	if character.HitPointMax == nil || strings.TrimSpace(character.Speed) == "" || strings.TrimSpace(fmt.Sprint(metadata["hit_dice"])) == "" {
+	if character.HitPointMax == nil || strings.TrimSpace(character.Speed) == "" || !metadataHasText("hit_dice") {
 		return "hit_points_hit_dice_and_movement"
 	}
-	if strings.TrimSpace(fmt.Sprint(metadata["age"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["size"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["weight"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["eyes"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["skin"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["hair"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["senses"])) == "" {
+	if !metadataHasText("age") &&
+		!metadataHasText("size") &&
+		!metadataHasText("weight") &&
+		!metadataHasText("eyes") &&
+		!metadataHasText("skin") &&
+		!metadataHasText("hair") &&
+		!metadataHasText("senses") {
 		return "languages_senses_and_body"
 	}
-	if strings.TrimSpace(fmt.Sprint(metadata["personality_traits"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["ideals"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["bonds"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["flaws"])) == "" {
+	if !metadataHasText("personality_traits") &&
+		!metadataHasText("ideals") &&
+		!metadataHasText("bonds") &&
+		!metadataHasText("flaws") {
 		return "personality"
 	}
-	if strings.TrimSpace(fmt.Sprint(metadata["starting_equipment"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["starting_money"])) == "" &&
-		strings.TrimSpace(fmt.Sprint(metadata["current_inventory"])) == "" {
+	if !metadataHasList("starting_equipment") &&
+		!metadataHasText("starting_money") &&
+		!metadataHasList("current_inventory") {
 		return "equipment_and_money"
 	}
 	if len(character.Features) == 0 {
 		return "class_features_not_spells"
 	}
-	if strings.TrimSpace(fmt.Sprint(metadata["spells"])) == "" && strings.Contains(strings.ToLower(strings.TrimSpace(character.ClassAndLevel)), "wizard") {
+	if !metadataHasList("spells") && builderHasLevelOneSpellcasting(character) {
 		return "spellcasting_if_available"
 	}
 	if strings.TrimSpace(character.Proficiency) == "" || character.ArmorClass == nil {
 		return "derived_stats"
 	}
-	if strings.TrimSpace(fmt.Sprint(metadata["combat_attacks"])) == "" {
+	if !metadataHasList("combat_attacks") {
 		return "combat"
 	}
 	return "review"
@@ -2559,6 +3789,8 @@ func builderStageAllowedMetadataKeys(stage string) map[string]bool {
 	case "background_and_alignment":
 		keys["background"] = true
 		keys["alignment"] = true
+		keys["background_skill_proficiencies"] = true
+		keys["skill_proficiencies"] = true
 	case "ability_method":
 		keys["creation_method"] = true
 	case "ability_scores":
@@ -2567,6 +3799,7 @@ func builderStageAllowedMetadataKeys(stage string) map[string]bool {
 		keys["creation_method"] = true
 		keys["race_bonus_choices"] = true
 	case "class_proficiencies_and_choices":
+		keys["class_skill_proficiencies"] = true
 		keys["skill_proficiencies"] = true
 		keys["saving_throw_proficiencies"] = true
 		keys["tools_and_proficiencies"] = true
@@ -2653,6 +3886,8 @@ func sanitizeCharacterBuilderPatchForStage(patch *CharacterBuilderPatch, stage s
 	case "derived_stats":
 		allowedTopLevel["proficiency_bonus"] = true
 		allowedTopLevel["armor_class"] = true
+		allowedTopLevel["hit_point_max"] = true
+		allowedTopLevel["speed"] = true
 	case "review":
 		allowedTopLevel["name"] = true
 		allowedTopLevel["player_name"] = true
@@ -2904,6 +4139,8 @@ func compactCharacterMetadataForPrompt(metadata map[string]any) map[string]any {
 		"skin",
 		"hair",
 		"senses",
+		"background_skill_proficiencies",
+		"class_skill_proficiencies",
 		"skill_proficiencies",
 		"saving_throw_proficiencies",
 		"starting_equipment",
@@ -3646,6 +4883,19 @@ func reconcileBuilderDerivedCharacterFields(character *Character) {
 		character.Metadata = map[string]any{}
 	}
 	metadata := defaultMetadata(character.Metadata)
+	backgroundSkills := uniqueCanonicalSkills(stringListFromAny(metadata["background_skill_proficiencies"]))
+	classSkills := uniqueCanonicalSkills(stringListFromAny(metadata["class_skill_proficiencies"]))
+	legacySkills := uniqueCanonicalSkills(stringListFromAny(metadata["skill_proficiencies"]))
+	if len(backgroundSkills) == 0 && len(classSkills) == 0 && len(legacySkills) > 0 {
+		backgroundSkills = legacySkills
+	}
+	mergedSkills := uniqueCanonicalSkills(append(backgroundSkills, classSkills...))
+	if len(mergedSkills) == 0 {
+		mergedSkills = legacySkills
+	}
+	if len(mergedSkills) > 0 {
+		character.Metadata["skill_proficiencies"] = mergedSkills
+	}
 	if classRule, ok := builderClassRuleForCharacter(*character); ok {
 		if len(stringListFromAny(metadata["saving_throw_proficiencies"])) == 0 && len(classRule.SavingThrows) > 0 {
 			character.Metadata["saving_throw_proficiencies"] = classRule.SavingThrows
@@ -3943,6 +5193,9 @@ func mergeBuilderStructuredState(existing map[string]any, character Character) m
 	if character.Metadata != nil {
 		state["builder_stage"] = character.Metadata["builder_stage"]
 		state["builder_status"] = character.Metadata["builder_status"]
+		state["background_skill_proficiencies"] = character.Metadata["background_skill_proficiencies"]
+		state["class_skill_proficiencies"] = character.Metadata["class_skill_proficiencies"]
+		state["skill_proficiencies"] = character.Metadata["skill_proficiencies"]
 	}
 	return state
 }

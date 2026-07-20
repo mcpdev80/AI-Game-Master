@@ -439,6 +439,29 @@ function normalizeSpeechCommandPrefix(text: string): string {
     .replace(/\s+/g, " ");
 }
 
+function containsWakeFinishCommand(text: string): boolean {
+  const normalized = normalizeSpeechCommandPrefix(text);
+  if (!normalized) {
+    return false;
+  }
+  const patterns = [
+    /ende unserer antwort\b/i,
+    /unsere antwort ende\b/i,
+    /end of our answer\b/i,
+    /our answer end\b/i,
+  ];
+  return patterns.some((pattern) => pattern.test(normalized));
+}
+
+function stripWakeFinishCommand(text: string): string {
+  return text
+    .replace(/ende unserer antwort/gi, "")
+    .replace(/unsere antwort ende/gi, "")
+    .replace(/end of our answer/gi, "")
+    .replace(/our answer end/gi, "")
+    .trim();
+}
+
 export function PlayerScreenView({
   session,
   documents,
@@ -848,14 +871,11 @@ export function PlayerScreenView({
   }
 
   async function finalizeWakeCapture(reason: "end_keyword" | "silence") {
-    const finalText = captureBufferRef.current
-      .replace(/ende unserer antwort/gi, "")
-      .replace(/end of our answer/gi, "")
-      .trim();
+    const finalText = stripWakeFinishCommand(captureBufferRef.current);
     captureBufferRef.current = "";
     captureSilenceChunksRef.current = 0;
     setConversationPhase("idle");
-    setWakeListening(true);
+    setWakeListening(false);
     if (!finalText || promptPendingRef.current) {
       if (reason === "end_keyword") {
         setSTTTranscript(finalText || tr("No player response detected.", "Keine Spielerantwort erkannt."));
@@ -869,6 +889,30 @@ export function PlayerScreenView({
     setSTTTranscript(finalText);
     setPromptInput(finalText);
     await sendPlayerInput(finalText, true);
+  }
+
+  function handleCancelListening() {
+    captureBufferRef.current = "";
+    captureSilenceChunksRef.current = 0;
+    setConversationPhase("idle");
+    setWakeListening(false);
+    setSTTPending(false);
+    setPromptPending(false);
+    if (wakeRestartTimerRef.current) {
+      window.clearTimeout(wakeRestartTimerRef.current);
+      wakeRestartTimerRef.current = null;
+    }
+    if (wakeRecorderRef.current && wakeRecorderRef.current.state !== "inactive") {
+      wakeRecorderRef.current.stop();
+    }
+    wakeRecorderRef.current = null;
+    wakeChunksRef.current = [];
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+    setSTTTranscript("");
   }
 
   async function processWakeTranscriptChunk(transcript: string) {
@@ -897,13 +941,16 @@ export function PlayerScreenView({
       captureSilenceChunksRef.current = 0;
       setConversationPhase("capturing");
       setSTTTranscript(remainder || tr(`${wakePhrase} detected.`, `${wakePhrase} erkannt.`));
+      if (containsWakeFinishCommand(remainder)) {
+        await finalizeWakeCapture("end_keyword");
+      }
       return;
     }
 
     captureSilenceChunksRef.current = 0;
     captureBufferRef.current = `${captureBufferRef.current} ${cleanedTranscript}`.trim();
     setSTTTranscript(captureBufferRef.current);
-    if (/ende unserer antwort/i.test(captureBufferRef.current)) {
+    if (containsWakeFinishCommand(captureBufferRef.current)) {
       await finalizeWakeCapture("end_keyword");
     }
   }
@@ -1769,6 +1816,10 @@ export function PlayerScreenView({
                 <p className="eyebrow">{tr("AI DM Voice Console", "Sprachkonsole des KI-Spielleiters")}</p>
                 <h2>{voiceConsoleState.title}</h2>
 				<p className="player-audio-note">{tr("AI-generated voice", "KI-generierte Stimme")}</p>
+                <div className="voice-console__hint">
+                  <p><strong>{tr("Wake phrase", "Aktivierungswort")}:</strong> „Unsere Antwort“ / “Our answer”</p>
+                  <p><strong>{tr("End phrase", "Endwort")}:</strong> „Ende unserer Antwort“ / “End of our answer”</p>
+                </div>
               </div>
               <div className="voice-console__badge">{voiceConsoleState.mode}</div>
             </div>
@@ -1776,7 +1827,7 @@ export function PlayerScreenView({
               <div className="voice-console__side voice-console__side--left">
                 <button className="voice-console__key voice-console__key--amber" disabled={isRecording || sttPending || !enableState.mic} onClick={handleStartRecording} type="button">{tr("Listen", "Zuhören")}</button>
                 <button className="voice-console__key voice-console__key--amber" onClick={() => setPromptInput(sttTranscript || promptInput)} type="button">{tr("Reply", "Antworten")}</button>
-                <button className="voice-console__key voice-console__key--red" onClick={handleStopPlayback} type="button">{tr("Stop", "Stopp")}</button>
+                <button className="voice-console__key voice-console__key--red" onClick={handleCancelListening} type="button">{tr("Reset", "Reset")}</button>
               </div>
               <div className="voice-console__center">
               <div className="voice-console__bars">
@@ -1786,7 +1837,7 @@ export function PlayerScreenView({
               </div>
               <div className="voice-console__transport voice-console__transport--column">
                   <button className="voice-console__action voice-console__action--amber" onClick={handlePausePlayback} type="button"><Pause size={14} />{tr("Pause", "Pause")}</button>
-                  <button className="voice-console__action voice-console__action--red" onClick={handleStopPlayback} type="button"><Square size={14} />{tr("Stop", "Stopp")}</button>
+                  <button className="voice-console__action voice-console__action--red" onClick={handleCancelListening} type="button"><Square size={14} />{tr("Reset", "Reset")}</button>
                   <button className="voice-console__action voice-console__action--amber" disabled={promptPending || !liveSession} onClick={handleQuickContinue} type="button"><SkipForward size={14} />{tr("Continue", "Weiter")}</button>
                   <button className="voice-console__action voice-console__action--amber" disabled={promptPending || sttPending || !liveSession || !(sttTranscript || promptInput).trim()} onClick={handleFinalizePlayerTurn} type="button"><Send size={14} />{tr("Finish Response", "Antwort abschließen")}</button>
               </div>

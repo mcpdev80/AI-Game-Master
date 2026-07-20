@@ -603,6 +603,7 @@ export async function startCharacterBuilder(payload: {
   ruleset_work: string;
   ruleset_version: string;
   selected_document_ids: string[];
+  name?: string;
   player_name?: string;
   language: "en" | "de";
 }): Promise<{ character: Character; messages: CharacterBuilderMessage[] }> {

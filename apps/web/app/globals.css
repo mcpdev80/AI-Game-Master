@@ -2640,6 +2640,19 @@ pre {
   font-size: clamp(1.08rem, 1.5vw, 1.4rem);
 }
 
+.voice-console__hint {
+  margin-top: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.voice-console__hint p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .voice-console__badge {
   align-self: center;
   padding: 8px 12px;

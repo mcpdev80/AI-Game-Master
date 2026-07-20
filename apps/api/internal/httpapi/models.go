@@ -428,6 +428,7 @@ type StartCharacterBuilderRequest struct {
 	RulesetWork         string   `json:"ruleset_work" binding:"required,min=1,max=120"`
 	RulesetVersion      string   `json:"ruleset_version" binding:"required,min=1,max=120"`
 	SelectedDocumentIDs []string `json:"selected_document_ids" binding:"required,min=1"`
+	Name                string   `json:"name"`
 	PlayerName          string   `json:"player_name"`
 	Language            string   `json:"language" binding:"omitempty,oneof=en de"`
 }

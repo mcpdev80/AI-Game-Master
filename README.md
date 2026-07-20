@@ -36,6 +36,10 @@ This repository documents the Build Week conversion of an existing local project
 - the player view is explicitly filtered to remain player-safe
 - critical negative paths are tested, not only the happy path
 
+## Demo video
+
+- [Final demo video (MP4)](docs/media/demo-final-hd.mp4)
+
 ## Features
 
 - Campaign, adventure, character, and session management
@@ -120,6 +124,21 @@ The default text provider is OpenAI with `OPENAI_MODEL=gpt-5.6`, `OPENAI_STORE=f
 The UI identifies generated narration as an AI-generated voice, as required by OpenAI's usage policy.
 
 Do not commit `.env`, uploads, private campaign material, commercial rulebooks, personal voice recordings, or credentials.
+
+## Quick start
+
+1. Create a character
+   Open `Characters` and start the AI Character Builder.
+
+2. Create a session
+   Open `Sessions`, create a new session, and select campaign, ruleset, and adventure.
+
+3. Join the session as a player
+   Open the session in `Sessions`, copy the join link, and open it on the player device.
+
+4. Start the session on the main screen
+   Open `Sessions`, enter the session, and press `Start Session`.
+   Use the main session screen on a TV, projector, or monitor.
 
 ## Testing
 
@@ -217,3 +236,18 @@ npm run test:golden-path
 ```
 
 Kommerzielle Regelbücher, Abenteuer, private Kampagnendaten, persönliche Sprachaufnahmen und Zugangsdaten dürfen nicht in das Repository gelangen. Zulässige SRD-5.1-Inhalte sind gemäß CC BY 4.0 gekennzeichnet.
+
+### Kurzanleitung
+
+1. Charakter erstellen  
+   Im Menü `Characters` den KI-Character-Builder starten.
+
+2. Session anlegen  
+   Im Menü `Sessions` eine neue Session anlegen und Kampagne, Regelwerk und Abenteuer auswählen.
+
+3. Session als Spieler beitreten  
+   In der Session unter `Sessions` den Join-Link kopieren und auf dem Spielergerät öffnen.
+
+4. Session auf dem Hauptbildschirm starten  
+   Unter `Sessions` die Session öffnen und `Start Session` drücken.  
+   Diesen Hauptbildschirm auf Beamer, Fernseher oder Monitor verwenden.

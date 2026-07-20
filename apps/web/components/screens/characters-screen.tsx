@@ -37,6 +37,7 @@ type CharactersScreenProps = {
     portalToken: string;
     returnPath: string;
     playerSlotId: string;
+    characterName?: string;
     playerName: string;
     campaignId: string;
     rulesetWork: string;
@@ -433,6 +434,16 @@ function speakWithBrowserVoice(text: string): Promise<void> {
 
 function safeString(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function metadataStructuredText(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean).join("\n");
+  }
+  return "";
 }
 
 function metadataListToText(value: unknown) {
@@ -1142,6 +1153,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   }[status] ?? status);
   const [rulesetFilter, setRulesetFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [rosterCharacters, setRosterCharacters] = useState<Character[]>(characters);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [builderStep, setBuilderStep] = useState<BuilderStep>("start");
   const [builderCharacter, setBuilderCharacter] = useState<Character | null>(null);
@@ -1161,6 +1173,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   const [builderSTTStatus, setBuilderSTTStatus] = useState("");
   const [isBuilderRecording, setIsBuilderRecording] = useState(false);
   const [isBuilderTranscribing, setIsBuilderTranscribing] = useState(false);
+  const [builderCharacterName, setBuilderCharacterName] = useState("");
   const [builderPlayerName, setBuilderPlayerName] = useState("");
   const [selectedRulesetKey, setSelectedRulesetKey] = useState("");
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
@@ -1244,6 +1257,26 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   const rollStreamRef = useRef<MediaStream | null>(null);
   const seedAppliedRef = useRef(false);
 
+  useEffect(() => {
+    setRosterCharacters(characters);
+  }, [characters]);
+
+  function upsertRosterCharacter(updated: Character) {
+    setRosterCharacters((current) => {
+      const index = current.findIndex((item) => item.id === updated.id);
+      if (index === -1) {
+        return [updated, ...current];
+      }
+      const next = [...current];
+      next[index] = updated;
+      return next;
+    });
+  }
+
+  function removeRosterCharacter(characterId: string) {
+    setRosterCharacters((current) => current.filter((item) => item.id !== characterId));
+  }
+
   const rulesDocuments = useMemo(
     () =>
       documents.filter(
@@ -1265,7 +1298,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
 
   const roster = useMemo<RosterCharacter[]>(
     () =>
-      characters.map((character) => {
+      rosterCharacters.map((character) => {
         const ruleset = deriveRuleset(character.metadata);
         return {
           ...character,
@@ -1275,7 +1308,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           selectedDocumentNames: splitMetadataList(character.metadata.selected_document_names),
         };
       }),
-    [characters]
+    [rosterCharacters]
   );
 
   const availableRulesetFilters = useMemo(
@@ -1336,6 +1369,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     }
     seedAppliedRef.current = true;
     openNewBuilder();
+    setBuilderCharacterName(initialBuilderSeed.characterName ?? "");
     setBuilderPlayerName(initialBuilderSeed.playerName);
     setSelectedCampaignId(initialBuilderSeed.campaignId);
     const matchingRuleset = rulesetGroups.find(
@@ -1464,14 +1498,14 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       current_inventory: metadataListToText(character.metadata.current_inventory),
       level_up_available: safeString(character.metadata.level_up_available),
       combat_overview: safeString(character.metadata.combat_overview),
-      combat_attacks: safeString(character.metadata.combat_attacks),
+      combat_attacks: metadataStructuredText(character.metadata.combat_attacks),
       skill_proficiencies: metadataListToText(character.metadata.skill_proficiencies),
       saving_throw_proficiencies: metadataListToText(character.metadata.saving_throw_proficiencies),
       starting_equipment: metadataListToText(character.metadata.starting_equipment),
       spells: metadataListToText(character.metadata.spells),
       spell_save_dc: safeString(character.metadata.spell_save_dc),
       spell_attack_bonus: safeString(character.metadata.spell_attack_bonus),
-      spell_attacks: safeString(character.metadata.spell_attacks),
+      spell_attacks: metadataStructuredText(character.metadata.spell_attacks),
       spell_notes: safeString(character.metadata.spell_notes),
     });
     setAbilityMethod((safeString(character.metadata.creation_method) as AbilityMethod) || "standard");
@@ -1505,6 +1539,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     setBuilderMessages([]);
     setBuilderInput("");
     setIsBuilderResponding(false);
+    setBuilderCharacterName("");
     setBuilderPlayerName("");
     setSelectedCampaignId("");
     setIsRollModalOpen(false);
@@ -1521,16 +1556,18 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   }
 
   function openBuilderForCharacter(character: RosterCharacter) {
-    setBuilderCharacter(character);
-    setBuilderMessages(parseBuilderMessages(character.metadata));
+    const freshestCharacter = rosterCharacters.find((item) => item.id === character.id) ?? character;
+    setBuilderCharacter(freshestCharacter);
+    setBuilderMessages(parseBuilderMessages(freshestCharacter.metadata));
     setBuilderInput("");
     setIsBuilderResponding(false);
     setBuilderReferencePopup(null);
-    setBuilderPlayerName(character.player_name);
+    setBuilderCharacterName(freshestCharacter.name);
+    setBuilderPlayerName(freshestCharacter.player_name);
     setIsRollModalOpen(false);
     setCurrentRollIndex(0);
     setConfirmedRolls(Array.from({ length: guidedRollCount }, () => false));
-    syncSheetForm(character);
+    syncSheetForm(freshestCharacter);
     setBuilderStep("chat");
     setActiveSheetTab("overview");
     setIsBuilderOpen(true);
@@ -1699,9 +1736,11 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   ", "
                 )}. Present the values clearly, briefly explain that the lowest roll was removed, ask for confirmation, then guide the player through assigning them to Strength, Dexterity, Constitution, Intelligence, Wisdom, and Charisma.`,
         });
-        setBuilderCharacter(followUp.character ?? updatedDraft);
+        const nextCharacter = followUp.character ?? updatedDraft;
+        setBuilderCharacter(nextCharacter);
+        upsertRosterCharacter(nextCharacter);
         setBuilderMessages(followUp.messages);
-        syncSheetForm(followUp.character);
+        syncSheetForm(nextCharacter);
         setAssignment(normalizeAssignment(resolved.assignment));
         setResolvedValues(resolved.values);
         setCurrentRollIndex(0);
@@ -1751,10 +1790,12 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           ruleset_work: selectedRulesetGroup.work,
           ruleset_version: selectedRulesetGroup.version,
           selected_document_ids: selectedDocumentIds,
+          name: builderCharacterName || undefined,
           player_name: builderPlayerName || undefined,
           language: locale,
         });
         setBuilderCharacter(response.character);
+        upsertRosterCharacter(response.character);
         setBuilderMessages(response.messages);
         syncSheetForm(response.character);
         setBuilderStep("chat");
@@ -1790,6 +1831,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
           language: locale,
         });
         setBuilderCharacter(response.character);
+        upsertRosterCharacter(response.character);
         setBuilderMessages(response.messages);
         syncSheetForm(response.character);
         if (response.ui_action === "open_document" && response.ui_payload) {
@@ -2042,6 +2084,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       try {
         const updated = await applyCharacterBuilderPatch(builderCharacter.id, { patch });
         setBuilderCharacter(updated);
+        upsertRosterCharacter(updated);
         syncSheetForm(updated);
         setIsSheetEditMode(false);
         notify({ title: tr("Character Sheet", "Charakterbogen"), message: tr("Sheet changes were saved.", "Änderungen am Bogen wurden gespeichert."), tone: "success" });
@@ -2133,6 +2176,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
             },
           },
         });
+        upsertRosterCharacter(updated);
         const followUp = await sendCharacterBuilderMessage(builderCharacter.id, {
           language: locale,
           message:
@@ -2141,6 +2185,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
               : `The confirmed ability rolls are ${resolvedValues.join(", ")}. The assignment is STR ${assignment.strength}, DEX ${assignment.dexterity}, CON ${assignment.constitution}, INT ${assignment.intelligence}, WIS ${assignment.wisdom}, CHA ${assignment.charisma}. Verify the values, briefly ask whether everything is correct, then continue with the next character creation step.`,
         });
         setBuilderCharacter(followUp.character);
+        upsertRosterCharacter(followUp.character);
         setBuilderMessages(followUp.messages);
         syncSheetForm(followUp.character);
         setIsRollModalOpen(false);
@@ -2164,6 +2209,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       try {
         const updated = await finishCharacterBuilder(builderCharacter.id);
         setBuilderCharacter(updated);
+        upsertRosterCharacter(updated);
         if (initialBuilderSeed?.playerSlotId) {
           await updatePlayerSlotCharacter(initialBuilderSeed.playerSlotId, { character_id: updated.id });
         }
@@ -2187,7 +2233,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
   function handleDuplicateCharacter(character: RosterCharacter) {
     startTransition(async () => {
       try {
-        await createCharacter({
+        const created = await createCharacter({
           campaign_id: character.campaign_id,
           name: `${character.name} Copy`,
           player_name: character.player_name,
@@ -2207,6 +2253,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
             builder_status: "draft",
           },
         });
+        upsertRosterCharacter(created);
         notify({ title: tr("Character Copy", "Charakterkopie"), message: tr("Copy created.", "Kopie wurde erstellt."), tone: "success" });
         router.refresh();
       } catch (error) {
@@ -2226,6 +2273,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     startTransition(async () => {
       try {
         await apiDelete<{ deleted: boolean }>(`/api/characters/${character.id}`);
+        removeRosterCharacter(character.id);
         notify({ title: tr("Character Deleted", "Charakter gelöscht"), message: tr(`${character.name} was deleted.`, `${character.name} wurde gelöscht.`), tone: "success" });
         router.refresh();
       } catch (error) {
@@ -2423,10 +2471,16 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
                   </label>
                 </div>
 
-                <label className="field-stack">
-                  <span>{tr("Player name", "Spielername")}</span>
-                  <input onChange={(event) => setBuilderPlayerName(event.target.value)} placeholder={tr("Optional: player name", "Optional: Spielername")} value={builderPlayerName} />
-                </label>
+                <div className="dual-field-grid">
+                  <label className="field-stack">
+                    <span>{tr("Character name", "Charaktername")}</span>
+                    <input onChange={(event) => setBuilderCharacterName(event.target.value)} placeholder={tr("Optional: character name", "Optional: Charaktername")} value={builderCharacterName} />
+                  </label>
+                  <label className="field-stack">
+                    <span>{tr("Player name", "Spielername")}</span>
+                    <input onChange={(event) => setBuilderPlayerName(event.target.value)} placeholder={tr("Optional: player name", "Optional: Spielername")} value={builderPlayerName} />
+                  </label>
+                </div>
 
                 <Panel title={tr("Source Books", "Buchbasis")} description={tr("The AI prioritizes these books. Unselected books are not used as default sources.", "Die KI priorisiert diese Bücher. Nicht ausgewählte Bücher werden nicht als Standardquelle verwendet.")}>
                   <div className="meta-chip-row">
