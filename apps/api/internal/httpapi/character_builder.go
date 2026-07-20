@@ -1261,6 +1261,9 @@ func builderDeterministicGuidedChoiceCompletion(character *Character, stage stri
 	if reply, ok := builderDeterministicLanguageReply(*character, latestUserMessage); ok {
 		return characterBuilderCompletion{Reply: reply, Patch: CharacterBuilderPatch{}}, true
 	}
+	if reply, ok := builderDeterministicStageAdviceReply(*character, stage, latestUserMessage); ok {
+		return characterBuilderCompletion{Reply: reply, Patch: CharacterBuilderPatch{}}, true
+	}
 	switch normalizeBuilderStage(stage) {
 	case "ability_scores":
 		if reply, patch, ok := builderDeterministicHalfElfAbilityReply(character, latestUserMessage); ok {
@@ -1289,6 +1292,35 @@ func builderDeterministicGuidedChoiceCompletion(character *Character, stage stri
 		}
 	}
 	return characterBuilderCompletion{}, false
+}
+
+func builderDeterministicStageAdviceReply(character Character, stage string, latestUserMessage string) (string, bool) {
+	message := normalizeBuilderIntentText(latestUserMessage)
+	if !builderQuestionLooksLikeListRequest(message) && !builderQuestionLooksLikeRecommendationRequest(message) {
+		return "", false
+	}
+	switch normalizeBuilderStage(stage) {
+	case "race":
+		return builderDeterministicRaceAdviceReply(character, message)
+	case "class_and_level":
+		return builderDeterministicClassStageAdviceReply(character, message)
+	case "background_and_alignment":
+		return builderDeterministicBackgroundReply(character, latestUserMessage)
+	case "ability_method":
+		return "Für die Attributsmethode hast du drei offizielle Wege: Standardwerte, Point Buy oder Würfeln. Für einen stabilen, gut vergleichbaren Start empfehle ich Standardwerte; für mehr Feintuning Point Buy; für mehr Zufall Würfeln. Wähle jetzt Standardwerte, Point Buy oder Würfeln.", true
+	case "class_proficiencies_and_choices":
+		return builderDeterministicClassChoicesReply(character)
+	case "languages_senses_and_body":
+		return builderDeterministicLanguageReply(character, latestUserMessage)
+	case "personality":
+		return "Jetzt geht es um Persönlichkeit. Sinnvoll sind jeweils kurze Entscheidungen für Merkmal, Ideal, Bindung und Makel. Für einen disziplinierten Ritter würden zum Beispiel Pflichtbewusstsein, Ehre, Treue zum Lehnsherrn und Stolz gut passen. Nenne jetzt diese vier Punkte oder bitte mich um drei passende Vorschlagssets.", true
+	case "equipment_and_money":
+		return "Jetzt sind Ausrüstung und Geld dran. Sinnvoll ist zuerst das Klassenpaket, danach der Hintergrundanteil und zuletzt das Startgeld. Wenn du möchtest, nenne ich dir die naheliegende Standardausrüstung für diesen Build und empfehle dann die beste Wahl.", true
+	case "combat":
+		return "Jetzt fehlen nur noch die Kampfdaten. Ich kann die Angriffe sauber aus Waffen, Attributen und Übungsbonus ableiten; sinnvoll ist zuerst Hauptwaffe, dann Fernkampfoption, dann Schadensnotiz. Nenne jetzt die ausgerüsteten Waffen oder bitte mich um einen kampffertigen Vorschlag.", true
+	default:
+		return "", false
+	}
 }
 
 func builderDeterministicHalfElfAbilityReply(character *Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
@@ -1339,6 +1371,9 @@ func builderDeterministicClassChoicesReply(character Character) (string, bool) {
 		if raceRule.ExtraLanguageChoiceCount > 0 {
 			parts = append(parts, fmt.Sprintf("Als %s wählst du zusätzlich %d Sprache nach Wahl.", raceRule.RaceName, raceRule.ExtraLanguageChoiceCount))
 		}
+	}
+	if suggestions := builderSuggestedSkillSets(character, classRule); len(suggestions) > 0 {
+		parts = append(parts, fmt.Sprintf("Sinnvolle Vorschläge sind %s.", joinGermanList(suggestions)))
 	}
 	if classRule.SkillChoiceCount > 0 {
 		parts = append(parts, fmt.Sprintf("Lege jetzt zuerst die %d %s-Fertigkeiten fest.", classRule.SkillChoiceCount, classRule.ClassName))
@@ -1406,10 +1441,53 @@ func builderDeterministicBackgroundReply(character Character, latestUserMessage 
 	if !builderMentionsRulesBackgroundTopic(message) {
 		return "", false
 	}
-	if strings.Contains(message, "welch") || strings.Contains(message, "empfehl") || strings.Contains(message, "rat") {
-		return "Das SRD 5.1 enthält als einzigen benannten Musterhintergrund Akolyth. Dieselben offiziellen Regeln erlauben aber ausdrücklich einen eigenen Hintergrund: Wähle dafür zwei Fertigkeiten sowie insgesamt zwei Sprachen oder Werkzeugübungen und gib ihm einen passenden Namen. Du kannst also Akolyth wählen oder mir deinen eigenen Hintergrund beschreiben.", true
+	if builderQuestionLooksLikeListRequest(message) || builderQuestionLooksLikeRecommendationRequest(message) {
+		allSkills := builderCanonicalSkillNames()
+		suggestions := builderBackgroundSuggestions(message, character)
+		parts := []string{
+			"Das SRD 5.1 enthält als einzigen benannten Musterhintergrund Akolyth.",
+			"Derselbe offizielle Regelrahmen erlaubt aber ausdrücklich einen eigenen Hintergrund mit eigenem Namen.",
+			fmt.Sprintf("Für den eigenen Hintergrund wählst du genau zwei Fertigkeiten aus %s.", joinGermanList(allSkills)),
+			"Dazu wählst du insgesamt noch zwei Sprachen oder Werkzeugübungen.",
+		}
+		if len(suggestions) > 0 {
+			parts = append(parts, fmt.Sprintf("Für deinen beschriebenen Hintergrund passen besonders gut %s.", joinGermanList(suggestions)))
+		}
+		parts = append(parts, "Lege jetzt den Hintergrundnamen fest und nenne danach die zwei Fertigkeiten.")
+		return strings.Join(parts, " "), true
 	}
 	return "", false
+}
+
+func builderDeterministicRaceAdviceReply(character Character, message string) (string, bool) {
+	options := make([]string, 0, len(builderCoreRaceRules))
+	for _, rule := range builderCoreRaceRules {
+		options = append(options, rule.RaceName)
+	}
+	parts := []string{
+		fmt.Sprintf("Verfügbare Völker im aktuellen SRD-Profil sind %s.", joinGermanList(options)),
+	}
+	if suggestions := builderRaceSuggestions(character, message); len(suggestions) > 0 {
+		parts = append(parts, fmt.Sprintf("Sinnvolle Vorschläge sind %s.", joinGermanList(suggestions)))
+	}
+	parts = append(parts, "Wähle jetzt genau ein Volk.")
+	return strings.Join(parts, " "), true
+}
+
+func builderDeterministicClassStageAdviceReply(character Character, message string) (string, bool) {
+	options := make([]string, 0, len(builderCoreClassRules))
+	for _, rule := range builderCoreClassRules {
+		options = append(options, rule.ClassName)
+	}
+	parts := []string{
+		fmt.Sprintf("Verfügbare Klassen im aktuellen Profil sind %s.", joinGermanList(options)),
+		"Für den Einstieg ist normalerweise Stufe 1 sinnvoll.",
+	}
+	if suggestions := builderClassSuggestions(character, message); len(suggestions) > 0 {
+		parts = append(parts, fmt.Sprintf("Sinnvolle Vorschläge sind %s.", joinGermanList(suggestions)))
+	}
+	parts = append(parts, "Nenne jetzt Klasse und Stufe zusammen, zum Beispiel „Kämpfer, Stufe 1“.")
+	return strings.Join(parts, " "), true
 }
 
 func builderDeterministicLanguageReply(character Character, latestUserMessage string) (string, bool) {
@@ -3059,12 +3137,21 @@ func builderReplyContract(character Character, stage string) string {
 		if builderHasPendingRaceChoice(character) {
 			return "Nenne den aktuellen Stand der Attributsphase, erkläre die noch offene Halbelf-Bonuswahl knapp und fordere dann genau zwei Attribute an."
 		}
+		return "Wenn nach Optionen oder Empfehlungen gefragt wird, nenne die erlaubten Attributs- oder Bonusentscheidungen und gib einen knappen, passenden Vorschlag, bevor du die konkrete Wahl anforderst."
 	case "class_proficiencies_and_choices":
-		return "Nenne zuerst feste Klassen- und Volksvorgaben, dann die konkreten Auswahloptionen und fordere danach die Auswahl ein."
+		return "Nenne zuerst feste Klassen- und Volksvorgaben, dann die konkreten Auswahloptionen und mindestens einen passenden Vorschlag, bevor du die Auswahl einforderst."
 	case "background_and_alignment":
-		return "Trenne regeltechnischen Hintergrund und narrative Geschichte sauber. Nenne Akolyth als einzigen benannten SRD-5.1-Musterhintergrund und biete gleichwertig die offizielle Regel für einen eigenen Hintergrund mit zwei Fertigkeiten und insgesamt zwei Sprachen oder Werkzeugübungen an."
+		return "Trenne regeltechnischen Hintergrund und narrative Geschichte sauber. Nenne Akolyth als einzigen benannten SRD-5.1-Musterhintergrund, liste bei Nachfrage die verfügbaren Fertigkeiten für eigene Hintergründe auf und gib mindestens einen thematisch passenden Vorschlag, bevor du die Auswahl einforderst."
 	case "hit_points_hit_dice_and_movement":
 		return "Nenne Trefferpunkte, Trefferwürfel und Bewegungsrate knapp als festgelegten Stand und fordere dann direkt die nächste Pflichtentscheidung an, zum Beispiel Sprachen, Sinne oder Körperdaten."
+	case "race":
+		return "Wenn nach Optionen oder Empfehlungen gefragt wird, nenne die verfügbaren Völker im aktuellen Profil und gib einen knappen, passenden Vorschlag, bevor du die Wahl anforderst."
+	case "class_and_level":
+		return "Wenn nach Optionen oder Empfehlungen gefragt wird, nenne die verfügbaren Klassen im aktuellen Profil, schlage eine passende Klasse knapp vor und fordere dann Klasse plus Stufe an."
+	case "ability_method":
+		return "Wenn nach Optionen oder Empfehlungen gefragt wird, nenne Standardwerte, Point Buy und Würfeln, gib eine kurze Empfehlung mit Begründung und fordere dann die konkrete Methode an."
+	case "languages_senses_and_body":
+		return "Wenn nach Optionen oder Empfehlungen gefragt wird, nenne feste Sprachen und offene Sprachwahlen klar und gib bei offenen Sprachen einen knappen Vorschlag, bevor du die konkrete Wahl anforderst."
 	}
 	return "Kurz, sachlich, führend: aktueller Schritt, offene Regeloptionen, klare Auswahlaufforderung."
 }
@@ -3221,6 +3308,117 @@ func builderQuestionLooksLikeListRequest(message string) bool {
 		}
 	}
 	return false
+}
+
+func builderQuestionLooksLikeRecommendationRequest(message string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	if lower == "" {
+		return false
+	}
+	keywords := []string{
+		"empfehl",
+		"vorschlag",
+		"sinn",
+		"pass",
+		"besten",
+		"geeignet",
+		"rat",
+		"recommend",
+		"suggest",
+		"fit",
+		"good choice",
+	}
+	for _, keyword := range keywords {
+		if strings.Contains(lower, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func builderCanonicalSkillNames() []string {
+	items := make([]string, 0, len(builderCanonicalSkills))
+	for _, skill := range builderCanonicalSkills {
+		items = append(items, skill.Name)
+	}
+	return items
+}
+
+func builderBackgroundSuggestions(message string, character Character) []string {
+	lower := strings.ToLower(message)
+	suggestions := []string{}
+	if strings.Contains(lower, "ritter") || strings.Contains(lower, "knight") {
+		suggestions = append(suggestions,
+			"„Athletik und Einschüchtern“ für einen klassischen Ritter",
+			"„Geschichte und Überzeugen“ für einen höfischen Ritter",
+			"„Mit Tieren umgehen und Überlebenskunst“ für einen reitenden Grenzritter",
+		)
+	}
+	if classRule, ok := builderClassRuleForCharacter(character); ok && strings.EqualFold(classRule.ClassName, "Kämpfer") {
+		suggestions = append(suggestions, "„Athletik und Wahrnehmung“ für einen wachsamen Frontkämpfer")
+	}
+	return uniquePreserveOrder(suggestions)
+}
+
+func builderRaceSuggestions(character Character, message string) []string {
+	lower := strings.ToLower(message)
+	suggestions := []string{}
+	if strings.Contains(lower, "ark") || strings.Contains(lower, "mag") || strings.Contains(lower, "zauber") || strings.Contains(lower, "intelligenz") {
+		suggestions = append(suggestions, "Hochelf für geschickte arkane Figuren", "Felsgnom für intelligenzbasierte Tüftler")
+	}
+	if strings.Contains(lower, "ritter") || strings.Contains(lower, "nahkampf") || strings.Contains(lower, "front") {
+		suggestions = append(suggestions, "Mensch für einen flexiblen Ritterstart", "Hochelf für einen wendigen Kampfstil", "Halbork für rohe Nahkampfstärke")
+	}
+	if len(suggestions) == 0 {
+		suggestions = append(suggestions, "Mensch für den flexibelsten Start", "Hochelf für Geschicklichkeit plus Intelligenz", "Felsgnom für einen Intelligenzfokus")
+	}
+	return uniquePreserveOrder(suggestions)
+}
+
+func builderClassSuggestions(character Character, message string) []string {
+	lower := strings.ToLower(message)
+	suggestions := []string{}
+	if strings.Contains(lower, "ritter") || strings.Contains(lower, "knight") || strings.Contains(lower, "nahkampf") {
+		suggestions = append(suggestions, "Kämpfer, Stufe 1 für einen direkten Ritterstart", "Paladin, Stufe 1 für einen ehrengebundenen Ritter", "Waldläufer, Stufe 1 für einen Grenzritter oder Späher")
+	}
+	if strings.Contains(lower, "ark") || strings.Contains(lower, "zauber") || strings.Contains(lower, "mag") {
+		suggestions = append(suggestions, "Magier, Stufe 1 für klassische Arkana", "Hexenmeister, Stufe 1 für dunklere Magie", "Zauberer, Stufe 1 für angeborene Magie")
+	}
+	if raceRule, ok := builderRaceRuleForCharacter(character); ok {
+		switch raceRule.RaceName {
+		case "Hochelf":
+			suggestions = append(suggestions, "Magier, Stufe 1 für einen sauberen Intelligenzpfad", "Kämpfer, Stufe 1 für einen wendigen Schwertkämpfer")
+		case "Felsgnom":
+			suggestions = append(suggestions, "Magier, Stufe 1 für einen starken Intelligenzfokus")
+		case "Mensch":
+			suggestions = append(suggestions, "Kämpfer, Stufe 1 für einen stabilen Allround-Start")
+		}
+	}
+	if len(suggestions) == 0 {
+		suggestions = append(suggestions, "Kämpfer, Stufe 1 für einen robusten Start", "Schurke, Stufe 1 für Geschicklichkeit und Utility", "Magier, Stufe 1 für reinen Arkana-Fokus")
+	}
+	return uniquePreserveOrder(suggestions)
+}
+
+func builderSuggestedSkillSets(character Character, classRule builderClassRule) []string {
+	suggestions := []string{}
+	background := strings.ToLower(strings.TrimSpace(character.Background))
+	switch classRule.ClassName {
+	case "Kämpfer":
+		suggestions = append(suggestions, "„Athletik und Wahrnehmung“")
+		if strings.Contains(background, "ritter") {
+			suggestions = append(suggestions, "„Athletik und Einschüchtern“", "„Athletik und Geschichte“")
+		}
+	case "Paladin":
+		suggestions = append(suggestions, "„Athletik und Überzeugen“", "„Athletik und Einschüchtern“")
+	case "Waldläufer":
+		suggestions = append(suggestions, "„Wahrnehmung und Überlebenskunst“", "„Heimlichkeit und Wahrnehmung“")
+	case "Schurke":
+		suggestions = append(suggestions, "„Heimlichkeit und Wahrnehmung“", "„Fingerfertigkeit und Täuschung“")
+	case "Magier":
+		suggestions = append(suggestions, "„Arkane Kunde und Nachforschungen“", "„Arkane Kunde und Geschichte“")
+	}
+	return uniquePreserveOrder(suggestions)
 }
 
 func builderDirectRaceReferenceReply(question string, raceReference string) (string, bool) {
