@@ -67,3 +67,36 @@
 - Added runtime scene-asset resolution: structured scene cues are matched against adventure assets, with an adventure map fallback.
 - Scene images now render directly on the Player Screen instead of being restricted to combat overlays.
 - Live verification passed: duplicate seeding reused the same records, the served map matched the source SHA-256, and a real GPT-5.6 roll-request/resolution turn restored the correct map to scene mode.
+
+### Runtime hardening and validation
+
+- Added server-side validation for structured model state updates before they are applied.
+- Restricted accepted state mutations to an explicit allowlist for session and character fields.
+- Rejected unknown entity IDs, empty entity IDs, campaign entity mutation, and mismatched delta/value payloads.
+- Tightened roll-request validation for type, dice notation, follow-up chains, labels, and DC ranges.
+- Wrapped retrieved adventure/rules content as untrusted context so it cannot silently override higher-level prompt rules.
+- Added regression tests for the validation layer and for prompt-injection-style untrusted content handling.
+
+### Frontend resilience and negative-path coverage
+
+- Added a visible player-facing error path for `429 Too Many Requests` responses from `/api/gm/respond`.
+- Added Playwright coverage for the visible rate-limit error in the Player Screen.
+- Added Playwright coverage for camera-denied manual roll fallback in the Player Screen.
+- Hardened the dice fallback browser test to tolerate the live popup timing used by the current UI.
+- Kept manual fallbacks reachable when browser camera access is unavailable.
+
+### Internal HTTPS and LAN demo hosting
+
+- Added an internal HTTPS reverse-proxy profile for local/LAN device testing.
+- Added self-signed certificate generation for a chosen hostname and LAN IP.
+- Verified health checks and app reachability through `https://dungeon-master.local:3443` in the local environment.
+- Documented the client trust and hosts-file steps required for desktop/phone testing.
+
+### Submission documentation
+
+- Added `SECURITY.md` to document supported demo boundaries, residual risk, and disclosure expectations.
+- Added `docs/architecture.md` for the system and data-flow overview.
+- Added `docs/judge-testing.md` for the five-minute judge path and deterministic proof path.
+- Added `docs/evals.md` to record the current automated and manual evaluation status.
+- Added `docs/demo-script.md` with the current sub-3-minute English video script.
+- Expanded `README.md` with Build Week scope, technical architecture, testing, challenges, and current limits.

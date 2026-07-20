@@ -4,6 +4,38 @@ A browser-based, 5E-compatible AI game master for shared tabletop sessions. The 
 
 > The Build Week implementation uses GPT-5.6 through the OpenAI Responses API, `gpt-4o-transcribe` for player speech, and `gpt-4o-mini-tts` for narrated output. Encounter turns and camera-assisted dice results use strict, versioned Structured Outputs; local providers remain available as optional fallbacks.
 
+## Why this project exists
+
+Running a tabletop session with an AI game master usually breaks down at the same places: too much hidden operator context leaks to players, model output is not constrained enough to trust, and multimodal features fail hard when camera or microphone access is missing.
+
+This project is an attempt to make that loop actually usable:
+
+- one operator controls the session
+- players join from their own device
+- GPT-5.6 handles live encounter turns
+- structured validation sits between the model and game state
+- camera, speech, and text all have practical fallbacks
+
+## Build Week scope
+
+This repository documents the Build Week conversion of an existing local project into a judgeable OpenAI-based demo. The Build Week work focused on:
+
+- moving the main GM turn flow to GPT-5.6 via the Responses API
+- switching speech input/output to OpenAI speech endpoints
+- removing non-redistributable content and keeping the repo license-safe
+- making English the default public-demo language while retaining German
+- adding deterministic tests for the full gameplay path and critical failure cases
+- preparing local HTTPS/LAN hosting for real device testing
+
+## What is new in the Build Week version
+
+- GPT-5.6 is the default turn engine for structured encounter resolution
+- `gpt-4o-transcribe` powers player speech input
+- `gpt-4o-mini-tts` powers narrated output
+- the bundled demo adventure is a redistributable, licensed package
+- the player view is explicitly filtered to remain player-safe
+- critical negative paths are tested, not only the happy path
+
 ## Features
 
 - Campaign, adventure, character, and session management
@@ -14,6 +46,17 @@ A browser-based, 5E-compatible AI game master for shared tabletop sessions. The 
 - PostgreSQL session state, Redis coordination, and a Next.js operator/player interface
 - English/German product direction; English will be the public-demo default
 
+## Architecture at a glance
+
+- Next.js frontend for operator, player join, player portal, and player screen
+- Go backend for orchestration, prompting, validation, persistence, and secret handling
+- OpenAI Responses API for structured game-master turns
+- OpenAI speech APIs for STT/TTS
+- Python vision service for dice recognition
+- PostgreSQL for durable state and Redis for transient coordination
+
+For the full system and data-flow view, see [docs/architecture.md](docs/architecture.md).
+
 ## Repository structure
 
 - `apps/web` — Next.js frontend
@@ -23,6 +66,14 @@ A browser-based, 5E-compatible AI game master for shared tabletop sessions. The 
 - `apps/speech-tts` — optional local TTS adapter; requires user-supplied, properly licensed reference audio
 - `docs` — architecture, licensing, and implementation notes
 - `scripts` — local validation utilities
+
+Submission-facing docs:
+
+- [SECURITY.md](SECURITY.md)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/judge-testing.md](docs/judge-testing.md)
+- [docs/demo-script.md](docs/demo-script.md)
+- [docs/evals.md](docs/evals.md)
 
 ## Local setup
 
@@ -70,6 +121,54 @@ The UI identifies generated narration as an AI-generated voice, as required by O
 
 Do not commit `.env`, uploads, private campaign material, commercial rulebooks, personal voice recordings, or credentials.
 
+## Testing
+
+Fast local validation:
+
+```bash
+bash scripts/mvp_smoke_test.sh
+```
+
+Deterministic isolated golden path:
+
+```bash
+npm run test:golden-path
+```
+
+Current highlighted coverage includes:
+
+- backend validation of structured state updates and roll requests
+- typed handling for OpenAI rate limits, invalid JSON, and invalid schemas
+- full character-builder-to-session-to-roll-resolution path
+- browser test for camera-denied manual roll fallback
+- browser test for visible rate-limit failure in the player screen
+
+For the current evaluation status, see [docs/evals.md](docs/evals.md).
+
+## Human decisions and Codex contribution
+
+Human decisions in this Build Week version included:
+
+- what content could legally remain in the repository
+- which product path should be demo-first instead of feature-complete
+- which device flows and fallbacks matter most for judging
+- which claims should be documented honestly versus postponed
+
+Codex was used as an implementation collaborator for:
+
+- code changes and refactors
+- test creation and debugging
+- validation hardening
+- local HTTPS/demo setup
+- submission documentation and cleanup planning
+
+## Challenges and tradeoffs
+
+- Keeping the repository redistributable meant removing or replacing material that could not be shipped publicly.
+- A judgeable AI demo needs stronger validation than a private prototype, so structured output checks and player-safe filtering became mandatory.
+- Real browser/device flows are less reliable than API-only demos, which is why manual fallbacks and deterministic tests were prioritized.
+- The current hosting model is intentionally local/internal rather than pretending to be production-ready public infrastructure.
+
 ## Languages
 
 English is the target default for the public demo and judging flow. German remains supported. The migration plan is documented in [`docs/I18N_PLAN.md`](docs/I18N_PLAN.md).
@@ -79,6 +178,13 @@ English is the target default for the public demo and judging flow. German remai
 Original source code is licensed under the MIT License. Small embedded rule references adapted from SRD 5.1 remain under CC BY 4.0. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and [`docs/CONTENT_POLICY.md`](docs/CONTENT_POLICY.md).
 
 This project is an independent, 5E-compatible tool. It is not affiliated with or endorsed by Wizards of the Coast.
+
+## Current limits
+
+- The judged deployment model is local/LAN hosting, not a public SaaS deployment.
+- Internal HTTPS currently uses a self-signed certificate for device testing.
+- Some automated tests use a deterministic local OpenAI-compatible mock instead of the live API.
+- Real device validation over HTTPS is still a required final ship check.
 
 ---
 
