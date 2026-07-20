@@ -1,55 +1,64 @@
 # Builder Guides
 
-Diese Dateien definieren regelwerkgebundene Character-Builder-Leitfaeden.
+These files define ruleset-specific character-builder guides.
 
-Ziel:
-- der KI einen sauberen roten Faden fuer die Charaktererstellung geben
-- den Ablauf nicht hart in einem einzigen Prompt verstecken
-- spaeter pro Regelwerk / Version austauschbar und in der Library verwaltbar machen
+Purpose:
 
-Die Idee:
-- pro `ruleset_work + ruleset_version` gibt es genau einen oder mehrere Builder-Guides
-- der Character-Builder laedt den passenden Guide aus der Library-Konfiguration
-- die KI arbeitet dann gegen diesen Leitfaden statt nur gegen einen generischen Prompt
+- give the AI a clear step-by-step flow for character creation
+- avoid hiding the entire process inside one oversized prompt
+- make the builder swappable per ruleset and version later through the library
 
-Beispiele:
+Core idea:
+
+- each `ruleset_work + ruleset_version` can have one or more builder guides
+- the character builder loads the matching guide from the library configuration
+- the AI follows that guide instead of relying only on a generic prompt
+
+Examples:
+
 - `dnd-5e.character-builder.yaml`
-- spaeter z. B.:
+- later, for example:
   - `dnd-3.5.character-builder.yaml`
   - `dsa-4.character-builder.yaml`
   - `how-to-be-a-hero.character-builder.yaml`
 
-## Geplanter spaeterer Anschluss an die Library
+## Planned library integration
 
-Die YAML-Dateien sollen fachlich wie Rulebook-nahe Konfigurationsobjekte behandelt werden:
-- zugeordnet zu `ruleset_work`
-- zugeordnet zu `ruleset_version`
-- optional mit `document_ids`, wenn bestimmte Buecher bevorzugt werden sollen
+The YAML files should be treated as rulebook-adjacent configuration objects:
 
-Damit kann spaeter in der Library pro Regelwerk gepflegt werden:
-- Rulebooks
-- Adventures
-- Assets
-- Character Builder Guides
+- linked to `ruleset_work`
+- linked to `ruleset_version`
+- optionally linked to preferred `document_ids`
 
-## Grundprinzip fuer den Builder
+That makes it possible to manage, per ruleset:
 
-Ein Guide beschreibt:
-- Builder-Zweck und Ton
-- feste Reihenfolge der Character-Erstellung
-- was automatisch berechnet wird
-- was die KI erfragen muss
-- welche Dinge nicht halluziniert werden duerfen
-- welche Sheet-Felder bei welchem Schritt gefuellt werden
+- rulebooks
+- adventures
+- assets
+- character builder guides
 
-## Wichtiger Architekturpunkt
+## Builder design principle
 
-Der Guide ersetzt keine Regeltexte und kein Retrieval.
-Er ist nur:
-- Ablaufsteuerung
-- Feldzuordnung
-- Guardrail
+A guide describes:
 
-Die eigentlichen Inhalte kommen weiterhin aus:
-- ausgewaehlten Rulebooks
-- spaeterem Retrieval / Kontext
+- builder purpose and tone
+- fixed character-creation order
+- what is derived automatically
+- what the AI must explicitly ask for
+- what must not be hallucinated
+- which sheet fields are filled at which step
+
+## Important architecture note
+
+The guide does not replace rule text or retrieval.
+
+It is only:
+
+- flow control
+- field mapping
+- guardrails
+
+Actual rules content still comes from:
+
+- the selected rulebooks
+- later retrieval and contextual evidence
