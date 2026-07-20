@@ -232,9 +232,9 @@ Die bestehende Struktur ist eine sehr gute Basis, aber aktuell wird nur `json_ob
 - [x] Playwright einrichten.
 - [x] Golden Path testen: Demo öffnen, Charakter erstellen, Player beitreten, Turn senden, Wurf bestätigen, Narration und State Update sehen.
 - [x] Kamera-Verweigerung und manuellen Würfel-Fallback testen.
-- [ ] Lade-, Fehler-, Rate-Limit- und LLM-Fallback-Zustände sichtbar und verständlich darstellen.
+- [x] Lade-, Fehler-, Rate-Limit- und LLM-Fallback-Zustände sichtbar und verständlich darstellen.
   - [x] Sichtbarer Rate-Limit-Fehler im Player Screen per Playwright abgesichert.
-  - [ ] Ladezustand, generischer Fehlerzustand und klarer LLM-Fallback-Text noch als eigene UI-Abnahmen prüfen.
+  - [x] Ladezustand, generischer Fehlerzustand und klarer LLM-Fallback-Text im Player Screen per Playwright abgesichert.
 - [ ] Responsive Test für Operator Desktop und Player Smartphone.
 
 ### Build-Gates
@@ -293,7 +293,7 @@ Die aktuelle API darf nicht unverändert öffentlich erreichbar sein.
 - [ ] Ein sichtbares „Why this happened“-Panel ergänzen: verwendete Regel-/Abenteuerquellen, keine Chain-of-Thought-Ausgabe.
 - [ ] Statuschips für `GPT-5.6`, `camera`, `speech`, `player connected`.
 - [ ] Manuelle Fallbacks immer erreichbar halten: Text statt Sprache, Würfelwert statt Kamera, Browser-Audio statt externem TTS-Service.
-- [ ] Fehler in klare Benutzeraktionen übersetzen, z. B. `Retry turn`, `Use manual roll`, `Continue without voice`.
+- [x] Fehler in klare Benutzeraktionen übersetzen, z. B. `Retry turn`, `Use manual roll`, `Continue without voice`.
 
 ### Design
 

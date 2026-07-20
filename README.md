@@ -87,7 +87,7 @@ docker compose up -d --build --wait
 bash scripts/mvp_smoke_test.sh
 ```
 
-For internal HTTPS on your LAN with a self-signed certificate, use the local proxy profile described in [`docs/LOCAL_HTTPS.md`](docs/LOCAL_HTTPS.md). That path is intended for local device testing only:
+For internal HTTPS on your LAN, use the local proxy profile described in [`docs/LOCAL_HTTPS.md`](docs/LOCAL_HTTPS.md). You can either copy in an existing certificate pair or generate a self-signed one for local device testing:
 
 ```bash
 ./scripts/generate_local_https_cert.sh dungeon-master.local 192.168.178.50 30
@@ -182,7 +182,7 @@ This project is an independent, 5E-compatible tool. It is not affiliated with or
 ## Current limits
 
 - The judged deployment model is local/LAN hosting, not a public SaaS deployment.
-- Internal HTTPS currently uses a self-signed certificate for device testing.
+- Internal HTTPS currently supports either a provided certificate pair or a self-signed certificate for device testing.
 - Some automated tests use a deterministic local OpenAI-compatible mock instead of the live API.
 - Real device validation over HTTPS is still a required final ship check.
 

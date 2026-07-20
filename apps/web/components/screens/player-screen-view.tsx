@@ -34,6 +34,12 @@ type UIStepRollRequest = {
   hideDC: boolean;
   followUpOnSuccess: UIStepRollRequest | null;
 };
+
+type PromptFeedbackState = {
+  message: string;
+  tone: "info" | "warning";
+};
+
 const STT_TARGET_SAMPLE_RATE = 32000;
 
 function parseUIRollRequest(value: unknown): UIStepRollRequest | null {
@@ -171,6 +177,36 @@ function isIgnorableSTTErrorMessage(message: string): boolean {
 function isIgnorableTTSErrorMessage(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes("502") || normalized.includes("503") || normalized.includes("504") || normalized.includes("bad gateway");
+}
+
+function formatPromptError(message: string, tr: (en: string, de: string) => string): string {
+  const normalized = message.trim();
+  if (!normalized) {
+    return tr("The AI DM could not respond right now. Retry the turn.", "Der KI-Spielleiter konnte gerade nicht antworten. Versuche den Zug erneut.");
+  }
+  if (normalized.includes("429")) {
+    return tr("429 Too Many Requests — wait a moment and retry the turn.", "429 Too Many Requests — warte kurz und versuche den Zug erneut.");
+  }
+  if (normalized.includes("500") || normalized.includes("502") || normalized.includes("503") || normalized.includes("504")) {
+    return tr("The AI DM is temporarily unavailable. Retry the turn.", "Der KI-Spielleiter ist vorübergehend nicht verfügbar. Versuche den Zug erneut.");
+  }
+  return tr("The AI DM could not respond right now. Retry the turn.", "Der KI-Spielleiter konnte gerade nicht antworten. Versuche den Zug erneut.");
+}
+
+function promptFeedbackFromResponse(response: GMResponse, tr: (en: string, de: string) => string): PromptFeedbackState | null {
+  if (response.prompt_source === "fallback") {
+    return {
+      tone: "warning",
+      message: tr("Fallback narration was used. Retry the turn for a full GPT-5.6 response.", "Es wurde eine Fallback-Erzählung verwendet. Wiederhole den Zug für eine vollständige GPT-5.6-Antwort."),
+    };
+  }
+  if (response.prompt_source === "llm_scene_fallback") {
+    return {
+      tone: "info",
+      message: tr("A simplified narration fallback was used after a parsing issue.", "Nach einem Parsing-Problem wurde eine vereinfachte Erzählungs-Fallback-Antwort verwendet."),
+    };
+  }
+  return null;
 }
 
 function looksUsablePlayerTurn(text: string): boolean {
@@ -435,6 +471,8 @@ export function PlayerScreenView({
   const [promptInput, setPromptInput] = useState("");
   const [promptPending, setPromptPending] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [promptFeedback, setPromptFeedback] = useState<PromptFeedbackState | null>(null);
+  const [lastSubmittedPrompt, setLastSubmittedPrompt] = useState("");
   const [sttPending, setSTTPending] = useState(false);
   const [sttError, setSTTError] = useState<string | null>(null);
   const [sttTranscript, setSTTTranscript] = useState("");
@@ -1085,14 +1123,18 @@ export function PlayerScreenView({
     if (!liveSession || !text.trim()) {
       return;
     }
+    const trimmedText = text.trim();
     setPromptPending(true);
     setPromptError(null);
+    setPromptFeedback(null);
+    setLastSubmittedPrompt(trimmedText);
     try {
-      await apiPost<GMResponse>("/api/gm/respond", {
+      const gmResponse = await apiPost<GMResponse>("/api/gm/respond", {
         session_id: liveSession.id,
-        player_input: text.trim(),
+        player_input: trimmedText,
         language: locale,
       });
+      setPromptFeedback(promptFeedbackFromResponse(gmResponse, tr));
       if (clearInput) {
         setPromptInput("");
       }
@@ -1102,7 +1144,8 @@ export function PlayerScreenView({
         setLiveSession(updated);
       }
     } catch (error) {
-      setPromptError(error instanceof Error ? error.message : tr("Could not send message.", "Nachricht konnte nicht gesendet werden."));
+      const message = error instanceof Error ? error.message : tr("Could not send message.", "Nachricht konnte nicht gesendet werden.");
+      setPromptError(formatPromptError(message, tr));
     } finally {
       setPromptPending(false);
     }
@@ -1269,6 +1312,20 @@ export function PlayerScreenView({
       return;
     }
     await sendPlayerInput(tr("Continue.", "Weiter."), false);
+  }
+
+  async function handleRetryTurn() {
+    if (!lastSubmittedPrompt || promptPending || sttPending) {
+      return;
+    }
+    await sendPlayerInput(lastSubmittedPrompt, false);
+  }
+
+  function handleContinueWithoutVoice() {
+    setTTSError(null);
+    setAmbientError(null);
+    setIsAudioMuted(true);
+    handleStopPlayback();
   }
 
   function handleStopPlayback() {
@@ -1755,16 +1812,33 @@ export function PlayerScreenView({
               <textarea onChange={(event) => setPromptInput(event.target.value)} placeholder={tr(`Describe an action or say "${wakePhrase}". Finish with "${finishPhrase}".`, `Beschreibe eine Aktion oder sage „${wakePhrase}“. Schließe mit „${finishPhrase}“ ab.`)} rows={3} value={promptInput} />
             </div>
             <div className="player-composer__feedback">
+              {promptPending ? <p className="player-audio-note">{tr("AI DM is responding...", "KI-Spielleiter antwortet...")}</p> : null}
               {sttError ? <p className="error-copy">{sttError}</p> : null}
               {promptError ? <p className="error-copy">{promptError}</p> : null}
+              {promptFeedback ? <p className={promptFeedback.tone === "warning" ? "error-copy" : "player-audio-note"}>{promptFeedback.message}</p> : null}
               {ambientError ? <p className="player-audio-note">{ambientError}</p> : null}
+              {ttsError ? <p className="player-audio-note">{ttsError}</p> : null}
+              {(promptError || promptFeedback || ttsError || ambientError) ? (
+                <div className="player-feedback-actions">
+                  {(promptError || promptFeedback) && lastSubmittedPrompt ? (
+                    <button className="studio-button studio-button--ghost" disabled={promptPending || sttPending} onClick={() => void handleRetryTurn()} type="button">
+                      {tr("Retry turn", "Zug erneut senden")}
+                    </button>
+                  ) : null}
+                  {(ttsError || ambientError) ? (
+                    <button className="studio-button studio-button--ghost" onClick={handleContinueWithoutVoice} type="button">
+                      {tr("Continue without voice", "Ohne Stimme fortfahren")}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <div className="button-row button-row--end">
               <button className="studio-button studio-button--ghost" disabled={promptPending || sttPending || !liveSession || !(sttTranscript || promptInput).trim()} onClick={handleFinalizePlayerTurn} type="button">
                 {tr("Finish Response", "Antwort abschließen")}
               </button>
               <button className="studio-button" disabled={promptPending || sttPending || !liveSession || !promptInput.trim()} onClick={handleSendPrompt} type="button">
-                {tr("Send", "Senden")}
+                {promptPending ? tr("Sending...", "Wird gesendet...") : tr("Send", "Senden")}
               </button>
             </div>
           </article>

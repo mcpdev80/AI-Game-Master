@@ -18,7 +18,7 @@ Current supported demo setup:
 
 - operator machine on the local network
 - optional player phone on the same network
-- internal HTTPS with a self-signed certificate
+- internal HTTPS with either a provided certificate pair or a self-signed certificate
 
 Reference local URL:
 
@@ -100,7 +100,7 @@ Useful quick checks during judging:
 
 ## Known demo constraints
 
-- HTTPS is local/internal only and uses a self-signed certificate
+- HTTPS is local/internal only; in local testing it may use either a provided certificate pair or a self-signed certificate
 - the current judged environment is not a public internet deployment
 - some tests are deterministic against a local OpenAI-compatible mock rather than the live API
 - device testing is strongest when run on the same LAN as the operator machine
@@ -111,7 +111,7 @@ Useful quick checks during judging:
 
 - confirm the phone is on the same LAN
 - confirm the hosts entry maps `dungeon-master.local` to the operator machine IP
-- confirm the self-signed certificate was trusted on the device
+- confirm the certificate used by the local HTTPS proxy is trusted on the device
 
 ### Camera or microphone features are blocked
 

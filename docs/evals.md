@@ -77,6 +77,9 @@ Covered by Playwright:
 
 - camera denied -> manual roll fallback works
 - `/api/gm/respond` rate limited -> visible player-facing error is shown
+- visible loading state while the player turn is in flight
+- generic `5xx` player-facing error with retry action
+- visible fallback narration notice when the backend uses the fallback path
 
 Reference commands:
 
@@ -106,12 +109,10 @@ These are still important because they involve real browser/device behavior:
 - deterministic browser golden path
 - player-facing rate-limit error path
 - manual dice fallback when camera permission is denied
+- player-facing loading, generic error, retry, and fallback-notice states
 
 ### Still open / not fully captured yet
 
-- dedicated UI proof for loading state
-- dedicated UI proof for generic non-rate-limit error state
-- explicit LLM fallback copy verification in the player-facing UI
 - responsive operator-desktop vs. player-smartphone screenshots/assertions
 - repeated real-device HTTPS run on desktop plus phone three times without restart
 
@@ -124,7 +125,7 @@ These are still important because they involve real browser/device behavior:
 ## Suggested next eval additions
 
 1. a Playwright test for visible loading and retry guidance
-2. a Playwright test for generic `5xx` or timeout copy
+2. a Playwright test for timeout-specific copy
 3. a responsive screenshot/smoke pass for desktop operator and smartphone player layouts
 4. a short real-device HTTPS checklist with recorded pass/fail results
 
@@ -136,6 +137,7 @@ Code and test references:
 - `apps/api/internal/httpapi/llm_openai_test.go`
 - `apps/api/internal/httpapi/llm_sessions_test.go`
 - `apps/web/e2e/dice-fallback.spec.ts`
+- `apps/web/e2e/player-feedback.spec.ts`
 - `apps/web/e2e/rate-limit.spec.ts`
 - `scripts/golden_path_api_test.sh`
 - `scripts/test_golden_path.sh`

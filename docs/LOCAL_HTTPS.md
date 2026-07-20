@@ -22,16 +22,33 @@ Example entry:
 192.168.178.50 dungeon-master.local
 ```
 
-## 2. Generate the self-signed certificate
+## 2. Provide a certificate or generate a self-signed one
 
 From the repository root:
+
+### Option A: use an existing certificate
+
+```bash
+chmod +x scripts/generate_local_https_cert.sh
+./scripts/generate_local_https_cert.sh \
+  dungeon-master.local 192.168.178.50 \
+  --cert /path/to/fullchain.pem \
+  --key /path/to/privkey.pem
+```
+
+This copies the provided files into:
+
+- `docker/certs/local-cert.pem`
+- `docker/certs/local-key.pem`
+
+### Option B: generate a self-signed certificate
 
 ```bash
 chmod +x scripts/generate_local_https_cert.sh
 ./scripts/generate_local_https_cert.sh dungeon-master.local 192.168.178.50 30
 ```
 
-This writes:
+This generates:
 
 - `docker/certs/local-cert.pem`
 - `docker/certs/local-key.pem`
@@ -57,9 +74,11 @@ https://dungeon-master.local:3443
 
 ## 4. Trust the certificate on test devices
 
-Because the certificate is self-signed, the browser will otherwise warn or block secure features.
+If you generated a self-signed certificate, the browser will otherwise warn or block secure features.
 
-For real microphone/camera testing, import and trust `docker/certs/local-cert.pem` on the desktop or phone you use for the session.
+For real microphone/camera testing with a self-signed cert, import and trust `docker/certs/local-cert.pem` on the desktop or phone you use for the session.
+
+If you copied an already trusted certificate chain, use your normal trust process for that certificate instead.
 
 ## 5. Operational notes
 

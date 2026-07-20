@@ -2876,6 +2876,13 @@ pre {
   min-height: 20px;
 }
 
+.player-feedback-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .button-row--end {
   justify-content: flex-end;
 }

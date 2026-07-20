@@ -21,7 +21,7 @@ Out of scope:
 Supported:
 
 - local Docker Compose stack
-- internal HTTPS via self-signed certificate as documented in [docs/LOCAL_HTTPS.md](docs/LOCAL_HTTPS.md)
+- internal HTTPS via either a provided certificate pair or a self-signed certificate as documented in [docs/LOCAL_HTTPS.md](docs/LOCAL_HTTPS.md)
 
 Not supported:
 
@@ -61,7 +61,7 @@ This project still has meaningful residual risk if exposed publicly without extr
 - no managed certificate/public edge setup
 - no WAF or internet-facing abuse controls beyond local demo rate limits
 - no formal security review or penetration test
-- self-signed HTTPS is acceptable only for local device testing
+- self-signed HTTPS is acceptable only for local device testing; provided certificates still do not make this setup a public production deployment
 
 For Build Week judging, the expected safe usage is an internal controlled demo environment.
 
