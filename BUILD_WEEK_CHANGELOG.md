@@ -77,6 +77,41 @@
 - Wrapped retrieved adventure/rules content as untrusted context so it cannot silently override higher-level prompt rules.
 - Added regression tests for the validation layer and for prompt-injection-style untrusted content handling.
 
+### Combat state, encounter flow, and session progression
+
+- Added persistent combat state to the session model with initiative order, active turn index, round counter, and a structured combat log.
+- Added session-side reward and progression tracking with `last_reward_summary`, `level_up_queue`, and `awaiting_level_up_rest`.
+- Added automatic combat start detection for hostile attack setups so encounter state no longer depends only on explicit initiative wording.
+- Added authoritative combat-state narration when a fight starts, preventing the model from contradicting actual initiative order.
+- Added enemy-turn resolution against tracked Armor Class with structured hit/miss/damage combat-log entries.
+- Added session-side combat-resolution and rest-transition detection to keep fight cleanup and level-up readiness in sync.
+- Added XP-threshold handling for 5E-compatible level-up readiness and queue generation from active session characters.
+- Added regression tests for character-level parsing, XP-based level-up eligibility, combat auto-start, and encounter-state initialization.
+
+### Encounter balancing
+
+- Replaced fixed spider-only combat assumptions with a generic encounter-definition system.
+- Added encounter balancing by active party size, average level, and highest level.
+- Added graduated combat variants for spiders, goblins, and wolves instead of always spawning the heaviest named enemy.
+- Downgraded solo and low-level encounters to safer variants, while stronger parties can receive higher-tier or plural enemy groups.
+- Added tests for low-level spider and goblin balancing as well as higher-level wolf encounter selection.
+
+### Live combat UI and player-safe board updates
+
+- Added a live combat tracker to the session screen with initiative order, active turn indication, and the full combat log for the current or last fight.
+- Added polling-based live session refresh for GM session detail screens so combat state, rolls, and events update without a manual reload.
+- Added a persistent initiative overlay to the player-facing visual board so turn order remains visible during combat scenes.
+- Added color-coded combat condition indicators for players and enemies on both the GM session screen and the player board.
+- Removed raw HP details from initiative order displays; only player-safe color/status indicators remain visible.
+- Kept the last combat log visible after combat ends so the full encounter history can still be reviewed.
+
+### GM-flow and localization fixes
+
+- Ensured non-roll narration ends with a direct handoff question so the players are always prompted for the next action.
+- Localized enemy combat narration based on session language to avoid German/English mixed combat output.
+- Improved embedded-document context retrieval so non-database adventure/rules content participates in GM context assembly.
+- Added browser-side combat UI helpers and updated API typings for the new combat/session state fields.
+
 ### Frontend resilience and negative-path coverage
 
 - Added a visible player-facing error path for `429 Too Many Requests` responses from `/api/gm/respond`.
