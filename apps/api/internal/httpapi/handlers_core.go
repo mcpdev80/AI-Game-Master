@@ -31,6 +31,7 @@ func (h *Handler) health(c *gin.Context) {
 
 	status := "ok"
 	database := "ok"
+	build := currentBuildInfo()
 	if err := h.store.Ping(ctx); err != nil {
 		status = "degraded"
 		database = "unreachable"
@@ -40,6 +41,7 @@ func (h *Handler) health(c *gin.Context) {
 		"status":    status,
 		"service":   "dungeon-master-api",
 		"database":  database,
+		"build":     build,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
 }
@@ -53,6 +55,7 @@ func (h *Handler) systemSummary(c *gin.Context) {
 	llmConfig := h.llmClient.CurrentConfig()
 	activeGatewaySessions, archivedGatewaySessions, _ := h.store.CountLLMSessionsByStatus(c.Request.Context())
 	gatewayStatus := h.llmGateway.Status(activeGatewaySessions, archivedGatewaySessions)
+	build := currentBuildInfo()
 
 	c.JSON(http.StatusOK, gin.H{
 		"services": []gin.H{
@@ -64,6 +67,7 @@ func (h *Handler) systemSummary(c *gin.Context) {
 			{"name": "media-director", "status": "planned"},
 		},
 		"counts":         stats,
+		"build":          build,
 		"active_session": nil,
 		"last_ai_action": nil,
 		"llm": gin.H{

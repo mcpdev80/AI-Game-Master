@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Activity, BookOpen, Calendar, Monitor, User } from "lucide-react";
 import { LanguageSwitcher } from "./language-switcher";
+import { getWebBuildInfo } from "../lib/build-info";
 import { useI18n, type MessageKey } from "../lib/i18n";
 
 type StudioShellProps = {
@@ -22,6 +23,7 @@ const navItems = [
 export function StudioShell({ children }: StudioShellProps) {
   const pathname = usePathname();
   const { t } = useI18n();
+  const build = getWebBuildInfo();
 
   return (
     <div className="studio-frame">
@@ -55,6 +57,10 @@ export function StudioShell({ children }: StudioShellProps) {
           <div>
             <span className="status-dot status-dot--live" />
             <span>{t("shell.ready")}</span>
+          </div>
+          <div className="studio-build-meta">
+            <span>v{build.version}</span>
+            <span>{build.commit}</span>
           </div>
           <LanguageSwitcher />
         </div>

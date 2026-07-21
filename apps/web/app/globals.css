@@ -160,6 +160,14 @@ pre {
   gap: 10px;
 }
 
+.studio-build-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.75rem;
+}
+
 .language-switcher {
   align-items: center;
   background: rgba(9, 15, 19, 0.72);

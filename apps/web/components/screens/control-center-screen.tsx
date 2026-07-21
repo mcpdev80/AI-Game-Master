@@ -7,6 +7,7 @@ import { PageIntro, Panel, StatCard, StatusPill } from "../studio-primitives";
 import { createFungalCavernsDemo, detectDiceFromImage, fetchLLMModels, stabilizeDiceFrames, testLLMConnection, updateSystemConfig, type DiceBox, type DiceDetection, type DiceDetectionFrame, type LLMGatewayStatus } from "../../lib/api";
 import { createClientId } from "../../lib/client-id";
 import type { PlayerLinkSlot, Session } from "../../lib/api";
+import type { AppBuildInfo } from "../../lib/build-info";
 import { useI18n } from "../../lib/i18n";
 
 type ControlCenterScreenProps = {
@@ -15,9 +16,11 @@ type ControlCenterScreenProps = {
   llm: { base_url?: string; model?: string };
 	tts: { provider?: string; model?: string };
 	stt: { provider?: string; model?: string };
+  apiBuild?: AppBuildInfo;
   llmGateway?: LLMGatewayStatus;
   sessions: Session[];
   playerLinks: PlayerLinkSlot[];
+  webBuild: AppBuildInfo;
 };
 
 const cameraPreferenceStorageKey = "dm.camera.preferredDeviceId";
@@ -93,7 +96,7 @@ function generateGuidedRollPlan(locale: "en" | "de"): GuidedRollStep[] {
   return steps;
 }
 
-export function ControlCenterScreen({ services, counts, llm, llmGateway, sessions, playerLinks, stt, tts }: ControlCenterScreenProps) {
+export function ControlCenterScreen({ apiBuild, services, counts, llm, llmGateway, sessions, playerLinks, stt, tts, webBuild }: ControlCenterScreenProps) {
   const { locale, tr } = useI18n();
   const checks = [
     { name: tr("Database", "Datenbank"), icon: Database, detail: tr("Postgres connected", "Postgres verbunden"), tone: "ready" as const },
@@ -1022,6 +1025,15 @@ export function ControlCenterScreen({ services, counts, llm, llmGateway, session
             </div>
           </Panel>
         ) : null}
+
+        <Panel title={tr("Release metadata", "Release-Metadaten")} description={tr("Visible build information for the current local demo stack.", "Sichtbare Build-Informationen für den aktuellen lokalen Demo-Stack.")}>
+          <div className="stat-grid">
+            <StatCard label={tr("Web version", "Web-Version")} value={`v${webBuild.version}`} />
+            <StatCard label={tr("Web commit", "Web-Commit")} value={webBuild.commit} />
+            <StatCard label={tr("API version", "API-Version")} value={`v${apiBuild?.version ?? "unknown"}`} />
+            <StatCard label={tr("API commit", "API-Commit")} value={apiBuild?.commit ?? "unknown"} />
+          </div>
+        </Panel>
 
         <Panel title={tr("Session Readiness", "Sitzungsbereitschaft")} description={tr("Requirements for a live AI-led session.", "Voraussetzungen für eine live von der KI geleitete Sitzung.")}>
           <div className="list-stack">
