@@ -131,6 +131,28 @@ export type SessionState = {
   scene_summary: string;
   active_npcs: string[];
   open_quests: string[];
+  combat?: {
+    active: boolean;
+    round: number;
+    active_turn_index: number;
+    initiative_order: {
+      id: string;
+      name: string;
+      side: string;
+      initiative: number;
+      status?: string;
+    }[];
+    log: {
+      timestamp: string;
+      actor_id: string;
+      actor_name: string;
+      side: string;
+      kind: string;
+      summary: string;
+      details?: Record<string, unknown>;
+      public_text?: string;
+    }[];
+  };
   last_narration: string;
   last_dm_notes: string[];
   active_media_cue: string;

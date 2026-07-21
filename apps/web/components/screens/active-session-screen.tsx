@@ -1,12 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Brain, Camera, Check, Copy, FileText, ImageIcon, Map as MapIcon, Monitor, Pause, Send, Users, X } from "lucide-react";
 import { Panel, StatusPill } from "../studio-primitives";
+import { combatIndicatorForTurn, findCombatCharacter } from "../../lib/combat-ui";
 import { useI18n } from "../../lib/i18n";
 import {
   apiPost,
+  fetchCharacters,
+  fetchPlayerLinks,
+  fetchSession,
+  fetchSessionEvents,
   pauseSession,
   startSession,
   stopSession,
@@ -101,8 +106,11 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
   const sessionStatusLabel = (status: string) => ({
     live: tr("LIVE", "LIVE"), paused: tr("PAUSED", "PAUSIERT"), ready_to_start: tr("READY", "BEREIT"), ended: tr("ENDED", "BEENDET"), draft: tr("DRAFT", "ENTWURF"),
   }[status] ?? status.toUpperCase());
-  const recentEvents = events.slice(0, 8);
   const router = useRouter();
+  const [liveSession, setLiveSession] = useState(session);
+  const [liveEvents, setLiveEvents] = useState(events);
+  const [livePlayerLinks, setLivePlayerLinks] = useState(playerLinks);
+  const [liveCharacters, setLiveCharacters] = useState(characters);
   const [prompt, setPrompt] = useState("");
   const [localResponse, setLocalResponse] = useState<GMResponse | null>(null);
   const [selectedHandoutId, setSelectedHandoutId] = useState("");
@@ -127,6 +135,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
   const [selectedCharacterTab, setSelectedCharacterTab] = useState<SessionSheetTab>("overview");
   const [joinUrlCopied, setJoinUrlCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const recentEvents = liveEvents.slice(0, 8);
   const releasedHandouts = documents.filter((document) => document.type === "handout" || document.type === "character_sheet" || document.type === "adventure");
   const releasedAssets = assets.filter((asset) => ["image", "portrait", "battlemap", "map", "handout"].includes(asset.type));
   const availableRulesets = buildRulesetOptions(documents);
@@ -139,9 +148,55 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
     return keyFromFields === sessionRulesetKey || derivedKey === sessionRulesetKey;
   });
   const selectedAdventure = adventures.find((adventure) => adventure.id === sessionAdventureId) ?? null;
-  const joinUrl = `/session-join/${session.join_token}`;
+  const joinUrl = `/session-join/${liveSession.join_token}`;
   const joinUrlAbsolute =
     typeof window !== "undefined" ? `${window.location.origin}${joinUrl}` : joinUrl;
+
+  useEffect(() => {
+    setLiveSession(session);
+  }, [session]);
+
+  useEffect(() => {
+    setLiveEvents(events);
+  }, [events]);
+
+  useEffect(() => {
+    setLivePlayerLinks(playerLinks);
+  }, [playerLinks]);
+
+  useEffect(() => {
+    setLiveCharacters(characters);
+  }, [characters]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshSessionDetail = async () => {
+      try {
+        const [nextSession, nextEvents, nextPlayerLinks, nextCharacters] = await Promise.all([
+          fetchSession(session.id),
+          fetchSessionEvents(session.id),
+          fetchPlayerLinks(session.id),
+          fetchCharacters(),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setLiveSession(nextSession);
+        setLiveEvents(nextEvents);
+        setLivePlayerLinks(nextPlayerLinks);
+        setLiveCharacters(nextCharacters);
+        setLocalResponse(null);
+      } catch {
+        // keep last known state
+      }
+    };
+    refreshSessionDetail();
+    const timer = window.setInterval(refreshSessionDetail, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [session.id]);
 
   async function sendPrompt(nextPrompt: string) {
     const response = await apiPost<GMResponse>("/api/gm/respond", {
@@ -199,12 +254,17 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
   }
 
   const displayedNarration =
-    localResponse?.narration || session.state.last_narration || tr(
+    localResponse?.narration || liveSession.state.last_narration || tr(
       "The AI DM is ready to describe the next scene once the session is started.",
       "Der KI-Spielleiter beschreibt die nächste Szene, sobald die Sitzung gestartet ist."
     );
-  const displayedNotes = localResponse?.dm_notes ?? session.state.last_dm_notes ?? [];
-  const displayedCue = localResponse?.scene_events?.[0]?.name || session.state.active_media_cue;
+  const displayedNotes = localResponse?.dm_notes ?? liveSession.state.last_dm_notes ?? [];
+  const displayedCue = localResponse?.scene_events?.[0]?.name || liveSession.state.active_media_cue;
+  const combatState = liveSession.state.combat;
+  const activeCombatTurn =
+    combatState?.active && combatState.initiative_order?.length
+      ? combatState.initiative_order[combatState.active_turn_index] ?? null
+      : null;
 
   function splitLines(value: unknown): string[] {
     if (Array.isArray(value)) {
@@ -450,13 +510,16 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
     startTransition(async () => {
       try {
         if (action === "start") {
-          await startSession(session.id);
+          await startSession(liveSession.id);
+          router.refresh();
         } else if (action === "pause") {
-          await pauseSession(session.id);
+          await pauseSession(liveSession.id);
+          router.refresh();
         } else {
-          await stopSession(session.id);
+          await stopSession(liveSession.id);
+          router.push("/sessions");
+          router.refresh();
         }
-        router.refresh();
       } catch (lifecycleError) {
         setError(lifecycleError instanceof Error ? lifecycleError.message : tr("Could not update session status", "Sitzungsstatus konnte nicht aktualisiert werden"));
       }
@@ -469,16 +532,16 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
     startTransition(async () => {
       try {
         await updateSession(session.id, {
-          campaign_id: session.campaign_id,
+          campaign_id: liveSession.campaign_id,
           name: sessionName.trim(),
           adventure_id: sessionAdventureId || null,
-          ruleset_work: rulesetWork?.trim() || session.ruleset_work,
-          ruleset_version: rulesetVersion?.trim() || session.ruleset_version,
+          ruleset_work: rulesetWork?.trim() || liveSession.ruleset_work,
+          ruleset_version: rulesetVersion?.trim() || liveSession.ruleset_version,
           target_player_count: Number(sessionTargetPlayers) || 4,
-          current_scene: session.current_scene,
-          current_location: session.current_location,
+          current_scene: liveSession.current_scene,
+          current_location: liveSession.current_location,
           language: locale,
-          default_voice_profile_id: session.default_voice_profile_id,
+          default_voice_profile_id: liveSession.default_voice_profile_id,
           selected_rulebook_ids: selectedRulebookIDs,
           prompt_config: {
             gm_style: gmStyle,
@@ -505,24 +568,24 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
     <div className="active-session">
       <header className="active-session__topbar">
         <div className="active-session__identity">
-          <StatusPill tone={session.status === "live" ? "live" : session.status === "paused" ? "warning" : "ready"}>
-            {sessionStatusLabel(session.status)}
+          <StatusPill tone={liveSession.status === "live" ? "live" : liveSession.status === "paused" ? "warning" : "ready"}>
+            {sessionStatusLabel(liveSession.status)}
           </StatusPill>
           <div className="active-session__ai">
             <Brain size={16} />
             <span>{tr("AI DM narrating the session", "KI-Spielleiter erzählt die Sitzung")}</span>
           </div>
-          <h1>{session.name || session.current_scene || tr("Active Session", "Aktive Sitzung")}</h1>
+          <h1>{liveSession.name || liveSession.current_scene || tr("Active Session", "Aktive Sitzung")}</h1>
         </div>
         <div className="button-row">
           <button
             className="studio-button studio-button--ghost"
             disabled={isPending}
-            onClick={() => handleLifecycle(session.status === "live" ? "pause" : "start")}
+            onClick={() => handleLifecycle(liveSession.status === "live" ? "pause" : "start")}
             type="button"
           >
             <Pause size={16} />
-            {session.status === "live" ? tr("Pause Session", "Sitzung pausieren") : tr("Start Session", "Sitzung starten")}
+            {liveSession.status === "live" ? tr("Pause Session", "Sitzung pausieren") : tr("Start Session", "Sitzung starten")}
           </button>
           <button className="studio-button studio-button--danger" disabled={isPending} onClick={() => handleLifecycle("stop")} type="button">
             {tr("End Session", "Sitzung beenden")}
@@ -546,7 +609,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
               <select onChange={(event) => setSessionAdventureId(event.target.value)} value={sessionAdventureId}>
                 <option value="">{tr("Select adventure", "Abenteuer wählen")}</option>
                 {adventures
-                  .filter((adventure) => !adventure.campaign_id || adventure.campaign_id === session.campaign_id)
+                  .filter((adventure) => !adventure.campaign_id || adventure.campaign_id === liveSession.campaign_id)
                   .map((adventure) => (
                     <option key={adventure.id} value={adventure.id}>
                       {adventure.name}
@@ -606,11 +669,11 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
             <dl className="meta-list">
               <div>
                 <dt>{tr("Location", "Ort")}</dt>
-                <dd>{session.current_location || tr("Unknown", "Unbekannt")}</dd>
+                <dd>{liveSession.current_location || tr("Unknown", "Unbekannt")}</dd>
               </div>
               <div>
                 <dt>{tr("Scene", "Szene")}</dt>
-                <dd>{session.current_scene || tr("Not set", "Nicht festgelegt")}</dd>
+                <dd>{liveSession.current_scene || tr("Not set", "Nicht festgelegt")}</dd>
               </div>
               <div>
                 <dt>{tr("Active cue", "Aktiver Hinweis")}</dt>
@@ -618,11 +681,11 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
               </div>
               <div>
                 <dt>{tr("Board mode", "Anzeigemodus")}</dt>
-                <dd>{session.state.visual_mode || "pause_or_recap"}</dd>
+                <dd>{liveSession.state.visual_mode || "pause_or_recap"}</dd>
               </div>
               <div>
                 <dt>{tr("Ambient", "Umgebung")}</dt>
-                <dd>{session.state.ambient_cue_id || tr("None", "Keine")}</dd>
+                <dd>{liveSession.state.ambient_cue_id || tr("None", "Keine")}</dd>
               </div>
             </dl>
           </Panel>
@@ -692,7 +755,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                   startTransition(async () => {
                     try {
                       const selectedDocument = releasedHandouts.find((item) => item.id === selectedHandoutId);
-                      await updateSessionRuntimeState(session.id, {
+                      await updateSessionRuntimeState(liveSession.id, {
                         visual_mode: "rules_reference",
                         visual_payload: {
                           document_id: selectedHandoutId,
@@ -720,7 +783,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                   setPushMessage(null);
                   startTransition(async () => {
                     try {
-                      await updateSessionRuntimeState(session.id, {
+                      await updateSessionRuntimeState(liveSession.id, {
                         visual_mode: "combat",
                         visual_payload: {
                           image_asset_id: selectedAssetId,
@@ -746,7 +809,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                   setPushMessage(null);
                   startTransition(async () => {
                     try {
-                      await updateSessionRuntimeState(session.id, {
+                      await updateSessionRuntimeState(liveSession.id, {
                         visual_mode: "scene",
                         visual_payload: { dismiss_popup: true, auto_close: false },
                       });
@@ -829,7 +892,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
               </article>
             </div>
             <div className="list-stack">
-              {playerLinks.map((slot) => {
+              {livePlayerLinks.map((slot) => {
                 const character = characters.find((item) => item.id === slot.player_slot.character_id) ?? null;
                 const clickable = Boolean(character);
                 return (
@@ -867,7 +930,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 <Monitor size={16} />
                 <div>
                   <strong>{tr("AI DM Visual Board", "Visuelles Board des KI-Spielleiters")}</strong>
-                  <p>{session.state.visual_mode || "pause_or_recap"} · {tr("current shared output", "aktuelle gemeinsame Ausgabe")}</p>
+                  <p>{liveSession.state.visual_mode || "pause_or_recap"} · {tr("current shared output", "aktuelle gemeinsame Ausgabe")}</p>
                 </div>
               </div>
               <div className="output-list__item">
@@ -881,10 +944,61 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 <Brain size={16} />
                 <div>
                   <strong>{tr("Voice & Ambient", "Stimme & Atmosphäre")}</strong>
-                  <p>{session.state.active_voice_profile_id || "narrator-default"} · {session.state.ambient_cue_id || "silence"}</p>
+                  <p>{liveSession.state.active_voice_profile_id || "narrator-default"} · {liveSession.state.ambient_cue_id || "silence"}</p>
                 </div>
               </div>
             </div>
+          </Panel>
+
+          <Panel title={tr("Combat Tracker", "Kampf-Tracker")} description={tr("Initiative order and resolved rolls for the current fight.", "Initiativereihenfolge und aufgelöste Würfe für den aktuellen Kampf.")}>
+            {!combatState?.active && (combatState?.log?.length ?? 0) === 0 ? (
+              <p className="empty-copy">{tr("No active combat.", "Kein aktiver Kampf.")}</p>
+            ) : (
+              <div className="list-stack">
+                {combatState?.active ? (
+                  <>
+                    <p className="muted-copy">
+                      {tr("Round", "Runde")} {combatState.round} · {tr("Current turn", "Aktueller Zug")}: {activeCombatTurn?.name || "—"}
+                    </p>
+                    {combatState.initiative_order.map((turn) => {
+                      const linkedCharacter = findCombatCharacter(turn, liveCharacters, livePlayerLinks);
+                      const indicator = combatIndicatorForTurn(turn, linkedCharacter, tr);
+                      return (
+                        <div className="list-row list-row--combatant" key={turn.id}>
+                          <div className="list-row__body">
+                            <div className="combatant-row">
+                              <span className={`combat-health-badge combat-health-badge--${indicator.level}`} aria-hidden="true">{indicator.marker}</span>
+                              <div>
+                                <strong>{turn.name}</strong>
+                                <p>{turn.side} · {tr("Initiative", "Initiative")} {turn.initiative}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <StatusPill tone={activeCombatTurn?.id === turn.id ? "live" : "default"}>
+                            {activeCombatTurn?.id === turn.id ? tr("active", "aktiv") : tr("waiting", "wartet")}
+                          </StatusPill>
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <p className="muted-copy">{tr("Combat resolved. Showing the full log of the last fight.", "Kampf beendet. Es wird das vollständige Protokoll des letzten Kampfes angezeigt.")}</p>
+                )}
+                <div className="list-stack">
+                  {(combatState?.log ?? []).map((entry, index) => (
+                    <article className="narrative-card" key={`${entry.timestamp}-${entry.actor_id}-${index}`}>
+                      <div className="narrative-card__meta">
+                        <StatusPill tone={entry.side === "enemy" ? "warning" : entry.side === "player" ? "info" : "default"}>
+                          {entry.kind}
+                        </StatusPill>
+                      </div>
+                      <strong className="event-title">{entry.actor_name}</strong>
+                      <p>{entry.summary}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            )}
           </Panel>
 
           <Panel title={tr("DM Notes", "Spielleiter-Notizen")} description={tr("Internal notes stored in the session or returned by the last prompt.", "Interne Notizen aus der Sitzung oder der letzten KI-Antwort.")}>

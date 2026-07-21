@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, FileText, Maximize, Mic, MicOff, Minimize, Pause, RotateCcw, Send, SkipForward, Square, Volume2, VolumeX, Wifi } from "lucide-react";
-import { apiBaseUrl, apiPost, apiUploadRaw, detectDiceFromImage, splitMetadataList, type Adventure, type Asset, type Character, type Document, type GMResponse, type PlayerLinkSlot, type Session } from "../../lib/api";
+import { apiBaseUrl, apiPost, apiUploadRaw, detectDiceFromImage, fetchCharacters, fetchPlayerLinks, fetchSession, splitMetadataList, type Adventure, type Asset, type Character, type Document, type GMResponse, type PlayerLinkSlot, type Session } from "../../lib/api";
+import { combatIndicatorForTurn, findCombatCharacter } from "../../lib/combat-ui";
 import { useI18n } from "../../lib/i18n";
 
 function normalizeAmbientUrl(session: Session | null): string {
@@ -481,6 +482,8 @@ export function PlayerScreenView({
   const wakePhrase = tr("Our answer", "Unsere Antwort");
   const finishPhrase = tr("End of our answer", "Ende unserer Antwort");
   const [liveSession, setLiveSession] = useState<Session | null>(session);
+  const [livePlayerLinks, setLivePlayerLinks] = useState<PlayerLinkSlot[]>(playerLinks);
+  const [liveCharacters, setLiveCharacters] = useState<Character[]>(characters);
   const [enableState, setEnableState] = useState<EnableState>({
     board: false,
     audio: false,
@@ -549,18 +552,25 @@ export function PlayerScreenView({
   }, [session]);
 
   useEffect(() => {
+    setLivePlayerLinks(playerLinks);
+  }, [playerLinks]);
+
+  useEffect(() => {
+    setLiveCharacters(characters);
+  }, [characters]);
+
+  useEffect(() => {
     let cancelled = false;
     const refreshSession = async () => {
+      if (!session?.id) {
+        return;
+      }
       try {
-        const response = await fetch(`${apiBaseUrl}/api/sessions`, { cache: "no-store" });
-        if (!response.ok) {
-          return;
-        }
-        const payload = (await response.json()) as { items?: Session[] };
-        const items = Array.isArray(payload.items) ? payload.items : [];
-        const next = items.find((item) => item.status === "live") ?? items[0] ?? null;
+        const [next, nextPlayerLinks, nextCharacters] = await Promise.all([fetchSession(session.id), fetchPlayerLinks(session.id), fetchCharacters()]);
         if (!cancelled) {
           setLiveSession(next);
+          setLivePlayerLinks(nextPlayerLinks);
+          setLiveCharacters(nextCharacters);
         }
       } catch {
         // keep last known state
@@ -645,7 +655,7 @@ export function PlayerScreenView({
   const rollRequestDC = activeRollRequest?.dc && activeRollRequest.dc > 0 ? activeRollRequest.dc : null;
   const rollRequestHideDC = activeRollRequest?.hideDC === true;
   const rollRequestFollowUpOnSuccess = activeRollRequest?.followUpOnSuccess ?? null;
-  const hasRollRequest = visualPayload.type === "roll_request";
+  const hasRollRequest = Boolean(activeRollRequest);
   const normalizedRollDice = useMemo(
     () => (rollRequestDice.length > 0 ? rollRequestDice : ["d20"]),
     [rollRequestDice]
@@ -691,7 +701,7 @@ export function PlayerScreenView({
       }) ?? null
     );
   }, [documents, liveSession]);
-  const activeRollCharacter = useMemo(() => pickActiveRollCharacter(playerLinks, characters), [playerLinks, characters]);
+  const activeRollCharacter = useMemo(() => pickActiveRollCharacter(livePlayerLinks, characters), [livePlayerLinks, characters]);
   const explicitAttackBonus = useMemo(
     () => extractAttackBonusFromCharacter(activeRollCharacter, rollRequestLabel, pendingRollPlayerInput || promptInput || sttTranscript),
     [activeRollCharacter, pendingRollPlayerInput, promptInput, rollRequestLabel, sttTranscript]
@@ -753,8 +763,11 @@ export function PlayerScreenView({
     }
     return null;
   }, [derivedAbilityModifier, diceValues, explicitAttackBonus, normalizedRollDice, proficiencyBonus, rollRequestAbility, rollRequestType, tr]);
-  const joinedPlayers = playerLinks.filter((slot) => slot.player_slot.status === "joined" || slot.player_slot.status === "ready").length;
-  const readyPlayers = playerLinks.filter((slot) => slot.player_slot.status === "ready").length;
+  const joinedPlayers = livePlayerLinks.filter((slot) => slot.player_slot.status === "joined" || slot.player_slot.status === "ready").length;
+  const readyPlayers = livePlayerLinks.filter((slot) => slot.player_slot.status === "ready").length;
+  const combatState = liveSession?.state.combat;
+  const combatInitiative = combatState?.initiative_order || [];
+  const currentCombatTurn = combatState?.active ? combatInitiative[combatState.active_turn_index] : null;
   const sessionRulebookCount = rulesDocument ? 1 : 0;
   const referencedDocumentPage =
     typeof visualPayload.document_page === "number"
@@ -799,12 +812,12 @@ export function PlayerScreenView({
       setPopupVisible(false);
       return;
     }
-    if (["rules_reference", "combat", "dice_capture"].includes(visualMode)) {
+    if (["rules_reference", "combat", "dice_capture"].includes(visualMode) || hasRollRequest) {
       setPopupVisible(true);
       return;
     }
     setPopupVisible(false);
-  }, [liveSession?.updated_at, rollResolutionPending, visualMode]);
+  }, [hasRollRequest, liveSession?.updated_at, rollResolutionPending, visualMode]);
 
   useEffect(() => {
     if (rollResolutionPending && visualMode !== "dice_capture") {
@@ -1607,6 +1620,41 @@ export function PlayerScreenView({
           <div className="player-stage__meta">
             <span>{stageTitle}</span>
           </div>
+          {combatState?.active && combatInitiative.length > 0 ? (
+            <aside className="player-stage__initiative-overlay">
+              <div className="player-initiative-board">
+                <div className="player-initiative-board__header">
+                  <strong>{tr("Initiative Order", "Initiative-Reihenfolge")}</strong>
+                  <span>{tr(`Round ${combatState.round}`, `Runde ${combatState.round}`)}</span>
+                </div>
+                <div className="player-initiative-board__list">
+                  {combatInitiative.map((turn, index) => {
+                    const linkedCharacter = findCombatCharacter(turn, liveCharacters, livePlayerLinks);
+                    const indicator = combatIndicatorForTurn(turn, linkedCharacter, tr);
+                    return (
+                      <div
+                        className={`player-initiative-board__item ${turn.side === "enemy" ? "is-enemy" : "is-player"} ${index === combatState.active_turn_index ? "is-active" : ""}`}
+                        key={`${turn.id}-${index}`}
+                      >
+                        <div className="player-initiative-board__combatant">
+                          <span className={`combat-health-badge combat-health-badge--${indicator.level}`} aria-hidden="true">{indicator.marker}</span>
+                          <div className="player-initiative-board__combatant-copy">
+                            <strong>{turn.name}</strong>
+                          </div>
+                        </div>
+                        <span>{turn.initiative}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {currentCombatTurn ? (
+                  <p className="player-initiative-board__status">
+                    {tr("Current turn:", "Aktueller Zug:")} {currentCombatTurn.name}
+                  </p>
+                ) : null}
+              </div>
+            </aside>
+          ) : null}
           {effectiveVisualMode === "scene" && referencedAsset ? (
             <img alt={referencedAsset.name} className="player-stage__image player-stage__image--map" src={assetUrl} />
           ) : effectiveVisualMode === "rules_reference" ? (

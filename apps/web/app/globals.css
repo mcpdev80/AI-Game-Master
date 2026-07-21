@@ -2508,6 +2508,16 @@ pre {
   font-size: 0.72rem;
 }
 
+.player-stage__initiative-overlay {
+  position: absolute;
+  top: 64px;
+  right: 18px;
+  z-index: 2;
+  width: min(360px, calc(100% - 36px));
+  max-height: calc(100% - 88px);
+  overflow: auto;
+}
+
 .player-stage__image,
 .player-stage__video {
   display: block;
@@ -2555,6 +2565,142 @@ pre {
 
 .player-stage__status strong {
   font-size: clamp(1.2rem, 2vw, 1.8rem);
+}
+
+.player-initiative-board {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin-top: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(183, 128, 58, 0.18);
+  background: rgba(10, 8, 6, 0.72);
+  text-align: left;
+  backdrop-filter: blur(12px);
+}
+
+.player-initiative-board__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.player-initiative-board__header span,
+.player-initiative-board__status {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.player-initiative-board__list {
+  display: grid;
+  gap: 8px;
+}
+
+.player-initiative-board__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.player-initiative-board__item.is-player {
+  border-color: rgba(76, 201, 240, 0.22);
+}
+
+.player-initiative-board__item.is-enemy {
+  border-color: rgba(226, 95, 95, 0.22);
+}
+
+.player-initiative-board__item.is-active {
+  background: rgba(211, 154, 74, 0.16);
+  border-color: rgba(211, 154, 74, 0.42);
+  box-shadow: 0 0 0 1px rgba(211, 154, 74, 0.18) inset;
+}
+
+.player-initiative-board__combatant,
+.combatant-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.player-initiative-board__combatant-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.player-initiative-board__combatant-copy strong,
+.combatant-row strong {
+  display: block;
+}
+
+.player-initiative-board__combatant-copy small,
+.combatant-row p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.combat-health-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  flex: 0 0 auto;
+}
+
+.combat-health-badge--healthy {
+  background: rgba(63, 185, 80, 0.18);
+  color: #8be28f;
+}
+
+.combat-health-badge--wounded {
+  background: rgba(214, 183, 48, 0.2);
+  color: #f0dd7a;
+}
+
+.combat-health-badge--critical {
+  background: rgba(227, 140, 57, 0.2);
+  color: #ffb36b;
+}
+
+.combat-health-badge--near-death,
+.combat-health-badge--downed {
+  background: rgba(190, 54, 54, 0.22);
+  color: #ff8a8a;
+}
+
+.combat-health-badge--stable {
+  background: rgba(64, 64, 64, 0.6);
+  color: #d6d6d6;
+}
+
+.combat-health-badge--dead {
+  background: rgba(10, 10, 10, 0.92);
+  color: #f5f5f5;
+}
+
+.combat-health-badge--unknown {
+  background: rgba(94, 94, 94, 0.28);
+  color: #d0d0d0;
+}
+
+.list-row--combatant {
+  align-items: center;
 }
 
 .player-overlay {
