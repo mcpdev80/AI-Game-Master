@@ -1028,10 +1028,24 @@ export function ControlCenterScreen({ apiBuild, services, counts, llm, llmGatewa
 
         <Panel title={tr("Release metadata", "Release-Metadaten")} description={tr("Visible build information for the current local demo stack.", "Sichtbare Build-Informationen für den aktuellen lokalen Demo-Stack.")}>
           <div className="stat-grid">
-            <StatCard label={tr("Web version", "Web-Version")} value={`v${webBuild.version}`} />
-            <StatCard label={tr("Web commit", "Web-Commit")} value={webBuild.commit} />
-            <StatCard label={tr("API version", "API-Version")} value={`v${apiBuild?.version ?? "unknown"}`} />
-            <StatCard label={tr("API commit", "API-Commit")} value={apiBuild?.commit ?? "unknown"} />
+            <StatCard
+              label={tr("Current release", "Aktuelle Release-Version")}
+              value={`v${apiBuild?.version && apiBuild.version !== "dev" ? apiBuild.version : webBuild.version}`}
+              detail={tr("Single visible release number for the local demo stack", "Eine sichtbare Release-Version für den lokalen Demo-Stack")}
+            />
+            <StatCard label={tr("Web revision", "Web-Revision")} value={webBuild.commit} detail={webBuild.date} />
+            <StatCard label={tr("API revision", "API-Revision")} value={apiBuild?.commit ?? "unknown"} detail={apiBuild?.date ?? "unknown"} />
+          </div>
+          <div className="button-row">
+            <a className="studio-button studio-button--ghost studio-button--inline" href="https://github.com/mcpdev80/AI-Game-Master" rel="noreferrer" target="_blank">
+              {tr("Open repository", "Repository öffnen")}
+            </a>
+            <a className="studio-button studio-button--ghost studio-button--inline" href="https://github.com/mcpdev80/AI-Game-Master/releases" rel="noreferrer" target="_blank">
+              {tr("Open releases", "Releases öffnen")}
+            </a>
+            <a className="studio-button studio-button--ghost studio-button--inline" href="https://github.com/mcpdev80/AI-Game-Master/blob/main/CHANGELOG.md" rel="noreferrer" target="_blank">
+              {tr("Open changelog", "Changelog öffnen")}
+            </a>
           </div>
         </Panel>
 

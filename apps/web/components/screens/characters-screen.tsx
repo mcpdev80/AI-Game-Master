@@ -118,6 +118,58 @@ type RosterCharacter = Character & {
   selectedDocumentNames: string[];
 };
 
+function localizeMeasurementText(value: string, locale: "en" | "de") {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const feetPattern = /(\d+(?:[.,]\d+)?)\s*(feet|foot|ft\.?|fuß)/gi;
+  const metersPattern = /(\d+(?:[.,]\d+)?)\s*m(?:eter|eters)?/gi;
+  const footCubePattern = /(\d+(?:[.,]\d+)?)\s*-\s*foot\s+cube/gi;
+  const feetPairPattern = /(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)\s*(feet|foot|ft\.?|fuß)/gi;
+  const metersPairPattern = /(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)\s*m(?:eter|eters)?/gi;
+  const parseValue = (raw: string) => Number.parseFloat(raw.replace(",", "."));
+  const formatMeters = (meters: number) => {
+    const rounded = Math.round(meters * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      return `${Math.round(rounded)} m`;
+    }
+    return `${rounded.toFixed(1).replace(".", ",")} m`;
+  };
+  const formatMetersNumber = (meters: number) => {
+    const rounded = Math.round(meters * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      return `${Math.round(rounded)}`;
+    }
+    return rounded.toFixed(1).replace(".", ",");
+  };
+  const formatFeet = (feet: number) => {
+    const rounded = Math.round(feet * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      return `${Math.round(rounded)} ft`;
+    }
+    return `${rounded.toFixed(1)} ft`;
+  };
+  const formatFeetNumber = (feet: number) => {
+    const rounded = Math.round(feet * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      return `${Math.round(rounded)}`;
+    }
+    return rounded.toFixed(1);
+  };
+  if (locale === "de") {
+    return trimmed
+      .replace(footCubePattern, (_, amount: string) => `${formatMeters(parseValue(amount) * 0.3)}-Würfel`)
+      .replace(feetPairPattern, (_, first: string, second: string) => `${formatMetersNumber(parseValue(first) * 0.3)}/${formatMetersNumber(parseValue(second) * 0.3)} m`)
+      .replace(feetPattern, (_, amount: string) => formatMeters(parseValue(amount) * 0.3));
+  }
+  return trimmed
+    .replace(metersPairPattern, (_, first: string, second: string) => `${formatFeetNumber(parseValue(first) / 0.3)}/${formatFeetNumber(parseValue(second) / 0.3)} ft`)
+    .replace(metersPattern, (_, amount: string) => formatFeet(parseValue(amount) / 0.3))
+    .replace(/fuß/gi, "ft")
+    .replace(/würfel/gi, "cube");
+}
+
 type ParsedTableRow = {
   columns: string[];
   description: string;
@@ -663,8 +715,8 @@ function parseStructuredRows(value: string, expectedColumns: number) {
   let pendingDescription = "";
 
   for (const line of lines) {
-    const normalized = line.replace(/^beschreibung\s*:\s*/i, "").trim();
-    if (/^beschreibung\s*:/i.test(line)) {
+    const normalized = line.replace(/^(beschreibung|description)\s*:\s*/i, "").trim();
+    if (/^(beschreibung|description)\s*:/i.test(line)) {
       if (rows.length > 0) {
         rows[rows.length - 1].description = normalized;
       } else {
@@ -724,7 +776,8 @@ function CharacterSheetCanvas({
   const proficiency = parseNumericText(sheetForm.proficiency_bonus) ?? deriveProficiencyBonus(sheetForm.class_and_level);
   const passivePerception = 10 + abilityModifier(assignment.wisdom || 10) + (builderSkillKeys.has("perception") ? proficiency : 0);
   const derivedArmorClass = deriveArmorClassValue(sheetForm, assignment);
-  const derivedSpeed = sheetForm.speed || deriveBaseSpeed(sheetForm.race) || "—";
+  const derivedSpeedRaw = sheetForm.speed || deriveBaseSpeed(sheetForm.race) || "—";
+  const derivedSpeed = derivedSpeedRaw === "—" ? derivedSpeedRaw : localizeMeasurementText(derivedSpeedRaw, locale);
   const derivedHitDie = sheetForm.hit_dice || deriveHitDie(sheetForm.class_and_level) || "—";
   const derivedSavingThrows = sheetForm.saving_throw_proficiencies || deriveSavingThrowProficiencies(sheetForm.class_and_level) || "—";
   const spellcastingAbility = deriveSpellcastingAbility(sheetForm.class_and_level);
@@ -996,7 +1049,7 @@ function CharacterSheetCanvas({
                     <div className="sheet-table-entry" key={`combat-row-${index}`}>
                       <div className="sheet-table sheet-table--combat sheet-table--values">
                         {row.columns.map((column, columnIndex) => (
-                          <div className="sheet-table__cell" key={`combat-${index}-${columnIndex}`}>{column || "—"}</div>
+                          <div className="sheet-table__cell" key={`combat-${index}-${columnIndex}`}>{columnIndex === 3 ? localizeMeasurementText(column || "—", locale) : (column || "—")}</div>
                         ))}
                       </div>
                       <div className="sheet-table-entry__description">
@@ -1062,7 +1115,7 @@ function CharacterSheetCanvas({
                     <div className="sheet-table-entry" key={`spell-row-${index}`}>
                       <div className="sheet-table sheet-table--combat sheet-table--values">
                         {row.columns.map((column, columnIndex) => (
-                          <div className="sheet-table__cell" key={`spell-${index}-${columnIndex}`}>{column || "—"}</div>
+                          <div className="sheet-table__cell" key={`spell-${index}-${columnIndex}`}>{columnIndex === 3 ? localizeMeasurementText(column || "—", locale) : (column || "—")}</div>
                         ))}
                       </div>
                       <div className="sheet-table-entry__description">

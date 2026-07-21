@@ -463,6 +463,17 @@ function stripWakeFinishCommand(text: string): string {
     .trim();
 }
 
+function stripWakeStartCommand(text: string): string {
+  return text
+    .replace(/^unsere antwort\b[:,.\s-]*/i, "")
+    .replace(/^our answer\b[:,.\s-]*/i, "")
+    .trim();
+}
+
+function sanitizePlayerSpeechInput(text: string): string {
+  return stripWakeStartCommand(stripWakeFinishCommand(text)).trim();
+}
+
 export function PlayerScreenView({
   session,
   documents,
@@ -812,7 +823,7 @@ export function PlayerScreenView({
       setPopupVisible(false);
       return;
     }
-    if (["rules_reference", "combat", "dice_capture"].includes(visualMode) || hasRollRequest) {
+    if (visualMode === "dice_capture" || hasRollRequest) {
       setPopupVisible(true);
       return;
     }
@@ -1183,7 +1194,10 @@ export function PlayerScreenView({
     if (!liveSession || !text.trim()) {
       return;
     }
-    const trimmedText = text.trim();
+    const trimmedText = sanitizePlayerSpeechInput(text);
+    if (!trimmedText) {
+      return;
+    }
     setPromptPending(true);
     setPromptError(null);
     setPromptFeedback(null);
@@ -1356,7 +1370,7 @@ export function PlayerScreenView({
   }
 
   async function handleFinalizePlayerTurn() {
-    const text = (sttTranscript || promptInput).trim();
+    const text = sanitizePlayerSpeechInput(sttTranscript || promptInput);
     if (!text || !liveSession || promptPending || sttPending) {
       return;
     }
@@ -1365,6 +1379,33 @@ export function PlayerScreenView({
     setConversationPhase("idle");
     await sendPlayerInput(text, true);
     setSTTTranscript("");
+  }
+
+  function handleStartResponse() {
+    if (promptPending || sttPending) {
+      return;
+    }
+    const current = (sttTranscript || promptInput).trim();
+    const next = current ? `${wakePhrase}. ${current}` : `${wakePhrase}.`;
+    captureBufferRef.current = current;
+    captureSilenceChunksRef.current = 0;
+    setConversationPhase("capturing");
+    setSTTTranscript(next);
+    setPromptInput(next);
+  }
+
+  function handleEndResponse() {
+    if (promptPending || sttPending) {
+      return;
+    }
+    const current = (sttTranscript || promptInput).trim();
+    const next = current
+      ? containsWakeFinishCommand(current)
+        ? current
+        : `${current} ${finishPhrase}.`
+      : `${finishPhrase}.`;
+    setSTTTranscript(next);
+    setPromptInput(next);
   }
 
   async function handleQuickContinue() {
@@ -1884,7 +1925,9 @@ export function PlayerScreenView({
                 <span className="voice-console__bar voice-console__bar--right" />
               </div>
               <div className="voice-console__transport voice-console__transport--column">
+                  <button className="voice-console__action voice-console__action--amber" disabled={promptPending || sttPending} onClick={handleStartResponse} type="button"><Mic size={14} />{tr("Start Response", "Antwort anfangen")}</button>
                   <button className="voice-console__action voice-console__action--amber" onClick={handlePausePlayback} type="button"><Pause size={14} />{tr("Pause", "Pause")}</button>
+                  <button className="voice-console__action voice-console__action--amber" disabled={promptPending || sttPending} onClick={handleEndResponse} type="button"><Send size={14} />{tr("End Response", "Antwort beenden")}</button>
                   <button className="voice-console__action voice-console__action--red" onClick={handleCancelListening} type="button"><Square size={14} />{tr("Reset", "Reset")}</button>
                   <button className="voice-console__action voice-console__action--amber" disabled={promptPending || !liveSession} onClick={handleQuickContinue} type="button"><SkipForward size={14} />{tr("Continue", "Weiter")}</button>
                   <button className="voice-console__action voice-console__action--amber" disabled={promptPending || sttPending || !liveSession || !(sttTranscript || promptInput).trim()} onClick={handleFinalizePlayerTurn} type="button"><Send size={14} />{tr("Finish Response", "Antwort abschließen")}</button>

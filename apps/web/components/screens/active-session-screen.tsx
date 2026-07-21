@@ -40,6 +40,55 @@ function splitMetadataList(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function localizeMeasurementText(value: string, locale: "en" | "de") {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const feetPattern = /(\d+(?:[.,]\d+)?)\s*(feet|foot|ft\.?|fuß)/gi;
+  const metersPattern = /(\d+(?:[.,]\d+)?)\s*m(?:eter|eters)?/gi;
+  const feetPairPattern = /(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)\s*(feet|foot|ft\.?|fuß)/gi;
+  const metersPairPattern = /(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)\s*m(?:eter|eters)?/gi;
+  const parseValue = (raw: string) => Number.parseFloat(raw.replace(",", "."));
+  const formatMeters = (meters: number) => {
+    const rounded = Math.round(meters * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      return `${Math.round(rounded)} m`;
+    }
+    return `${rounded.toFixed(1).replace(".", ",")} m`;
+  };
+  const formatMetersNumber = (meters: number) => {
+    const rounded = Math.round(meters * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      return `${Math.round(rounded)}`;
+    }
+    return rounded.toFixed(1).replace(".", ",");
+  };
+  const formatFeet = (feet: number) => {
+    const rounded = Math.round(feet * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      return `${Math.round(rounded)} ft`;
+    }
+    return `${rounded.toFixed(1)} ft`;
+  };
+  const formatFeetNumber = (feet: number) => {
+    const rounded = Math.round(feet * 10) / 10;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.05) {
+      return `${Math.round(rounded)}`;
+    }
+    return rounded.toFixed(1);
+  };
+  if (locale === "de") {
+    return trimmed
+      .replace(feetPairPattern, (_, first: string, second: string) => `${formatMetersNumber(parseValue(first) * 0.3)}/${formatMetersNumber(parseValue(second) * 0.3)} m`)
+      .replace(feetPattern, (_, amount: string) => formatMeters(parseValue(amount) * 0.3));
+  }
+  return trimmed
+    .replace(metersPairPattern, (_, first: string, second: string) => `${formatFeetNumber(parseValue(first) / 0.3)}/${formatFeetNumber(parseValue(second) / 0.3)} ft`)
+    .replace(metersPattern, (_, amount: string) => formatFeet(parseValue(amount) / 0.3))
+    .replace(/fuß/gi, "ft");
+}
+
 function buildRulesetOptions(documents: Document[]) {
   const groups = new Map<string, { key: string; work: string; version: string; label: string; documentCount: number }>();
   for (const document of documents) {
@@ -406,7 +455,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 <strong>{tr("Derived Stats", "Abgeleitete Werte")}</strong>
                 <dl className="sheet-detail-list">
                   <div><dt>{tr("Armor Class", "Rüstungsklasse")}</dt><dd>{character.armor_class ?? "—"}</dd></div>
-                  <div><dt>{tr("Speed", "Bewegung")}</dt><dd>{character.speed || "—"}</dd></div>
+                  <div><dt>{tr("Speed", "Bewegung")}</dt><dd>{character.speed ? localizeMeasurementText(character.speed, locale) : "—"}</dd></div>
                   <div><dt>{tr("Max HP", "TP max")}</dt><dd>{character.hit_point_max ?? "—"}</dd></div>
                   <div><dt>{tr("Current HP", "Aktuelle TP")}</dt><dd>{currentHitPoints}</dd></div>
                   <div><dt>{tr("Temp. HP", "Temp. TP")}</dt><dd>{temporaryHitPoints}</dd></div>
@@ -421,7 +470,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
           <div className="sheet-tab-panel">
             <section className="sheet-box sheet-box--combat">
               <article><span>{tr("Armor Class", "Rüstungsklasse")}</span><strong>{character.armor_class ?? "—"}</strong></article>
-              <article><span>{tr("Speed", "Bewegung")}</span><strong>{character.speed || "—"}</strong></article>
+              <article><span>{tr("Speed", "Bewegung")}</span><strong>{character.speed ? localizeMeasurementText(character.speed, locale) : "—"}</strong></article>
               <article><span>{tr("Max HP", "TP max")}</span><strong>{character.hit_point_max ?? "—"}</strong></article>
               <article><span>{tr("Current HP", "Aktuelle TP")}</span><strong>{currentHitPoints}</strong></article>
               <article><span>{tr("Temp. HP", "Temp. TP")}</span><strong>{temporaryHitPoints}</strong></article>
