@@ -34,6 +34,9 @@ Already completed and verified:
 - OpenAI TTS integrated through `gpt-4o-mini-tts`.
 - Redistributable bilingual demo adventure included with attribution.
 - Character builder supports German and English.
+- Character builder keeps late review corrections for HP, Hit Dice, attacks, and derived values.
+- Multiclass builder requests are normalized to a level-1 start draft with planned staged level-ups.
+- Builder step completions now include a short explicit confirmation checkpoint.
 - Session flow works locally through Docker Compose.
 - Deterministic backend and browser golden-path tests exist.
 - Local HTTPS/LAN hosting path exists for real-device testing.

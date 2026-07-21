@@ -1,5 +1,12 @@
 # Build Week changelog
 
+## Release 0.1.2
+
+- Added a stable SRD 5.1 reference baseline to the repository: original local PDF snapshot, extracted text snapshot, current landing-page snapshot, and a refresh helper script.
+- Added deterministic SRD-derived catalogs and rule helpers for builder/level-up behavior so spell, class, monster, and localization flows are less dependent on ad-hoc prompt reasoning.
+- Fixed bilingual builder consistency for spell advice and spell-sheet rows; English and German now have dedicated browser regression coverage.
+- Improved builder stability for multiclass normalization and late review corrections before finalizing a draft.
+
 ## Baseline
 
 - Commit: `dffac74`

@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
+## [0.1.2] - 2026-07-21
+
+### Added
+- Embedded SRD 5.1 reference snapshots, generated rule catalogs, and a refresh script for stable source regeneration
+- Deterministic SRD-backed character-builder and level-up helpers for spells, classes, monsters, and localized rule references
+- Dedicated Playwright coverage for the bilingual spell-builder UI in both English and German
+
+### Changed
+- Expanded the character builder to use deterministic bilingual guidance for spell selection, level-up planning, and staged multiclass normalization
+- Localized spell rows, short spell descriptions, and measurement displays consistently across builder chat and character-sheet views
+- Updated third-party notices and Build Week planning notes for the embedded SRD reference baseline
+
+### Fixed
+- Mixed-language leaks in the English spell-builder flow and spell-attack table rendering
+- Late builder review corrections for hit points, hit dice, attacks, and derived values
+- Character-sheet spell descriptions and related localized UI labels for German and English
+
 ## [0.1.1] - 2026-07-21
 
 ### Added
