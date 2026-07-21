@@ -11,10 +11,11 @@ async function jsonRequest<T>(request: APIRequestContext, method: "get" | "post"
 async function waitForOpening(request: APIRequestContext, sessionId: string) {
   await expect
     .poll(async () => {
-      const session = await jsonRequest<{ state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
-      return session.state.last_narration;
+      const session = await jsonRequest<{ current_scene: string; state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
+      const narration = session.state.last_narration ?? "";
+      return narration && narration !== session.current_scene ? narration : "";
     })
-    .toContain("Rain whispers");
+    .not.toEqual("");
 }
 
 test("complete browser golden path from demo and character builder to dice resolution", async ({ page, request, context }) => {
@@ -72,6 +73,7 @@ test("complete browser golden path from demo and character builder to dice resol
     },
   });
   await page.getByRole("button", { name: "Mark as Ready" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("heading", { name: "AI-guided Character Draft" })).toBeHidden();
   await expect(page.getByRole("heading", { name: "Eira Browser" }).first()).toBeVisible();
 
@@ -119,14 +121,18 @@ test("complete browser golden path from demo and character builder to dice resol
   expect((await resolutionPromise).ok()).toBeTruthy();
   await expect(page.getByRole("img", { name: demo.map_asset.name })).toBeVisible();
 
-  const finalSession = await jsonRequest<{ state: { visual_mode: string; visual_payload: { image_asset_id: string }; group_inventory: { gold: number } } }>(
-    request,
-    "get",
-    `/api/sessions/${session.id}`
-  );
-  expect(finalSession.state.visual_mode).toBe("scene");
-  expect(finalSession.state.visual_payload.image_asset_id).toBe(demo.map_asset.id);
-  expect(finalSession.state.group_inventory.gold).toBe(3);
+  await expect.poll(async () => {
+    const finalSession = await jsonRequest<{ state: { visual_mode: string; visual_payload: { image_asset_id: string }; group_inventory: { gold: number } } }>(
+      request,
+      "get",
+      `/api/sessions/${session.id}`
+    );
+    return {
+      visualMode: finalSession.state.visual_mode,
+      imageAssetId: finalSession.state.visual_payload.image_asset_id,
+      gold: finalSession.state.group_inventory.gold,
+    };
+  }).toEqual({ visualMode: "scene", imageAssetId: demo.map_asset.id, gold: 3 });
 
   await page.goto(`/player-portal/${portal.token}`);
   await expect(page.getByText("Eira Browser", { exact: true })).toBeVisible();

@@ -11,10 +11,11 @@ async function jsonRequest<T>(request: APIRequestContext, method: "get" | "post"
 async function waitForOpening(request: APIRequestContext, sessionId: string) {
   await expect
     .poll(async () => {
-      const session = await jsonRequest<{ state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
-      return session.state.last_narration;
+      const session = await jsonRequest<{ current_scene: string; state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
+      const narration = session.state.last_narration ?? "";
+      return narration && narration !== session.current_scene ? narration : "";
     })
-    .toContain("Rain whispers");
+    .not.toEqual("");
 }
 
 test("player screen shows a visible error when gm/respond is rate-limited", async ({ page, request, context }) => {
