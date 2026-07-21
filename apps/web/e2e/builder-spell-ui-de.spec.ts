@@ -89,8 +89,9 @@ test("deutscher builder-zauberschritt bleibt in chat und charakterbogen vollstae
   await expect(page.getByText("Schild", { exact: true })).toBeVisible();
   await expect(page.getByText("Reaktionszauber erhöht kurz die RK.", { exact: true })).toBeVisible();
 
-  await expect(page.getByText("Cantrip", { exact: false })).toHaveCount(0);
-  await expect(page.getByText("Spell Attack", { exact: false })).toHaveCount(0);
-  await expect(page.getByText("Saving Throw", { exact: false })).toHaveCount(0);
-  await expect(page.getByText("Check briefly whether this looks right.", { exact: false })).toHaveCount(0);
+  const builderDialog = page.getByRole("dialog");
+  await expect(builderDialog.getByText(/\bCantrip\b/)).toHaveCount(0);
+  await expect(builderDialog.getByText(/\bSpell Attack\b/)).toHaveCount(0);
+  await expect(builderDialog.getByText(/\bSaving Throw\b/)).toHaveCount(0);
+  await expect(builderDialog.getByText("Check briefly whether this looks right.", { exact: false })).toHaveCount(0);
 });

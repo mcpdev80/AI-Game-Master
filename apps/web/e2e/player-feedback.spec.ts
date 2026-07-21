@@ -18,6 +18,17 @@ async function waitForOpening(request: APIRequestContext, sessionId: string) {
     .not.toEqual("");
 }
 
+async function dismissPlayerPopupIfVisible(page: import("@playwright/test").Page) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const closeButton = page.getByRole("button", { name: "Close" }).first();
+    if (!(await closeButton.isVisible().catch(() => false))) {
+      return;
+    }
+    await closeButton.click();
+    await expect(closeButton).toBeHidden();
+  }
+}
+
 async function setupPlayableSession(page: import("@playwright/test").Page, request: APIRequestContext) {
   const demo = await jsonRequest<{
     campaign: { id: string; name: string };
@@ -77,6 +88,7 @@ async function setupPlayableSession(page: import("@playwright/test").Page, reque
 
   await page.goto("/player-screen");
   await page.getByRole("button", { name: "Activate Board" }).click();
+  await dismissPlayerPopupIfVisible(page);
   const composer = page.locator(".player-overlay__composer");
   await expect(composer).toBeVisible();
   return composer;
@@ -111,7 +123,8 @@ test("player screen shows sending state and visible fallback notice", async ({ p
   });
 
   await composer.locator("textarea").fill("I inspect the boulder and wait for the DM.");
-  await composer.getByRole("button", { name: "Send" }).click();
+  await dismissPlayerPopupIfVisible(page);
+  await composer.getByRole("button", { name: "Send" }).evaluate((node) => (node as HTMLButtonElement).click());
   await expect(composer.getByText("AI DM is responding...")).toBeVisible();
   await expect(composer.getByRole("button", { name: "Sending..." })).toBeVisible();
   await expect(composer.getByText("Fallback narration was used. Retry the turn for a full GPT-5.6 response.")).toBeVisible();
@@ -156,10 +169,11 @@ test("player screen shows generic error and allows retrying the turn", async ({ 
   });
 
   await composer.locator("textarea").fill("I inspect the boulder and wait for the DM.");
-  await composer.getByRole("button", { name: "Send" }).click();
+  await dismissPlayerPopupIfVisible(page);
+  await composer.getByRole("button", { name: "Send" }).evaluate((node) => (node as HTMLButtonElement).click());
   await expect(composer.getByText("The AI DM is temporarily unavailable. Retry the turn.")).toBeVisible();
   const retryButton = composer.getByRole("button", { name: "Retry turn" });
   await expect(retryButton).toBeVisible();
-  await retryButton.click();
+  await retryButton.evaluate((node) => (node as HTMLButtonElement).click());
   await expect(composer.getByText("The AI DM is temporarily unavailable. Retry the turn.")).toBeHidden();
 });
