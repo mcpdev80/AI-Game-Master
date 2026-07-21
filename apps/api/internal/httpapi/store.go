@@ -40,6 +40,10 @@ func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
+	if err := store.ensureBundledDemoCharacters(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("ensure bundled demo characters: %w", err)
+	}
 
 	return store, nil
 }
@@ -50,6 +54,26 @@ func (s *Store) Close() {
 
 func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
+}
+
+func (s *Store) ensureBundledDemoCharacters(ctx context.Context) error {
+	rows, err := s.pool.Query(ctx, `SELECT id::text FROM characters LIMIT 1`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return rows.Err()
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, character := range bundledDemoCharacters() {
+		if _, err := s.CreateCharacter(ctx, character); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) ListHiddenSystemDocumentIDs(ctx context.Context) (map[string]struct{}, error) {
@@ -205,6 +229,23 @@ func (s *Store) migrate(ctx context.Context) error {
 			joined_at TIMESTAMPTZ NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
+		`CREATE TABLE IF NOT EXISTS session_companions (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+			character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+			display_name TEXT NOT NULL DEFAULT '',
+			control_mode TEXT NOT NULL DEFAULT 'dm',
+			status TEXT NOT NULL DEFAULT 'active',
+			tactics_note TEXT NOT NULL DEFAULT '',
+			visibility TEXT NOT NULL DEFAULT 'player_visible',
+			current_hit_points INT NULL,
+			temporary_hit_points INT NULL,
+			conditions_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+			resource_overrides_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE (session_id, character_id)
+		)`,
 		`CREATE TABLE IF NOT EXISTS player_access_links (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			player_slot_id UUID NOT NULL REFERENCES player_slots(id) ON DELETE CASCADE,
@@ -275,6 +316,8 @@ func (s *Store) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_characters_campaign_id ON characters(campaign_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_characters_document_id ON characters(document_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_player_slots_session_id ON player_slots(session_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_companions_session_id ON session_companions(session_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_companions_character_id ON session_companions(character_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_player_access_links_slot_id ON player_access_links(player_slot_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_llm_sessions_scope ON llm_sessions(scope_type, scope_id)`,
@@ -2370,6 +2413,35 @@ func expandedSearchTokens(tokens []string) []string {
 			add("talent")
 		case strings.Contains(token, "monster"):
 			add("monster")
+		case strings.Contains(token, "abbey") || strings.Contains(token, "abtei"):
+			add("abbey")
+			add("abtei")
+		case strings.Contains(token, "crypt") || strings.Contains(token, "krypt"):
+			add("crypt")
+			add("krypta")
+		case strings.Contains(token, "brother") || strings.Contains(token, "bruder"):
+			add("brother")
+			add("bruder")
+		case strings.Contains(token, "hag") || strings.Contains(token, "hexe") || strings.Contains(token, "witch"):
+			add("hag")
+			add("hexe")
+			add("witch")
+		case strings.Contains(token, "roof") || strings.Contains(token, "dach"):
+			add("roof")
+			add("dach")
+		case strings.Contains(token, "tower") || strings.Contains(token, "turm") || strings.Contains(token, "belltower") || strings.Contains(token, "glockenturm"):
+			add("tower")
+			add("turm")
+			add("belltower")
+			add("glockenturm")
+		case strings.Contains(token, "map") || strings.Contains(token, "karte") || strings.Contains(token, "battlemap"):
+			add("map")
+			add("karte")
+			add("battlemap")
+		case strings.Contains(token, "letter") || strings.Contains(token, "brief") || strings.Contains(token, "handout"):
+			add("letter")
+			add("brief")
+			add("handout")
 		}
 	}
 
@@ -2591,6 +2663,56 @@ func (s *Store) ListSessionEvents(ctx context.Context, sessionID string, limit i
 		items = append(items, item)
 	}
 
+	return items, rows.Err()
+}
+
+func (s *Store) ListPrivateChatMessages(ctx context.Context, sessionID string, playerSlotID string, limit int) ([]PrivateChatMessage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, session_id::text, payload_json, created_at
+		FROM session_events
+		WHERE session_id = $1
+		  AND type = 'private_sidebar_message'
+		  AND payload_json->>'player_slot_id' = $2
+		ORDER BY created_at ASC
+		LIMIT $3
+	`, sessionID, playerSlotID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]PrivateChatMessage, 0)
+	for rows.Next() {
+		var id string
+		var sid string
+		var rawPayload []byte
+		var createdAt time.Time
+		if err := rows.Scan(&id, &sid, &rawPayload, &createdAt); err != nil {
+			return nil, err
+		}
+		payload := map[string]any{}
+		if len(rawPayload) > 0 {
+			if err := json.Unmarshal(rawPayload, &payload); err != nil {
+				return nil, err
+			}
+		}
+		msg := PrivateChatMessage{
+			ID:           id,
+			SessionID:    sid,
+			PlayerSlotID: strings.TrimSpace(fmt.Sprintf("%v", payload["player_slot_id"])),
+			Role:         strings.TrimSpace(fmt.Sprintf("%v", payload["role"])),
+			Content:      strings.TrimSpace(fmt.Sprintf("%v", payload["content"])),
+			Language:     strings.TrimSpace(fmt.Sprintf("%v", payload["language"])),
+			CreatedAt:    createdAt,
+		}
+		if characterID := strings.TrimSpace(fmt.Sprintf("%v", payload["character_id"])); characterID != "" && characterID != "<nil>" {
+			msg.CharacterID = &characterID
+		}
+		items = append(items, msg)
+	}
 	return items, rows.Err()
 }
 

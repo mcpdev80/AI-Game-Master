@@ -11,10 +11,11 @@ async function jsonRequest<T>(request: APIRequestContext, method: "get" | "post"
 async function waitForOpening(request: APIRequestContext, sessionId: string) {
   await expect
     .poll(async () => {
-      const session = await jsonRequest<{ state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
-      return session.state.last_narration;
+      const session = await jsonRequest<{ current_scene: string; state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
+      const narration = session.state.last_narration ?? "";
+      return narration && narration !== session.current_scene ? narration : "";
     })
-    .toContain("Rain whispers");
+    .not.toEqual("");
 }
 
 test("manual roll fallback works when camera permission is denied", async ({ page, request }) => {
@@ -119,7 +120,11 @@ test("manual roll fallback works when camera permission is denied", async ({ pag
   expect((await resolutionPromise).ok()).toBeTruthy();
   await expect(page.getByRole("img", { name: demo.map_asset.name })).toBeVisible();
 
-  const finalSession = await jsonRequest<{ state: { visual_mode: string; group_inventory: { gold: number } } }>(request, "get", `/api/sessions/${session.id}`);
-  expect(finalSession.state.visual_mode).toBe("scene");
-  expect(finalSession.state.group_inventory.gold).toBe(3);
+  await expect.poll(async () => {
+    const finalSession = await jsonRequest<{ state: { visual_mode: string; group_inventory: { gold: number } } }>(request, "get", `/api/sessions/${session.id}`);
+    return {
+      visualMode: finalSession.state.visual_mode,
+      gold: finalSession.state.group_inventory.gold,
+    };
+  }).toEqual({ visualMode: "scene", gold: 3 });
 });

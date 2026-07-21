@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Activity, BookOpen, Calendar, Monitor, User } from "lucide-react";
-import { LanguageSwitcher } from "./language-switcher";
 import { getWebBuildInfo } from "../lib/build-info";
 import { useI18n, type MessageKey } from "../lib/i18n";
 
@@ -62,15 +61,11 @@ export function StudioShell({ children }: StudioShellProps) {
             <span>v{build.version}</span>
             <span>{build.commit}</span>
           </div>
-          <LanguageSwitcher />
         </div>
       </aside>
 
       <main className="studio-main">
         <div className="studio-vignette" aria-hidden="true" />
-        <div className="studio-language-mobile">
-          <LanguageSwitcher compact />
-        </div>
         {children}
       </main>
 

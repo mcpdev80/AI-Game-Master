@@ -25,22 +25,23 @@ type Adventure struct {
 }
 
 type Session struct {
-	ID                    string       `json:"id"`
-	CampaignID            string       `json:"campaign_id"`
-	Name                  string       `json:"name"`
-	AdventureID           *string      `json:"adventure_id"`
-	RulesetWork           string       `json:"ruleset_work"`
-	RulesetVersion        string       `json:"ruleset_version"`
-	TargetPlayerCount     int          `json:"target_player_count"`
-	JoinToken             string       `json:"join_token"`
-	Status                string       `json:"status"`
-	CurrentScene          string       `json:"current_scene"`
-	CurrentLocation       string       `json:"current_location"`
-	Language              string       `json:"language"`
-	DefaultVoiceProfileID *string      `json:"default_voice_profile_id"`
-	State                 SessionState `json:"state"`
-	CreatedAt             time.Time    `json:"created_at"`
-	UpdatedAt             time.Time    `json:"updated_at"`
+	ID                    string             `json:"id"`
+	CampaignID            string             `json:"campaign_id"`
+	Name                  string             `json:"name"`
+	AdventureID           *string            `json:"adventure_id"`
+	RulesetWork           string             `json:"ruleset_work"`
+	RulesetVersion        string             `json:"ruleset_version"`
+	TargetPlayerCount     int                `json:"target_player_count"`
+	JoinToken             string             `json:"join_token"`
+	Status                string             `json:"status"`
+	CurrentScene          string             `json:"current_scene"`
+	CurrentLocation       string             `json:"current_location"`
+	Language              string             `json:"language"`
+	DefaultVoiceProfileID *string            `json:"default_voice_profile_id"`
+	State                 SessionState       `json:"state"`
+	Companions            []SessionCompanion `json:"companions,omitempty"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
 }
 
 type SessionState struct {
@@ -99,11 +100,21 @@ type CombatState struct {
 }
 
 type CombatTurnEntry struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Side       string `json:"side"`
-	Initiative int    `json:"initiative"`
-	Status     string `json:"status,omitempty"`
+	ID                 string `json:"id"`
+	CharacterID        string `json:"character_id,omitempty"`
+	Name               string `json:"name"`
+	Side               string `json:"side"`
+	ParticipantType    string `json:"participant_type,omitempty"`
+	ControlMode        string `json:"control_mode,omitempty"`
+	Initiative         int    `json:"initiative"`
+	Status             string `json:"status,omitempty"`
+	ArmorClass         int    `json:"armor_class,omitempty"`
+	HitPointMax        int    `json:"hit_point_max,omitempty"`
+	CurrentHitPoints   int    `json:"current_hit_points,omitempty"`
+	TemporaryHitPoints int    `json:"temporary_hit_points,omitempty"`
+	DeathSaveSuccesses int    `json:"death_save_successes,omitempty"`
+	DeathSaveFailures  int    `json:"death_save_failures,omitempty"`
+	Stable             bool   `json:"stable,omitempty"`
 }
 
 type CombatLogEntry struct {
@@ -212,6 +223,24 @@ type PlayerSlot struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
+type SessionCompanion struct {
+	ID                 string         `json:"id"`
+	SessionID          string         `json:"session_id"`
+	CharacterID        string         `json:"character_id"`
+	DisplayName        string         `json:"display_name"`
+	ControlMode        string         `json:"control_mode"`
+	Status             string         `json:"status"`
+	TacticsNote        string         `json:"tactics_note"`
+	Visibility         string         `json:"visibility"`
+	CurrentHitPoints   *int           `json:"current_hit_points,omitempty"`
+	TemporaryHitPoints *int           `json:"temporary_hit_points,omitempty"`
+	Conditions         []string       `json:"conditions"`
+	ResourceOverrides  map[string]any `json:"resource_overrides"`
+	Character          *Character     `json:"character,omitempty"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+}
+
 type PlayerAccessLink struct {
 	ID           string     `json:"id"`
 	PlayerSlotID string     `json:"player_slot_id"`
@@ -243,6 +272,22 @@ type CreatePlayerLinkRequest struct {
 type UpdatePlayerVisibleStateRequest struct {
 	HandoutDocumentIDs []string `json:"handout_document_ids"`
 	MediaAssetIDs      []string `json:"media_asset_ids"`
+}
+
+type UpdatePlayerPortalCharacterRequest struct {
+	CurrentHitPoints   *int     `json:"current_hit_points"`
+	TemporaryHitPoints *int     `json:"temporary_hit_points"`
+	CurrentMoney       *string  `json:"current_money"`
+	ExperiencePoints   *string  `json:"experience_points"`
+	Inspiration        *string  `json:"inspiration"`
+	SessionNotes       *string  `json:"session_notes"`
+	CurrentInventory   []string `json:"current_inventory"`
+}
+
+type UpdatePlayerPortalGroupInventoryRequest struct {
+	Gold  *int     `json:"gold"`
+	Items []string `json:"items"`
+	Notes *string  `json:"notes"`
 }
 
 type ResolveAbilityScoresRequest struct {
@@ -321,6 +366,28 @@ type PlayerPortalSession struct {
 	Character           *Character         `json:"character"`
 	VisibleState        PlayerVisibleState `json:"visible_state"`
 	AvailableCharacters []Character        `json:"available_characters"`
+}
+
+type PrivateChatMessage struct {
+	ID           string    `json:"id"`
+	SessionID    string    `json:"session_id"`
+	PlayerSlotID string    `json:"player_slot_id"`
+	CharacterID  *string   `json:"character_id,omitempty"`
+	Role         string    `json:"role"`
+	Content      string    `json:"content"`
+	Language     string    `json:"language"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type PlayerPortalPrivateChatRequest struct {
+	Message  string `json:"message" binding:"required,min=1,max=4000"`
+	Language string `json:"language"`
+}
+
+type PlayerPortalPrivateChatResponse struct {
+	Message  PrivateChatMessage   `json:"message"`
+	Reply    PrivateChatMessage   `json:"reply"`
+	Messages []PrivateChatMessage `json:"messages"`
 }
 
 type CreateCampaignRequest struct {
@@ -545,17 +612,24 @@ type LLMGatewayProfileStatus struct {
 }
 
 type CreateSessionRequest struct {
-	CampaignID            string  `json:"campaign_id"`
-	Name                  string  `json:"name" binding:"required,min=2,max=160"`
-	AdventureID           *string `json:"adventure_id"`
-	RulesetWork           string  `json:"ruleset_work" binding:"required,min=1,max=120"`
-	RulesetVersion        string  `json:"ruleset_version" binding:"required,min=1,max=120"`
-	TargetPlayerCount     int     `json:"target_player_count" binding:"required,min=1,max=12"`
-	Status                string  `json:"status"`
-	CurrentScene          string  `json:"current_scene"`
-	CurrentLocation       string  `json:"current_location"`
-	Language              string  `json:"language"`
-	DefaultVoiceProfileID *string `json:"default_voice_profile_id"`
+	CampaignID            string                           `json:"campaign_id"`
+	Name                  string                           `json:"name" binding:"required,min=2,max=160"`
+	AdventureID           *string                          `json:"adventure_id"`
+	RulesetWork           string                           `json:"ruleset_work" binding:"required,min=1,max=120"`
+	RulesetVersion        string                           `json:"ruleset_version" binding:"required,min=1,max=120"`
+	TargetPlayerCount     int                              `json:"target_player_count" binding:"required,min=1,max=12"`
+	Status                string                           `json:"status"`
+	CurrentScene          string                           `json:"current_scene"`
+	CurrentLocation       string                           `json:"current_location"`
+	Language              string                           `json:"language"`
+	DefaultVoiceProfileID *string                          `json:"default_voice_profile_id"`
+	CompanionTemplates    []CreateSessionCompanionTemplate `json:"companion_templates,omitempty"`
+}
+
+type CreateSessionCompanionTemplate struct {
+	TemplateCharacterID string `json:"template_character_id"`
+	Name                string `json:"name"`
+	TacticsNote         string `json:"tactics_note,omitempty"`
 }
 
 type UpdateSessionRequest struct {
@@ -617,6 +691,24 @@ type UpdatePlayerSlotCharacterRequest struct {
 
 type UpdatePlayerSlotStatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=invited joined ready locked"`
+}
+
+type CreateSessionCompanionRequest struct {
+	CharacterID string `json:"character_id" binding:"required,uuid"`
+	DisplayName string `json:"display_name"`
+	TacticsNote string `json:"tactics_note"`
+	Visibility  string `json:"visibility"`
+}
+
+type UpdateSessionCompanionRequest struct {
+	DisplayName        *string        `json:"display_name"`
+	Status             *string        `json:"status"`
+	TacticsNote        *string        `json:"tactics_note"`
+	Visibility         *string        `json:"visibility"`
+	CurrentHitPoints   *int           `json:"current_hit_points"`
+	TemporaryHitPoints *int           `json:"temporary_hit_points"`
+	Conditions         []string       `json:"conditions"`
+	ResourceOverrides  map[string]any `json:"resource_overrides"`
 }
 
 type UpdateSessionRuntimeStateRequest struct {

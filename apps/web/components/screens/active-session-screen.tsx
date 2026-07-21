@@ -8,6 +8,8 @@ import { combatIndicatorForTurn, findCombatCharacter } from "../../lib/combat-ui
 import { useI18n } from "../../lib/i18n";
 import {
   apiPost,
+  createSessionCompanion,
+  deleteSessionCompanion,
   fetchCharacters,
   fetchPlayerLinks,
   fetchSession,
@@ -24,6 +26,7 @@ import {
   type GMResponse,
   type PlayerLinkSlot,
   type Session,
+  type SessionCompanion,
   type SessionEvent,
 } from "../../lib/api";
 
@@ -144,6 +147,22 @@ function summarizeEvent(event: SessionEvent, locale: "en" | "de"): { title: stri
     };
   }
 
+  if (event.type === "private_sidebar_message") {
+    const role = typeof event.payload.role === "string" ? event.payload.role : "";
+    const displayName = typeof event.payload.display_name === "string" ? event.payload.display_name : "";
+    const characterName = typeof event.payload.character_name === "string" ? event.payload.character_name : "";
+    const content = typeof event.payload.content === "string" ? event.payload.content : locale === "de" ? "Keine Nachricht" : "No message";
+    const speaker =
+      role === "assistant"
+        ? locale === "de" ? "KI-Spielleiter" : "AI DM"
+        : displayName || characterName || (locale === "de" ? "Unbekannt" : "Unknown");
+    const detail = characterName && displayName && characterName !== displayName ? `${displayName} · ${characterName}` : characterName || displayName;
+    return {
+      title: detail ? `${speaker} · ${detail}` : speaker,
+      body: content,
+    };
+  }
+
   return {
     title: event.type,
     body: JSON.stringify(event.payload),
@@ -182,9 +201,12 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
   const [error, setError] = useState<string | null>(null);
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
   const [selectedCharacterTab, setSelectedCharacterTab] = useState<SessionSheetTab>("overview");
+  const [selectedCompanionCharacterId, setSelectedCompanionCharacterId] = useState("");
+  const [companionTacticsNote, setCompanionTacticsNote] = useState("");
   const [joinUrlCopied, setJoinUrlCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const recentEvents = liveEvents.slice(0, 8);
+  const recentEvents = liveEvents.filter((event) => event.type !== "private_sidebar_message").slice(0, 8);
+  const privateSidebarEvents = liveEvents.filter((event) => event.type === "private_sidebar_message").slice(0, 20);
   const releasedHandouts = documents.filter((document) => document.type === "handout" || document.type === "character_sheet" || document.type === "adventure");
   const releasedAssets = assets.filter((asset) => ["image", "portrait", "battlemap", "map", "handout"].includes(asset.type));
   const availableRulesets = buildRulesetOptions(documents);
@@ -200,6 +222,15 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
   const joinUrl = `/session-join/${liveSession.join_token}`;
   const joinUrlAbsolute =
     typeof window !== "undefined" ? `${window.location.origin}${joinUrl}` : joinUrl;
+  const assignedCharacterIDs = new Set<string>([
+    ...livePlayerLinks.flatMap((entry) => (entry.player_slot.character_id ? [entry.player_slot.character_id] : [])),
+    ...(liveSession.companions ?? []).map((companion) => companion.character_id),
+  ]);
+  const availableCompanionCharacters = liveCharacters.filter((character) => {
+    if (assignedCharacterIDs.has(character.id)) return false;
+    if (character.campaign_id && character.campaign_id !== liveSession.campaign_id) return false;
+    return true;
+  });
 
   useEffect(() => {
     setLiveSession(session);
@@ -366,6 +397,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
     const allies = String(characterMetaValue(character, "allies") ?? "");
     const weaponNotes = splitLines(characterMetaValue(character, "weapon_notes"));
     const spellNotes = String(characterMetaValue(character, "spell_notes") ?? "");
+    const featureNotes = String(characterMetaValue(character, "feature_notes") ?? "");
     const combatAttacks = String(characterMetaValue(character, "combat_attacks") ?? "");
     const spellAttacks = String(characterMetaValue(character, "spell_attacks") ?? "");
     const age = String(characterMetaValue(character, "age") ?? "—");
@@ -503,6 +535,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
               <dl className="sheet-detail-list">
                 <div><dt>{tr("Spells", "Zauber")}</dt><dd>{spells.join(", ") || "—"}</dd></div>
                 <div><dt>{tr("Spell Notes", "Zaubernotizen")}</dt><dd>{spellNotes || "—"}</dd></div>
+                <div><dt>{tr("Feature Notes", "Merkmalsnotizen")}</dt><dd style={{ whiteSpace: "pre-wrap" }}>{featureNotes || "—"}</dd></div>
                 <div><dt>{tr("Spell Attacks", "Zauberangriffe")}</dt><dd style={{ whiteSpace: "pre-wrap" }}>{spellAttacks || "—"}</dd></div>
               </dl>
             </section>
@@ -609,6 +642,39 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
         router.refresh();
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : tr("Could not save session", "Sitzung konnte nicht gespeichert werden"));
+      }
+    });
+  }
+
+  function handleAddCompanion() {
+    if (!selectedCompanionCharacterId) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await createSessionCompanion(liveSession.id, {
+          character_id: selectedCompanionCharacterId,
+          tactics_note: companionTacticsNote.trim(),
+          visibility: "player_visible",
+        });
+        const refreshed = await fetchSession(liveSession.id);
+        setLiveSession(refreshed);
+        setSelectedCompanionCharacterId("");
+        setCompanionTacticsNote("");
+      } catch (companionError) {
+        setError(companionError instanceof Error ? companionError.message : tr("Could not add companion", "Companion konnte nicht hinzugefügt werden"));
+      }
+    });
+  }
+
+  function handleRemoveCompanion(companion: SessionCompanion) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await deleteSessionCompanion(companion.id);
+        const refreshed = await fetchSession(liveSession.id);
+        setLiveSession(refreshed);
+      } catch (companionError) {
+        setError(companionError instanceof Error ? companionError.message : tr("Could not remove companion", "Companion konnte nicht entfernt werden"));
       }
     });
   }
@@ -736,7 +802,63 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 <dt>{tr("Ambient", "Umgebung")}</dt>
                 <dd>{liveSession.state.ambient_cue_id || tr("None", "Keine")}</dd>
               </div>
+              <div>
+                <dt>{tr("What happened so far", "Was bisher geschah")}</dt>
+                <dd>{liveSession.state.session_recap || tr("No story recap yet.", "Noch keine Story-Zusammenfassung.")}</dd>
+              </div>
             </dl>
+          </Panel>
+
+          <Panel title={tr("DM Companions", "DM-Companions")} description={tr("Add existing characters as AI DM-controlled party companions.", "Bestehende Charaktere als KI-DM-gesteuerte Gruppenbegleiter hinzufügen.")}>
+            <div className="form-grid">
+              <select onChange={(event) => setSelectedCompanionCharacterId(event.target.value)} value={selectedCompanionCharacterId}>
+                <option value="">{tr("Choose character", "Charakter wählen")}</option>
+                {availableCompanionCharacters.map((character) => (
+                  <option key={character.id} value={character.id}>
+                    {character.name} · {character.race || "—"} · {character.class_and_level || "—"}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                className="studio-textarea"
+                onChange={(event) => setCompanionTacticsNote(event.target.value)}
+                placeholder={tr("Optional tactics note, e.g. protect the wizard or heal first.", "Optionale Taktiknotiz, z. B. beschütze den Magier oder heile zuerst.")}
+                rows={3}
+                value={companionTacticsNote}
+              />
+              <div className="button-row">
+                <button className="studio-button" disabled={isPending || !selectedCompanionCharacterId} onClick={handleAddCompanion} type="button">
+                  <Users size={16} />
+                  {tr("Add Companion", "Companion hinzufügen")}
+                </button>
+              </div>
+            </div>
+            <div className="list-stack">
+              {(liveSession.companions ?? []).map((companion) => (
+                <div className="scope-card" key={companion.id}>
+                  <div className="button-row">
+                    <StatusPill tone="info">{tr("DM Controlled", "DM-gesteuert")}</StatusPill>
+                    <StatusPill tone={companion.status === "active" ? "ready" : "warning"}>{companion.status || "active"}</StatusPill>
+                  </div>
+                  <strong>{companion.display_name || companion.character?.name || tr("Unnamed companion", "Unbenannter Companion")}</strong>
+                  <p>{companion.character ? `${companion.character.race || "—"} · ${companion.character.class_and_level || "—"}` : "—"}</p>
+                  <p>{companion.tactics_note || tr("No tactics note.", "Keine Taktiknotiz.")}</p>
+                  <div className="button-row">
+                    {companion.character ? (
+                      <button className="studio-button studio-button--ghost" onClick={() => openCharacterSheet(companion.character!)} type="button">
+                        <FileText size={16} />
+                        {tr("Open Sheet", "Bogen öffnen")}
+                      </button>
+                    ) : null}
+                    <button className="studio-button studio-button--ghost" disabled={isPending} onClick={() => handleRemoveCompanion(companion)} type="button">
+                      <X size={16} />
+                      {tr("Remove", "Entfernen")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {(liveSession.companions ?? []).length === 0 ? <p className="muted-copy">{tr("No companions added yet.", "Noch keine Companions hinzugefügt.")}</p> : null}
+            </div>
           </Panel>
 
           <Panel title={tr("Camera Feed", "Kamerabild")} description={tr("Dice and table recognition feed.", "Erkennung von Würfeln und Spieltisch.")}>
@@ -1012,6 +1134,12 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                     {combatState.initiative_order.map((turn) => {
                       const linkedCharacter = findCombatCharacter(turn, liveCharacters, livePlayerLinks);
                       const indicator = combatIndicatorForTurn(turn, linkedCharacter, tr);
+                      const roleLabel =
+                        turn.side === "enemy"
+                          ? tr("Enemy", "Gegner")
+                          : turn.side === "ally"
+                          ? tr("Ally", "Verbündeter")
+                          : tr("Player", "Spieler");
                       return (
                         <div className="list-row list-row--combatant" key={turn.id}>
                           <div className="list-row__body">
@@ -1019,7 +1147,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                               <span className={`combat-health-badge combat-health-badge--${indicator.level}`} aria-hidden="true">{indicator.marker}</span>
                               <div>
                                 <strong>{turn.name}</strong>
-                                <p>{turn.side} · {tr("Initiative", "Initiative")} {turn.initiative}</p>
+                                <p>{roleLabel} · {tr("Initiative", "Initiative")} {turn.initiative}</p>
                               </div>
                             </div>
                           </div>
@@ -1037,7 +1165,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                   {(combatState?.log ?? []).map((entry, index) => (
                     <article className="narrative-card" key={`${entry.timestamp}-${entry.actor_id}-${index}`}>
                       <div className="narrative-card__meta">
-                        <StatusPill tone={entry.side === "enemy" ? "warning" : entry.side === "player" ? "info" : "default"}>
+                        <StatusPill tone={entry.side === "enemy" ? "warning" : entry.side === "player" ? "info" : entry.side === "ally" ? "ready" : "default"}>
                           {entry.kind}
                         </StatusPill>
                       </div>
@@ -1056,6 +1184,32 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 <p className="empty-copy">{tr("No DM notes yet.", "Noch keine Spielleiter-Notizen.")}</p>
               ) : (
                 displayedNotes.map((note) => <p className="note-chip" key={note}>{note}</p>)
+              )}
+            </div>
+          </Panel>
+
+          <Panel
+            title={tr("Private Sidebars", "Private Nebenabsprachen")}
+            description={tr("Private player ↔ AI DM conversations recorded for operator visibility.", "Private Spieler-↔-KI-Spielleiter-Gespräche zur Einsicht für die Spielleitung.")}
+          >
+            <div className="list-stack">
+              {privateSidebarEvents.length === 0 ? (
+                <p className="empty-copy">{tr("No private sidebar messages yet.", "Noch keine privaten Nebenabsprachen.")}</p>
+              ) : (
+                privateSidebarEvents.map((event) => {
+                  const summary = summarizeEvent(event, locale);
+                  const timestamp = new Date(event.created_at).toLocaleString(locale === "de" ? "de-DE" : "en-US");
+                  return (
+                    <article className="narrative-card" key={event.id}>
+                      <div className="narrative-card__meta">
+                        <StatusPill tone="warning">{tr("private", "privat")}</StatusPill>
+                        <span className="muted-copy">{timestamp}</span>
+                      </div>
+                      <strong className="event-title">{summary.title}</strong>
+                      <p>{summary.body}</p>
+                    </article>
+                  );
+                })
               )}
             </div>
           </Panel>

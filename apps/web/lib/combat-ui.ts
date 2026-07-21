@@ -2,9 +2,17 @@ type TrFn = (en: string, de: string) => string;
 
 type CombatTurnLike = {
   id: string;
+  character_id?: string;
   name: string;
   side: string;
+  participant_type?: string;
   status?: string;
+  hit_point_max?: number;
+  current_hit_points?: number;
+  temporary_hit_points?: number;
+  death_save_successes?: number;
+  death_save_failures?: number;
+  stable?: boolean;
 };
 
 type CharacterLike = {
@@ -52,6 +60,26 @@ function currentHitPoints(character: CharacterLike): number | null {
     return current;
   }
   return character.hit_point_max;
+}
+
+function turnCurrentHitPoints(turn: CombatTurnLike): number | null {
+  return parseNumeric(turn.current_hit_points);
+}
+
+function turnTemporaryHitPoints(turn: CombatTurnLike): number {
+  return Math.max(0, parseNumeric(turn.temporary_hit_points) ?? 0);
+}
+
+function turnDeathSaveSuccesses(turn: CombatTurnLike): number {
+  return Math.max(0, Math.min(3, parseNumeric(turn.death_save_successes) ?? 0));
+}
+
+function turnDeathSaveFailures(turn: CombatTurnLike): number {
+  return Math.max(0, Math.min(3, parseNumeric(turn.death_save_failures) ?? 0));
+}
+
+function turnStable(turn: CombatTurnLike): boolean {
+  return parseBoolean(turn.stable);
 }
 
 function temporaryHitPoints(character: CharacterLike): number {
@@ -104,6 +132,12 @@ export function findCombatCharacter(
   if (byID) {
     return byID;
   }
+  if (turn.character_id) {
+    const byCharacterID = characters.find((character) => character.id === turn.character_id);
+    if (byCharacterID) {
+      return byCharacterID;
+    }
+  }
   if (turn.side !== "player") {
     return null;
   }
@@ -112,6 +146,58 @@ export function findCombatCharacter(
 }
 
 export function combatIndicatorForTurn(turn: CombatTurnLike, character: CharacterLike | null, tr: TrFn): CombatIndicator {
+  const turnMaxHP = Math.max(0, parseNumeric(turn.hit_point_max) ?? 0);
+  const turnCurrentHP = turnCurrentHitPoints(turn);
+  const turnTempHP = turnTemporaryHitPoints(turn);
+  const turnSuccesses = turnDeathSaveSuccesses(turn);
+  const turnFailures = turnDeathSaveFailures(turn);
+  const turnIsStable = turnStable(turn);
+  if (turnCurrentHP !== null && turnMaxHP >= 0) {
+    if (turnCurrentHP <= 0) {
+      if (turnFailures >= 3 || String(turn.status ?? "").toLowerCase().includes("dead")) {
+        return {
+          level: "dead",
+          marker: markerForLevel("dead"),
+          label: tr("Dead", "Tot"),
+          details: tr("3 failed death saves", "3 misslungene Todessaves"),
+        };
+      }
+      if (turnIsStable || turnSuccesses >= 3) {
+        return {
+          level: "stable",
+          marker: markerForLevel("stable"),
+          label: tr("Stable", "Stabil"),
+          details: tr(`0 HP · ${turnSuccesses} successes / ${turnFailures} failures`, `0 TP · ${turnSuccesses} Erfolge / ${turnFailures} Fehlschläge`),
+        };
+      }
+      return {
+        level: "downed",
+        marker: markerForLevel("downed"),
+        label: tr("Dying", "Am Boden"),
+        details: tr(`0 HP · ${turnSuccesses} successes / ${turnFailures} failures`, `0 TP · ${turnSuccesses} Erfolge / ${turnFailures} Fehlschläge`),
+      };
+    }
+    if (turnMaxHP > 0) {
+      const ratio = Math.max(0, turnCurrentHP) / turnMaxHP;
+      const level = hpLevelForRatio(ratio);
+      const baseDetails = turnTempHP > 0 ? `${turnCurrentHP}/${turnMaxHP} HP + ${turnTempHP} THP` : `${turnCurrentHP}/${turnMaxHP} HP`;
+      return {
+        level,
+        marker: markerForLevel(level),
+        label:
+          level === "healthy"
+            ? tr("Healthy", "Fit")
+            : level === "wounded"
+            ? tr("Wounded", "Angeschlagen")
+            : level === "critical"
+            ? tr("Critical", "Kritisch")
+            : level === "near-death"
+            ? tr("Near Death", "Fast tot")
+            : tr("Down", "Am Boden"),
+        details: baseDetails,
+      };
+    }
+  }
   if (character) {
     const maxHP = Math.max(0, character.hit_point_max ?? 0);
     const currentHP = currentHitPoints(character);

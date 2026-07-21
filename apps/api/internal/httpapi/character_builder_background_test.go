@@ -213,6 +213,37 @@ func TestBuilderDeterministicSkillRepairReplyMarksMissingClassSkillsAfterStageAd
 	}
 }
 
+func TestBuilderDeterministicSkillRepairReplyRecoversBackgroundAndSavingThrowsFromPriorAssistantState(t *testing.T) {
+	character := Character{
+		ClassAndLevel: "Paladin 3 / Zauberer 1",
+		Background:    "Ritter",
+		Metadata: map[string]any{
+			"builder_stage":       "hit_points_hit_dice_and_movement",
+			"skill_proficiencies": []string{},
+		},
+	}
+	previousAssistant := "Die Fertigkeiten sind übernommen: Athletik und Wahrnehmung aus dem Hintergrund „Ritter“, Motiv erkennen und Überzeugen vom Paladin. Als startender Paladin beherrschst du außerdem Weisheits- und Charismarettungswürfe."
+	reply, patch, ok := builderDeterministicSkillRepairReply(character, "hit_points_hit_dice_and_movement", "past du must es aber noch übernehmen! Athletik ist auch noch nicht als geübt und auch nicht Wahrnehmung das musst du auch noch korrigieren! Klassen merkmale nehme ich Motiv erkennen und Überzeugen", previousAssistant)
+	if !ok {
+		t.Fatal("expected skill repair reply with prior assistant recovery")
+	}
+	if !strings.Contains(reply, "Athletik") || !strings.Contains(reply, "Überzeugen") {
+		t.Fatalf("reply should mention repaired skills, got: %s", reply)
+	}
+	backgroundSkills := stringListFromAny(patch.Metadata["background_skill_proficiencies"])
+	if got := strings.Join(backgroundSkills, ", "); got != "Athletik, Wahrnehmung" {
+		t.Fatalf("unexpected recovered background skills: %s", got)
+	}
+	classSkills := stringListFromAny(patch.Metadata["class_skill_proficiencies"])
+	if got := strings.Join(classSkills, ", "); got != "Motiv erkennen, Überzeugen" {
+		t.Fatalf("unexpected recovered class skills: %s", got)
+	}
+	savingThrows := stringListFromAny(patch.Metadata["saving_throw_proficiencies"])
+	if got := strings.Join(savingThrows, ", "); got != "Weisheit, Charisma" {
+		t.Fatalf("unexpected recovered saving throws: %s", got)
+	}
+}
+
 func TestBuilderDeterministicEquipmentAdviceReplyListsFighterOptionsAndRecommendation(t *testing.T) {
 	character := Character{ClassAndLevel: "Kämpfer, Stufe 1", Background: "Ritter"}
 	reply, ok := builderDeterministicEquipmentAdviceReply(character, "welche Startausrüstungsoptionen habe ich?")
@@ -239,6 +270,28 @@ func TestBuilderDeterministicEquipmentReplyCanApplyRecommendedLoadout(t *testing
 	items := stringListFromAny(patch.Metadata["starting_equipment"])
 	if got := strings.Join(items, ", "); got != "Kettenhemd, Langschwert und Schild, leichte Armbrust mit 20 Bolzen, Entdeckerausrüstung" {
 		t.Fatalf("unexpected starting equipment: %s", got)
+	}
+}
+
+func TestBuilderDeterministicEquipmentReplyFallsBackToAdviceWhileEquipmentIsStillEmpty(t *testing.T) {
+	character := Character{
+		ClassAndLevel: "Paladin, Stufe 1",
+		Background:    "Ritter",
+		Metadata: map[string]any{
+			"starting_equipment": []string{},
+		},
+	}
+	reply, patch, ok := builderDeterministicEquipmentReply(character, "was schlägst du vor", "Jetzt tragen wir die Ausrüstung und das Geld sauber ein.")
+	if !ok {
+		t.Fatal("expected equipment advice fallback")
+	}
+	if len(patch.Metadata) != 0 {
+		t.Fatalf("expected no patch for advice-only reply, got %#v", patch.Metadata)
+	}
+	for _, expected := range []string{"Startausrüstungsoptionen", "Langschwert", "Schild", "Kettenhemd"} {
+		if !strings.Contains(reply, expected) {
+			t.Fatalf("reply does not contain %q: %s", expected, reply)
+		}
 	}
 }
 
@@ -333,8 +386,27 @@ func TestBuilderDeterministicSpellcastingReplyStoresStructuredSpellAttackRows(t 
 			t.Fatalf("expected spell attack rows to contain %q, got %q", expected, rows)
 		}
 	}
+	for _, forbidden := range []string{"Magierhand", "Fingerfertigkeit", "Schild", "Magische Rüstung"} {
+		if strings.Contains(rows, forbidden) {
+			t.Fatalf("did not expect non-attack spell %q in spell attack rows: %q", forbidden, rows)
+		}
+	}
 	if !strings.Contains(rows, "Beschreibung:") {
 		t.Fatalf("expected german spell descriptions, got %q", rows)
+	}
+	notes, ok := patch.Metadata["spell_notes"].(string)
+	if !ok {
+		t.Fatalf("expected spell_notes string, got %#v", patch.Metadata["spell_notes"])
+	}
+	for _, expected := range []string{"Magierhand:", "Fingerfertigkeit:", "Schild:", "Magische Rüstung:"} {
+		if !strings.Contains(notes, expected) {
+			t.Fatalf("expected spell notes to contain %q, got %q", expected, notes)
+		}
+	}
+	for _, forbidden := range []string{"Feuerpfeil:", "Magisches Geschoss:", "Schlaf:"} {
+		if strings.Contains(notes, forbidden) {
+			t.Fatalf("did not expect attack/save spell %q in spell notes: %q", forbidden, notes)
+		}
 	}
 }
 
@@ -360,6 +432,9 @@ func TestBuilderDeterministicGuidedChoiceCompletionKeepsSpellcastingStageConfirm
 	rows, ok := completion.Patch.Metadata["spell_attacks"].(string)
 	if !ok || !strings.Contains(rows, "Zaubertrick |") {
 		t.Fatalf("expected structured spell attack rows in patch, got %#v", completion.Patch.Metadata["spell_attacks"])
+	}
+	if strings.Contains(rows, "Magierhand") {
+		t.Fatalf("did not expect non-attack spell in spell attack rows, got %q", rows)
 	}
 	if !strings.Contains(rows, "Beschreibung:") {
 		t.Fatalf("expected german spell descriptions in patch, got %q", rows)

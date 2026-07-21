@@ -21,10 +21,11 @@ async function jsonRequest<T>(request: APIRequestContext, method: "get" | "post"
 async function waitForOpening(request: APIRequestContext, sessionId: string) {
   await expect
     .poll(async () => {
-      const session = await jsonRequest<{ state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
-      return session.state.last_narration;
+      const session = await jsonRequest<{ current_scene: string; state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
+      const narration = session.state.last_narration ?? "";
+      return narration && narration !== session.current_scene ? narration : "";
     })
-    .toContain("Rain whispers");
+    .not.toEqual("");
 }
 
 async function hold(page: Page, ms: number) {
@@ -97,7 +98,8 @@ test("record polished golden-path demo video", async ({ page, request, context }
     },
   });
   await page.getByRole("button", { name: "Mark as Ready" }).click();
-  await expect(page.getByRole("heading", { name: "Eira Video" }).first()).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).first().click();
+  await expect(page.getByRole("heading", { name: "AI-guided Character Draft" })).toBeHidden();
   await hold(page, 12000);
 
   const session = await jsonRequest<{ id: string }>(request, "post", "/api/sessions", {

@@ -1,6 +1,10 @@
 package httpapi
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestCombatReadyCharactersFiltersJoinedAndReady(t *testing.T) {
 	input := []map[string]any{
@@ -41,6 +45,72 @@ func TestInitializeCombatStateIncludesMultiplePlayers(t *testing.T) {
 	}
 	if playerCount != 2 {
 		t.Fatalf("expected 2 player turns in initiative order, got %d", playerCount)
+	}
+}
+
+func TestInitializeCombatStateIncludesDMCompanionAsAlly(t *testing.T) {
+	activeCharacters := []map[string]any{
+		{"id": "p1", "name": "Aria", "status": "ready", "participant_type": "player_character", "control_mode": "player", "abilities": map[string]int{"dexterity": 14}, "armor_class": 15, "hit_point_max": 10, "current_hit_points": 10},
+		{"id": "comp1", "character_id": "c1", "name": "Brother Alden", "status": "active", "participant_type": "dm_companion", "control_mode": "dm", "abilities": map[string]int{"dexterity": 10}, "armor_class": 18, "hit_point_max": 11, "current_hit_points": 11},
+	}
+	state := initializeCombatState(
+		Session{},
+		GMRespondRequest{
+			PlayerInput: "I roll initiative against a goblin.",
+			DiceRoll: &DiceRollEvent{
+				Dice: []DiceResult{{Type: "d20", Value: 15}},
+			},
+		},
+		GMResponse{Narration: "A goblin lunges out from the ruined archway.", Language: "en"},
+		activeCharacters,
+	)
+	if !state.Active {
+		t.Fatal("expected combat to be active")
+	}
+	foundAlly := false
+	for _, turn := range state.InitiativeOrder {
+		if turn.ID == "comp1" {
+			foundAlly = true
+			if turn.Side != "ally" {
+				t.Fatalf("expected companion side ally, got %q", turn.Side)
+			}
+			if turn.CharacterID != "c1" {
+				t.Fatalf("expected companion character id c1, got %q", turn.CharacterID)
+			}
+		}
+	}
+	if !foundAlly {
+		t.Fatal("expected DM companion in initiative order")
+	}
+}
+
+func TestResolveAutomatedCombatTurnsProcessesAllyAndEnemyUntilPlayerTurn(t *testing.T) {
+	state := CombatState{
+		Active:          true,
+		Round:           1,
+		ActiveTurnIndex: 0,
+		InitiativeOrder: []CombatTurnEntry{
+			{ID: "comp1", CharacterID: "c1", Name: "Brother Alden", Side: "ally", ParticipantType: "dm_companion", ControlMode: "dm", Initiative: 18, Status: "active", ArmorClass: 18, HitPointMax: 11, CurrentHitPoints: 11},
+			{ID: "enemy:1:goblin", Name: "Goblin Raider", Side: "enemy", ParticipantType: "enemy_npc", ControlMode: "dm", Initiative: 14, Status: "ready", ArmorClass: 15, HitPointMax: 7, CurrentHitPoints: 7},
+			{ID: "p1", CharacterID: "p1", Name: "Aria", Side: "player", ParticipantType: "player_character", ControlMode: "player", Initiative: 12, Status: "ready", ArmorClass: 15, HitPointMax: 10, CurrentHitPoints: 10},
+		},
+	}
+	activeCharacters := []map[string]any{
+		{"id": "comp1", "character_id": "c1", "name": "Brother Alden", "participant_type": "dm_companion", "control_mode": "dm", "combat_attacks": "Mace | +2 | STR | Melee | +4 | 1d6+2 | Bludgeoning", "armor_class": 18, "hit_point_max": 11, "current_hit_points": 11},
+		{"id": "p1", "name": "Aria", "participant_type": "player_character", "control_mode": "player", "armor_class": 15, "hit_point_max": 10, "current_hit_points": 10},
+	}
+	narration, entries := resolveAutomatedCombatTurns("en", &state, activeCharacters)
+	if len(entries) < 1 {
+		t.Fatalf("expected at least one automated combat log entry, got %d", len(entries))
+	}
+	if strings.TrimSpace(narration) == "" {
+		t.Fatal("expected non-empty narration")
+	}
+	if state.ActiveTurnIndex != 2 && state.ActiveTurnIndex != 0 {
+		t.Fatalf("expected turn to resolve to the player or reset after combat, got index %d", state.ActiveTurnIndex)
+	}
+	if state.Active && state.InitiativeOrder[state.ActiveTurnIndex].Side != "player" {
+		t.Fatalf("expected active turn to be player, got %q", state.InitiativeOrder[state.ActiveTurnIndex].Side)
 	}
 }
 
@@ -172,6 +242,125 @@ func TestBuildRewardSummary(t *testing.T) {
 	}, "en")
 	if summary == "" {
 		t.Fatal("expected non-empty reward summary")
+	}
+}
+
+func TestBuildSessionStorySummaryAccumulatesNarrativeWithoutMechanics(t *testing.T) {
+	got := buildSessionStorySummary(
+		Session{CurrentScene: "the web-choked cavern", CurrentLocation: "the lower passage"},
+		SessionState{ActiveNPCs: []string{"Mira"}},
+		"Thoras entered the web-choked cavern and heard movement in the dark.",
+		"Two giant spiders descend from the ceiling. Roll 1d20 for initiative. What do you do now?",
+		"en",
+	)
+	if got == "" {
+		t.Fatal("expected non-empty story summary")
+	}
+	if !strings.Contains(got, "Thoras entered the web-choked cavern") {
+		t.Fatalf("expected prior recap to be preserved, got %q", got)
+	}
+	if !strings.Contains(got, "The story is currently at the web-choked cavern") {
+		t.Fatalf("expected contextual chapter-style sentence, got %q", got)
+	}
+	if !strings.Contains(got, "Two giant spiders descend from the ceiling.") {
+		t.Fatalf("expected narrative consequence in recap, got %q", got)
+	}
+	for _, forbidden := range []string{"1d20", "What do you do now", "initiative"} {
+		if strings.Contains(strings.ToLower(got), strings.ToLower(forbidden)) {
+			t.Fatalf("did not expect %q in story summary: %q", forbidden, got)
+		}
+	}
+}
+
+func TestBuildSessionWorkingSummaryIncludesStorySummary(t *testing.T) {
+	summary := buildSessionWorkingSummary(Session{ID: "s1", CampaignID: "c1"}, SessionState{
+		SceneSummary:  "A cavern opens ahead.",
+		SessionRecap:  "Thoras entered the cavern and spotted movement in the webs.",
+		LastNarration: "The webs tremble as something approaches.",
+	}, GMResponse{})
+	if got := strings.TrimSpace(fmt.Sprint(summary["story_summary"])); got == "" {
+		t.Fatal("expected story_summary in working summary")
+	}
+	if got := strings.TrimSpace(fmt.Sprint(summary["recent_summary"])); got == "" {
+		t.Fatal("expected recent_summary in working summary")
+	}
+}
+
+func TestActiveCharacterContextIncludesSensesAndPassivePerception(t *testing.T) {
+	chunks := activeCharacterContextChunks([]map[string]any{
+		{
+			"id":                  "c1",
+			"name":                "Elira",
+			"class_and_level":     "Wizard 1",
+			"race":                "High Elf",
+			"background":          "Sage",
+			"alignment":           "Neutral Good",
+			"armor_class":         12,
+			"speed":               "30 ft",
+			"hit_point_max":       8,
+			"proficiency_bonus":   "+2",
+			"abilities":           map[string]any{"wisdom": 12},
+			"current_inventory":   []string{"Spellbook"},
+			"current_money":       "10 gp",
+			"experience_points":   "0",
+			"level_up_available":  "false",
+			"features":            []string{"Darkvision"},
+			"languages":           []string{"Common", "Elvish"},
+			"senses":              "Darkvision 60 ft, Passive Perception 13",
+			"skill_proficiencies": []string{"Perception", "Arcana"},
+			"passive_perception":  13,
+		},
+	})
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+	}
+	if !strings.Contains(chunks[0].ChunkText, "Sinne: Darkvision 60 ft, Passive Perception 13") {
+		t.Fatalf("expected senses in chunk text, got %q", chunks[0].ChunkText)
+	}
+	if !strings.Contains(chunks[0].ChunkText, "Passive Wahrnehmung: 13") {
+		t.Fatalf("expected passive perception in chunk text, got %q", chunks[0].ChunkText)
+	}
+}
+
+func TestBuildScenePromptContextIncludesMatchingAdventureEntitiesAndAssets(t *testing.T) {
+	benjamin := "Brother Benjamin"
+	crypt := "Abbey Crypt"
+	context := buildScenePromptContext(
+		Session{CurrentScene: "Vor der Abtei", CurrentLocation: "Eingang"},
+		GMRespondRequest{PlayerInput: "Wer ist Bruder Benjamin und welche Karte der Krypta gibt es?"},
+		map[string]any{},
+		[]GMContextChunk{
+			{DocumentName: "Die Abtei", ChunkText: "Benjamin ist ein verängstigter Mönch in der Abtei. In der alten Krypta wartet Fellehar."},
+		},
+		[]Asset{
+			{Type: "portrait", Name: "Brother_Benjamin.png", EntityName: &benjamin},
+			{Type: "battlemap", Name: "AbbeyCrypt_colour_4k.jpg", LocationName: &crypt, Tags: []string{"battlemap", "abbey_crypt"}},
+		},
+	)
+	known := defaultAnySliceValue(context, "known_npcs")
+	if len(known) == 0 {
+		t.Fatal("expected known_npcs to include matched entity from adventure assets")
+	}
+	adventureCtx := defaultAnySliceValue(context, "adventure_context")
+	if len(adventureCtx) == 0 {
+		t.Fatal("expected adventure_context entries")
+	}
+	foundBenjamin := false
+	foundCryptAsset := false
+	for _, item := range adventureCtx {
+		text := fmt.Sprintf("%v", item)
+		if strings.Contains(text, "Brother Benjamin") || strings.Contains(text, "Benjamin") {
+			foundBenjamin = true
+		}
+		if strings.Contains(text, "AbbeyCrypt") || strings.Contains(text, "Abbey Crypt") {
+			foundCryptAsset = true
+		}
+	}
+	if !foundBenjamin {
+		t.Fatal("expected Benjamin context in adventure_context")
+	}
+	if !foundCryptAsset {
+		t.Fatal("expected crypt asset context in adventure_context")
 	}
 }
 

@@ -40,6 +40,7 @@ var sessionUpdateFields = map[string]string{
 	"group_inventory_add":    "group_inventory_add",
 	"group_inventory_remove": "group_inventory_remove",
 	"group_notes":            "group_notes",
+	"scene_summary":          "scene_summary",
 }
 
 // StateUpdateValidationError describes why a single update was rejected.

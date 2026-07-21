@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { PageIntro, StatCard, StatusPill } from "../studio-primitives";
 import { useNotifications } from "../notifications-provider";
 import { useI18n } from "../../lib/i18n";
@@ -24,6 +24,13 @@ type Props = {
   characters: Character[];
   adventures: Adventure[];
   documents: Document[];
+};
+
+type CompanionDraft = {
+  id: string;
+  template_character_id: string;
+  name: string;
+  tactics_note: string;
 };
 
 function statusTone(status: string): "default" | "ready" | "warning" | "live" | "info" {
@@ -88,6 +95,8 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
   const [rulesetKey, setRulesetKey] = useState("");
   const [adventureId, setAdventureId] = useState("");
   const [targetPlayers, setTargetPlayers] = useState("4");
+  const [useCompanions, setUseCompanions] = useState(false);
+  const [companionDrafts, setCompanionDrafts] = useState<CompanionDraft[]>([]);
   const [error, setError] = useState<string | null>(null);
   const statusLabel = (status: string) => ({
     live: tr("live", "live"),
@@ -98,6 +107,10 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
   }[status] ?? status);
 
   const availableRulesets = useMemo(() => ensureFallbackRulesets(rulesetGroups(documents), adventures), [documents, adventures]);
+  const sortedCharacters = useMemo(
+    () => [...characters].sort((a, b) => a.name.localeCompare(b.name, locale === "de" ? "de" : "en")),
+    [characters, locale],
+  );
   const rulesetAdventures = useMemo(() => {
     if (!rulesetKey) return adventures;
     return adventures.filter((adventure) => {
@@ -111,7 +124,48 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
     setRulesetKey("");
     setAdventureId("");
     setTargetPlayers("4");
+    setUseCompanions(false);
+    setCompanionDrafts([]);
     setError(null);
+  }
+
+  function addCompanionDraft() {
+    setCompanionDrafts((current) => {
+      if (current.length >= 3) {
+        return current;
+      }
+      return [
+        ...current,
+        {
+          id: `${Date.now()}-${current.length}`,
+          template_character_id: "",
+          name: "",
+          tactics_note: "",
+        },
+      ];
+    });
+  }
+
+  function removeCompanionDraft(id: string) {
+    setCompanionDrafts((current) => current.filter((item) => item.id !== id));
+  }
+
+  function updateCompanionDraft(id: string, patch: Partial<CompanionDraft>) {
+    setCompanionDrafts((current) =>
+      current.map((item) => {
+        if (item.id !== id) {
+          return item;
+        }
+        const next = { ...item, ...patch };
+        if (patch.template_character_id !== undefined) {
+          const template = sortedCharacters.find((character) => character.id === patch.template_character_id);
+          if (template && !next.name.trim()) {
+            next.name = template.name;
+          }
+        }
+        return next;
+      }),
+    );
   }
 
   function openCreateModal() {
@@ -137,6 +191,18 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
       setError(tr("Choose a session name, ruleset, and adventure.", "Bitte Sitzungsname, Regelwerk und Abenteuer auswählen."));
       return;
     }
+    if (useCompanions) {
+      if (companionDrafts.length < 1 || companionDrafts.length > 3) {
+        setError(tr("Add between 1 and 3 companion NPCs.", "Bitte 1 bis 3 Begleiter-NPCs hinzufügen."));
+        return;
+      }
+      for (const draft of companionDrafts) {
+        if (!draft.template_character_id || !draft.name.trim()) {
+          setError(tr("Each companion needs a template and a new name.", "Jeder Begleiter braucht eine Vorlage und einen neuen Namen."));
+          return;
+        }
+      }
+    }
     setError(null);
     startTransition(async () => {
       try {
@@ -148,6 +214,13 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
           ruleset_version: rulesetVersion,
           target_player_count: Number(targetPlayers) || 4,
           language: locale,
+          companion_templates: useCompanions
+            ? companionDrafts.map((draft) => ({
+                template_character_id: draft.template_character_id,
+                name: draft.name.trim(),
+                tactics_note: draft.tactics_note.trim(),
+              }))
+            : [],
         });
         notify({ title: tr("Session created", "Sitzung erstellt"), message: tr(`${created.name} is ready for players to join.`, `${created.name} ist für den Spielerbeitritt bereit.`), tone: "success" });
         setIsCreateOpen(false);
@@ -257,6 +330,69 @@ export function SessionsCoreScreen({ sessions, campaigns, characters, adventures
                 ))}
               </select>
               <input min={1} onChange={(event) => setTargetPlayers(event.target.value)} placeholder={tr("Planned player count", "Geplante Spielerzahl")} type="number" value={targetPlayers} />
+            </div>
+
+            <div className="studio-panel" style={{ marginTop: 16 }}>
+              <div className="button-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <strong>{tr("DM companion NPCs", "Begleiter-NPCs des Spielleiters")}</strong>
+                  <p className="muted-copy">{tr("Optional: clone up to 3 existing characters into this session as DM-controlled companions.", "Optional: Bis zu 3 bestehende Charaktere als vom Spielleiter gesteuerte Begleiter in diese Sitzung klonen.")}</p>
+                </div>
+                <label className="button-row" style={{ gap: 8 }}>
+                  <input
+                    checked={useCompanions}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setUseCompanions(checked);
+                      if (checked && companionDrafts.length === 0) {
+                        addCompanionDraft();
+                      }
+                      if (!checked) {
+                        setCompanionDrafts([]);
+                      }
+                    }}
+                    type="checkbox"
+                  />
+                  <span>{tr("Enable", "Aktivieren")}</span>
+                </label>
+              </div>
+
+              {useCompanions ? (
+                <>
+                  <div className="button-row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+                    <button className="studio-button studio-button--ghost studio-button--inline" disabled={companionDrafts.length >= 3} onClick={addCompanionDraft} type="button">
+                      <Plus size={16} />
+                      {tr("Add companion", "Begleiter hinzufügen")}
+                    </button>
+                  </div>
+
+                  <div className="list-stack" style={{ marginTop: 12 }}>
+                    {companionDrafts.map((draft, index) => (
+                      <div className="session-card" key={draft.id}>
+                        <div className="button-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                          <strong>{tr(`Companion ${index + 1}`, `Begleiter ${index + 1}`)}</strong>
+                          <button className="studio-button studio-button--danger studio-button--inline" onClick={() => removeCompanionDraft(draft.id)} type="button">
+                            <Trash2 size={16} />
+                            {tr("Remove", "Entfernen")}
+                          </button>
+                        </div>
+                        <div className="form-grid" style={{ marginTop: 12 }}>
+                          <select onChange={(event) => updateCompanionDraft(draft.id, { template_character_id: event.target.value })} value={draft.template_character_id}>
+                            <option value="">{tr("Choose template character", "Vorlagencharakter wählen")}</option>
+                            {sortedCharacters.map((character) => (
+                              <option key={character.id} value={character.id}>
+                                {character.name} · {character.class_and_level || tr("No class", "Keine Klasse")}
+                              </option>
+                            ))}
+                          </select>
+                          <input onChange={(event) => updateCompanionDraft(draft.id, { name: event.target.value })} placeholder={tr("New companion name", "Neuer Begleitername")} value={draft.name} />
+                          <input onChange={(event) => updateCompanionDraft(draft.id, { tactics_note: event.target.value })} placeholder={tr("Optional tactic or role", "Optionale Taktik oder Rolle")} value={draft.tactics_note} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </div>
 
             {error ? <p className="error-copy">{error}</p> : null}

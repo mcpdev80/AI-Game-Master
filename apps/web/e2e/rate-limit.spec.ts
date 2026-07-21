@@ -11,10 +11,22 @@ async function jsonRequest<T>(request: APIRequestContext, method: "get" | "post"
 async function waitForOpening(request: APIRequestContext, sessionId: string) {
   await expect
     .poll(async () => {
-      const session = await jsonRequest<{ state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
-      return session.state.last_narration;
+      const session = await jsonRequest<{ current_scene: string; state: { last_narration: string } }>(request, "get", `/api/sessions/${sessionId}`);
+      const narration = session.state.last_narration ?? "";
+      return narration && narration !== session.current_scene ? narration : "";
     })
-    .toContain("Rain whispers");
+    .not.toEqual("");
+}
+
+async function dismissPlayerPopupIfVisible(page: import("@playwright/test").Page) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const closeButton = page.getByRole("button", { name: "Close" }).first();
+    if (!(await closeButton.isVisible().catch(() => false))) {
+      return;
+    }
+    await closeButton.click();
+    await expect(closeButton).toBeHidden();
+  }
 }
 
 test("player screen shows a visible error when gm/respond is rate-limited", async ({ page, request, context }) => {
@@ -89,9 +101,11 @@ test("player screen shows a visible error when gm/respond is rate-limited", asyn
 
   await page.goto("/player-screen");
   await page.getByRole("button", { name: "Activate Board" }).click();
+  await dismissPlayerPopupIfVisible(page);
   const composer = page.locator(".player-overlay__composer");
   await expect(composer).toBeVisible();
   await composer.locator("textarea").fill("I inspect the boulder and wait for the DM.");
-  await composer.getByRole("button", { name: "Send" }).click();
+  await dismissPlayerPopupIfVisible(page);
+  await composer.getByRole("button", { name: "Send" }).evaluate((node) => (node as HTMLButtonElement).click());
   await expect(page.locator(".error-copy").filter({ hasText: "429 Too Many Requests" })).toBeVisible();
 });

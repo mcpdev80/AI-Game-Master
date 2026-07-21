@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -357,9 +359,180 @@ func (h *Handler) updatePlayerVisibleState(c *gin.Context) {
 	c.JSON(http.StatusOK, state)
 }
 
+func (h *Handler) updatePlayerPortalCharacter(c *gin.Context) {
+	token := strings.TrimSpace(c.Query("token"))
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token query parameter"})
+		return
+	}
+	portal, err := h.loadPlayerPortalSession(c.Request.Context(), token)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "player portal session not found"})
+			return
+		}
+		errorResponse(c, http.StatusInternalServerError, "load player portal", err)
+		return
+	}
+	if portal.Character == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no character assigned to this player slot"})
+		return
+	}
+
+	var req UpdatePlayerPortalCharacterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid player portal character payload", err)
+		return
+	}
+
+	updatedCharacter, err := applyPlayerPortalCharacterUpdate(*portal.Character, req)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "apply player portal character update", err)
+		return
+	}
+	saved, err := h.store.UpdateCharacter(c.Request.Context(), updatedCharacter)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "update player portal character", err)
+		return
+	}
+	c.JSON(http.StatusOK, saved)
+}
+
+func (h *Handler) updatePlayerPortalGroupInventory(c *gin.Context) {
+	token := strings.TrimSpace(c.Query("token"))
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token query parameter"})
+		return
+	}
+	portal, err := h.loadPlayerPortalSession(c.Request.Context(), token)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "player portal session not found"})
+			return
+		}
+		errorResponse(c, http.StatusInternalServerError, "load player portal", err)
+		return
+	}
+
+	var req UpdatePlayerPortalGroupInventoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid player portal group inventory payload", err)
+		return
+	}
+
+	nextInventory, err := applyPlayerPortalGroupInventoryUpdate(portal.Session.State.GroupInventory, req)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "apply player portal group inventory update", err)
+		return
+	}
+
+	nextState := portal.Session.State
+	nextState.GroupInventory = nextInventory
+	if err := h.store.UpdateSessionState(c.Request.Context(), portal.Session.ID, nextState); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "update player portal group inventory", err)
+		return
+	}
+	c.JSON(http.StatusOK, nextInventory)
+}
+
+func (h *Handler) listPlayerPortalPrivateChat(c *gin.Context) {
+	token := strings.TrimSpace(c.Query("token"))
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token query parameter"})
+		return
+	}
+	portal, err := h.loadPlayerPortalSession(c.Request.Context(), token)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "player portal session not found"})
+			return
+		}
+		errorResponse(c, http.StatusInternalServerError, "load player portal", err)
+		return
+	}
+	items, err := h.store.ListPrivateChatMessages(c.Request.Context(), portal.Session.ID, portal.PlayerSlot.ID, 80)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "list player portal private chat", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (h *Handler) sendPlayerPortalPrivateChat(c *gin.Context) {
+	token := strings.TrimSpace(c.Query("token"))
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token query parameter"})
+		return
+	}
+	portal, err := h.loadPlayerPortalSession(c.Request.Context(), token)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "player portal session not found"})
+			return
+		}
+		errorResponse(c, http.StatusInternalServerError, "load player portal", err)
+		return
+	}
+	var req PlayerPortalPrivateChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid private chat payload", err)
+		return
+	}
+	req.Message = strings.TrimSpace(req.Message)
+	if req.Message == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message is required"})
+		return
+	}
+
+	history, err := h.store.ListPrivateChatMessages(c.Request.Context(), portal.Session.ID, portal.PlayerSlot.ID, 40)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "load private chat history", err)
+		return
+	}
+	contextChunks, err := h.privateSidebarContext(c.Request.Context(), portal, req.Message)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "load private sidebar context", err)
+		return
+	}
+
+	userMessageEvent, err := h.store.CreateSessionEvent(c.Request.Context(), portal.Session.ID, "private_sidebar_message", privateSidebarEventPayload(portal, "user", req.Message, chooseLanguage(req.Language, portal.Session.Language), nil))
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "persist private user message", err)
+		return
+	}
+	userMessage := privateChatMessageFromEvent(userMessageEvent)
+
+	llmCtx, cancel := context.WithTimeout(c.Request.Context(), 45*time.Second)
+	defer cancel()
+	response, err := h.llmClient.CompletePrivateSidebarResponse(llmCtx, portal.Session, portal.PlayerSlot, portal.Character, req.Language, req.Message, append(history, userMessage), contextChunks)
+	if err != nil {
+		errorResponse(c, http.StatusBadGateway, "complete private sidebar response", err)
+		return
+	}
+	replyEvent, err := h.store.CreateSessionEvent(c.Request.Context(), portal.Session.ID, "private_sidebar_message", privateSidebarEventPayload(portal, "assistant", response.Reply, response.Language, response.DMNotes))
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "persist private assistant message", err)
+		return
+	}
+	replyMessage := privateChatMessageFromEvent(replyEvent)
+	allMessages, err := h.store.ListPrivateChatMessages(c.Request.Context(), portal.Session.ID, portal.PlayerSlot.ID, 80)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "reload private chat history", err)
+		return
+	}
+	c.JSON(http.StatusOK, PlayerPortalPrivateChatResponse{
+		Message:  userMessage,
+		Reply:    replyMessage,
+		Messages: allMessages,
+	})
+}
+
 func (h *Handler) loadPlayerPortalSession(ctx context.Context, token string) (PlayerPortalSession, error) {
 	portal, err := h.store.GetPlayerPortalSession(ctx, token)
 	if err != nil {
+		return PlayerPortalSession{}, err
+	}
+	if err := h.attachSessionCompanions(ctx, &portal.Session); err != nil {
 		return PlayerPortalSession{}, err
 	}
 
@@ -377,12 +550,26 @@ func (h *Handler) loadPlayerPortalSession(ctx context.Context, token string) (Pl
 			claimed[*slot.CharacterID] = true
 		}
 	}
+
+	companionCharacterIDs := make(map[string]bool, len(portal.Session.Companions))
+	for _, companion := range portal.Session.Companions {
+		if strings.TrimSpace(companion.CharacterID) != "" {
+			companionCharacterIDs[companion.CharacterID] = true
+		}
+	}
+
 	available := make([]Character, 0)
 	for _, character := range characters {
-		if character.CampaignID != nil && *character.CampaignID != portal.Session.CampaignID {
+		if claimed[character.ID] {
 			continue
 		}
-		if claimed[character.ID] {
+		if companionCharacterIDs[character.ID] {
+			continue
+		}
+		if isSessionClone, ok := character.Metadata["is_session_clone"].(bool); ok && isSessionClone {
+			continue
+		}
+		if clonedForSessionID := strings.TrimSpace(fmt.Sprintf("%v", character.Metadata["cloned_for_session_id"])); clonedForSessionID != "" {
 			continue
 		}
 		available = append(available, character)
@@ -408,4 +595,128 @@ func sanitizeSessionForPlayers(session Session) Session {
 		session.State.VisualPayload = payload
 	}
 	return session
+}
+
+func privateSidebarEventPayload(portal PlayerPortalSession, role string, content string, language string, dmNotes []string) map[string]any {
+	payload := map[string]any{
+		"scope":          "private_player",
+		"visibility":     "private",
+		"player_slot_id": portal.PlayerSlot.ID,
+		"display_name":   portal.PlayerSlot.DisplayName,
+		"role":           role,
+		"content":        strings.TrimSpace(content),
+		"language":       chooseLanguage(language, portal.Session.Language),
+	}
+	if portal.PlayerSlot.CharacterID != nil {
+		payload["character_id"] = *portal.PlayerSlot.CharacterID
+	}
+	if portal.Character != nil {
+		payload["character_name"] = portal.Character.Name
+	}
+	if len(dmNotes) > 0 {
+		payload["dm_notes"] = dmNotes
+	}
+	return payload
+}
+
+func privateChatMessageFromEvent(event SessionEvent) PrivateChatMessage {
+	message := PrivateChatMessage{
+		ID:        event.ID,
+		SessionID: event.SessionID,
+		Role:      strings.TrimSpace(fmt.Sprintf("%v", event.Payload["role"])),
+		Content:   strings.TrimSpace(fmt.Sprintf("%v", event.Payload["content"])),
+		Language:  strings.TrimSpace(fmt.Sprintf("%v", event.Payload["language"])),
+		CreatedAt: event.CreatedAt,
+	}
+	message.PlayerSlotID = strings.TrimSpace(fmt.Sprintf("%v", event.Payload["player_slot_id"]))
+	if characterID := strings.TrimSpace(fmt.Sprintf("%v", event.Payload["character_id"])); characterID != "" && characterID != "<nil>" {
+		message.CharacterID = &characterID
+	}
+	return message
+}
+
+func (h *Handler) privateSidebarContext(ctx context.Context, portal PlayerPortalSession, query string) ([]GMContextChunk, error) {
+	adventureDocuments, err := sessionAdventureDocuments(ctx, h.store, portal.Session)
+	if err != nil {
+		return nil, err
+	}
+	if len(adventureDocuments) == 0 {
+		return []GMContextChunk{}, nil
+	}
+	return h.retrieveRelevantContextForDocuments(ctx, adventureDocuments, query, 3, false)
+}
+
+func applyPlayerPortalCharacterUpdate(character Character, req UpdatePlayerPortalCharacterRequest) (Character, error) {
+	metadata := defaultMetadata(character.Metadata)
+	if req.CurrentHitPoints != nil {
+		if *req.CurrentHitPoints < 0 {
+			return Character{}, fmt.Errorf("current_hit_points must be 0 or greater")
+		}
+		metadata["current_hit_points"] = strconv.Itoa(*req.CurrentHitPoints)
+	}
+	if req.TemporaryHitPoints != nil {
+		if *req.TemporaryHitPoints < 0 {
+			return Character{}, fmt.Errorf("temporary_hit_points must be 0 or greater")
+		}
+		metadata["temporary_hit_points"] = strconv.Itoa(*req.TemporaryHitPoints)
+	}
+	if req.CurrentMoney != nil {
+		metadata["current_money"] = strings.TrimSpace(*req.CurrentMoney)
+	}
+	if req.ExperiencePoints != nil {
+		metadata["experience_points"] = strings.TrimSpace(*req.ExperiencePoints)
+	}
+	if req.Inspiration != nil {
+		metadata["inspiration"] = strings.TrimSpace(*req.Inspiration)
+	}
+	if req.SessionNotes != nil {
+		metadata["session_notes"] = normalizePlayerPortalNotes(*req.SessionNotes)
+	}
+	if req.CurrentInventory != nil {
+		metadata["current_inventory"] = normalizePlayerPortalList(req.CurrentInventory)
+	}
+	character.Metadata = metadata
+	return character, nil
+}
+
+func applyPlayerPortalGroupInventoryUpdate(current SessionGroupInventory, req UpdatePlayerPortalGroupInventoryRequest) (SessionGroupInventory, error) {
+	next := current
+	if req.Gold != nil {
+		if *req.Gold < 0 {
+			return SessionGroupInventory{}, fmt.Errorf("gold must be 0 or greater")
+		}
+		next.Gold = *req.Gold
+	}
+	if req.Items != nil {
+		next.Items = normalizePlayerPortalList(req.Items)
+	}
+	if req.Notes != nil {
+		next.Notes = strings.TrimSpace(*req.Notes)
+	}
+	return next, nil
+}
+
+func normalizePlayerPortalList(items []string) []string {
+	normalized := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	return normalized
+}
+
+func normalizePlayerPortalNotes(value string) []string {
+	lines := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '\n' || r == ';'
+	})
+	return normalizePlayerPortalList(lines)
 }

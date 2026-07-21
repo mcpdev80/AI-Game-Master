@@ -336,7 +336,7 @@ func (h *Handler) createAdventurePackage(c *gin.Context) {
 			return
 		}
 
-		zipReport, err := importAdventureZip(c.Request.Context(), h.store, h.uploadsDir, targetPath, adventure)
+		zipReport, err := importAdventureZip(c.Request.Context(), h.store, h.uploadsDir, targetPath, adventure, h.cfg.MaxZipEntries, h.cfg.MaxZipExtractBytes)
 		if err != nil {
 			errorResponse(c, http.StatusInternalServerError, "import adventure resources", err)
 			return
@@ -571,7 +571,7 @@ func (h *Handler) importAdventureZip(c *gin.Context) {
 		return
 	}
 
-	report, err := importAdventureZip(c.Request.Context(), h.store, h.uploadsDir, targetPath, adventure)
+	report, err := importAdventureZip(c.Request.Context(), h.store, h.uploadsDir, targetPath, adventure, h.cfg.MaxZipEntries, h.cfg.MaxZipExtractBytes)
 	if err != nil {
 		errorResponse(c, http.StatusInternalServerError, "import zip adventure", err)
 		return

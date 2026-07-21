@@ -137,10 +137,20 @@ export type SessionState = {
     active_turn_index: number;
     initiative_order: {
       id: string;
+      character_id?: string;
       name: string;
       side: string;
+      participant_type?: string;
+      control_mode?: string;
       initiative: number;
       status?: string;
+      armor_class?: number;
+      hit_point_max?: number;
+      current_hit_points?: number;
+      temporary_hit_points?: number;
+      death_save_successes?: number;
+      death_save_failures?: number;
+      stable?: boolean;
     }[];
     log: {
       timestamp: string;
@@ -211,6 +221,25 @@ export type Session = {
   language: string;
   default_voice_profile_id: string | null;
   state: SessionState;
+  companions?: SessionCompanion[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type SessionCompanion = {
+  id: string;
+  session_id: string;
+  character_id: string;
+  display_name: string;
+  control_mode: string;
+  status: string;
+  tactics_note: string;
+  visibility: string;
+  current_hit_points?: number | null;
+  temporary_hit_points?: number | null;
+  conditions: string[];
+  resource_overrides: Record<string, unknown>;
+  character?: Character | null;
   created_at: string;
   updated_at: string;
 };
@@ -348,6 +377,17 @@ export type PlayerPortalSession = {
   character: Character | null;
   visible_state: PlayerVisibleState;
   available_characters: Character[];
+};
+
+export type PrivateChatMessage = {
+  id: string;
+  session_id: string;
+  player_slot_id: string;
+  character_id?: string | null;
+  role: string;
+  content: string;
+  language: string;
+  created_at: string;
 };
 
 export type SessionJoinCandidate = {
@@ -507,6 +547,43 @@ export async function fetchSessions(): Promise<Session[]> {
 
 export async function fetchSession(sessionId: string): Promise<Session> {
   return apiGet<Session>(`/api/sessions/${sessionId}`);
+}
+
+export async function fetchSessionCompanions(sessionId: string): Promise<SessionCompanion[]> {
+  const response = await apiGet<{ items: SessionCompanion[] }>(`/api/sessions/${sessionId}/companions`);
+  return response.items;
+}
+
+export async function createSessionCompanion(
+  sessionId: string,
+  payload: {
+    character_id: string;
+    display_name?: string;
+    tactics_note?: string;
+    visibility?: string;
+  },
+): Promise<SessionCompanion> {
+  return apiPost<SessionCompanion>(`/api/sessions/${sessionId}/companions`, payload);
+}
+
+export async function updateSessionCompanion(
+  companionId: string,
+  payload: {
+    display_name?: string;
+    status?: string;
+    tactics_note?: string;
+    visibility?: string;
+    current_hit_points?: number | null;
+    temporary_hit_points?: number | null;
+    conditions?: string[];
+    resource_overrides?: Record<string, unknown>;
+  },
+): Promise<SessionCompanion> {
+  return apiPut<SessionCompanion>(`/api/session-companions/${companionId}`, payload);
+}
+
+export async function deleteSessionCompanion(companionId: string): Promise<{ deleted: boolean }> {
+  return apiDelete<{ deleted: boolean }>(`/api/session-companions/${companionId}`);
 }
 
 export async function updateSession(
@@ -725,6 +802,47 @@ export async function updatePlayerSlotCharacter(playerSlotId: string, payload: {
 
 export async function updatePlayerSlotStatus(playerSlotId: string, payload: { status: "invited" | "joined" | "ready" | "locked" }) {
   return apiPut(`/api/player-slots/${playerSlotId}/status`, payload);
+}
+
+export async function updatePlayerPortalCharacter(
+  token: string,
+  payload: {
+    current_hit_points?: number;
+    temporary_hit_points?: number;
+    current_money?: string;
+    experience_points?: string;
+    inspiration?: string;
+    session_notes?: string;
+    current_inventory?: string[];
+  }
+): Promise<Character> {
+  return apiPut<Character>(`/api/player-portal/character?token=${encodeURIComponent(token)}`, payload);
+}
+
+export async function updatePlayerPortalGroupInventory(
+  token: string,
+  payload: {
+    gold?: number;
+    items?: string[];
+    notes?: string;
+  }
+): Promise<SessionState["group_inventory"]> {
+  return apiPut<SessionState["group_inventory"]>(`/api/player-portal/group-inventory?token=${encodeURIComponent(token)}`, payload);
+}
+
+export async function fetchPlayerPortalPrivateChat(token: string): Promise<PrivateChatMessage[]> {
+  const response = await apiGet<{ items: PrivateChatMessage[] }>(`/api/player-portal/private-chat?token=${encodeURIComponent(token)}`);
+  return response.items;
+}
+
+export async function sendPlayerPortalPrivateChat(
+  token: string,
+  payload: { message: string; language: string }
+): Promise<{ message: PrivateChatMessage; reply: PrivateChatMessage; messages: PrivateChatMessage[] }> {
+  return apiPost<{ message: PrivateChatMessage; reply: PrivateChatMessage; messages: PrivateChatMessage[] }>(
+    `/api/player-portal/private-chat?token=${encodeURIComponent(token)}`,
+    payload
+  );
 }
 
 export async function updateSessionRuntimeState(

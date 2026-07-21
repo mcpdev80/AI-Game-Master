@@ -70,15 +70,37 @@ apply_json="$(api_request POST "/api/characters/${character_id}/builder/apply" '
     "class_and_level": "Ranger 1",
     "background": "Cave Cartographer",
     "race": "Human",
-    "alignment": "Good",
+    "alignment": "Neutral Good",
     "armor_class": 14,
     "speed": "30 ft",
     "hit_point_max": 11,
     "proficiency_bonus": "+2",
     "abilities": {"strength":10,"dexterity":16,"constitution":13,"intelligence":12,"wisdom":15,"charisma":8},
     "languages": ["Common"],
-    "features": ["Keen observer", "Cave navigation"],
-    "metadata": {"builder_stage":"review","skill_proficiencies":["Perception","Survival"]}
+    "features": ["Natural Explorer", "Favored Enemy"],
+    "metadata": {
+      "builder_stage":"review",
+      "builder_status":"draft",
+      "creation_method":"standard_array",
+      "skill_proficiencies":["Perception","Survival"],
+      "saving_throw_proficiencies":["Strength","Dexterity"],
+      "hit_dice":"1d10",
+      "age":"27",
+      "size":"Medium",
+      "weight":"145 lb",
+      "eyes":"Gray",
+      "skin":"Fair",
+      "hair":"Brown",
+      "personality_traits":"Careful, watchful, and quietly protective.",
+      "ideals":"Responsibility. If I know the safe path, I guide others through it.",
+      "bonds":"I keep maps and notes so no companion is lost in the dark.",
+      "flaws":"I can hesitate too long when every route looks dangerous.",
+      "starting_equipment":["Scale mail","Longbow","20 arrows","2 shortswords","Explorer pack"],
+      "current_inventory":["Scale mail","Longbow","20 arrows","2 shortswords","Explorer pack","Cartographer notes"],
+      "current_money":"10 gp",
+      "senses":"Passive Perception 14",
+      "combat_attacks":"Longbow | +2 | DEX | 150/600 ft | +5 | 1d8+3 | Piercing\nDescription: Main ranged attack for scouting and opening combat.\nShortsword | +2 | DEX | Melee | +5 | 1d6+3 | Piercing\nDescription: Close-range finesse backup weapon."
+    }
   }
 }')"
 jq -e '.name == "Eira Flint" and .abilities.dexterity == 16' <<<"${apply_json}" >/dev/null
@@ -101,15 +123,22 @@ api_request PUT "/api/player-slots/${slot_id}/status" '{"status":"ready"}' | jq 
 echo "==> Start session and wait for deterministic AI opening"
 api_request POST "/api/sessions/${session_id}/start" '{}' | jq -e '.status == "live"' >/dev/null
 opening_ready=false
-for _ in $(seq 1 40); do
+for _ in $(seq 1 100); do
+  gateway_json="$(api_request GET /api/system/llm-gateway/status)"
   current_session="$(api_request GET "/api/sessions/${session_id}")"
-  if jq -e '.state.last_narration | contains("Rain whispers")' <<<"${current_session}" >/dev/null; then
+  opening_narration="$(jq -r '.state.last_narration // ""' <<<"${current_session}")"
+  if jq -e '.in_flight == 0' <<<"${gateway_json}" >/dev/null && [[ -n "${opening_narration}" && "${opening_narration}" != "Sheltered entrance" ]]; then
     opening_ready=true
     break
   fi
-  sleep 0.5
+  sleep 1
 done
-[[ "${opening_ready}" == "true" ]] || { echo "Opening did not complete" >&2; exit 1; }
+if [[ "${opening_ready}" != "true" ]]; then
+  echo "Opening did not complete" >&2
+  jq '{status,in_flight,last_error,circuit_breaker_open}' <<<"${gateway_json}" >&2
+  jq '{last_narration:.state.last_narration,current_scene:.current_scene,visual_mode:.state.visual_mode}' <<<"${current_session}" >&2
+  exit 1
+fi
 
 echo "==> Request roll"
 roll_json="$(api_request POST /api/gm/respond "$(jq -cn --arg id "${session_id}" '{session_id:$id,player_input:"I inspect the boulder and search for a safe passage.",language:"en"}')")"

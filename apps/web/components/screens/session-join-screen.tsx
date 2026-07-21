@@ -12,7 +12,8 @@ export function SessionJoinScreen({ token, preview }: { token: string; preview: 
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [joiningNew, setJoiningNew] = useState(!preview?.has_progress);
+  const hasExistingPlayers = (preview?.existing_players.length ?? 0) > 0;
+  const [joiningNew, setJoiningNew] = useState(!preview?.has_progress || !hasExistingPlayers);
 
   function handleJoin() {
     if (!displayName.trim()) {
@@ -62,7 +63,7 @@ export function SessionJoinScreen({ token, preview }: { token: string; preview: 
               : tr("After joining, choose your character in the portal and mark yourself ready.", "Nach dem Beitritt kannst du im Portal deinen Charakter wählen und dich als bereit melden.")}
           </span>
         </div>
-        {preview?.has_progress && preview.existing_players.length > 0 ? (
+        {preview?.has_progress && hasExistingPlayers ? (
           <div className="form-grid">
             {preview.existing_players.map((entry) => (
               <div className="scope-card" key={entry.player_slot.id}>
