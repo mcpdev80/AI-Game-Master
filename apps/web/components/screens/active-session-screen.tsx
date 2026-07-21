@@ -383,6 +383,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
     const allies = String(characterMetaValue(character, "allies") ?? "");
     const weaponNotes = splitLines(characterMetaValue(character, "weapon_notes"));
     const spellNotes = String(characterMetaValue(character, "spell_notes") ?? "");
+    const featureNotes = String(characterMetaValue(character, "feature_notes") ?? "");
     const combatAttacks = String(characterMetaValue(character, "combat_attacks") ?? "");
     const spellAttacks = String(characterMetaValue(character, "spell_attacks") ?? "");
     const age = String(characterMetaValue(character, "age") ?? "—");
@@ -520,6 +521,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
               <dl className="sheet-detail-list">
                 <div><dt>{tr("Spells", "Zauber")}</dt><dd>{spells.join(", ") || "—"}</dd></div>
                 <div><dt>{tr("Spell Notes", "Zaubernotizen")}</dt><dd>{spellNotes || "—"}</dd></div>
+                <div><dt>{tr("Feature Notes", "Merkmalsnotizen")}</dt><dd style={{ whiteSpace: "pre-wrap" }}>{featureNotes || "—"}</dd></div>
                 <div><dt>{tr("Spell Attacks", "Zauberangriffe")}</dt><dd style={{ whiteSpace: "pre-wrap" }}>{spellAttacks || "—"}</dd></div>
               </dl>
             </section>
