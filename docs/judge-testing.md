@@ -2,6 +2,8 @@
 
 This guide is for a fast local/demo evaluation of the current Build Week version of AI Game Master.
 
+This repository was prepared with substantial help from Codex, and the judged Build Week implementation path primarily uses GPT-5.6 plus OpenAI speech models.
+
 ## What the judge should see
 
 In under five minutes, the judge should be able to verify:
@@ -11,6 +13,7 @@ In under five minutes, the judge should be able to verify:
 - player-safe session sharing
 - speech/camera-ready player experience with manual fallbacks
 - deterministic automated test coverage for the critical gameplay path
+- clear evidence of where Codex and GPT-5.6 were used
 
 ## Environment
 
@@ -19,6 +22,11 @@ Current supported demo setup:
 - operator machine on the local network
 - optional player phone on the same network
 - internal HTTPS with either a provided certificate pair or a self-signed certificate
+
+For Build Week judging, there are two valid verification modes in this repository:
+
+- live OpenAI-backed local demo with an `OPENAI_API_KEY`
+- deterministic no-key golden path using the bundled local OpenAI-compatible mock
 
 Reference local URL:
 
@@ -89,6 +97,8 @@ What this validates:
 - player-safe portal output
 - browser flow via Playwright
 
+This path is intentionally the fastest repo-level proof for judges because it does not require the judge to supply their own OpenAI API key.
+
 ## External import compatibility check
 
 If you want one additional manual proof that the importer can handle a real third-party adventure package shape, use `The Abbey` by Internal Rock as an external test source:
@@ -132,6 +142,15 @@ Useful quick checks during judging:
 - the current judged environment is not a public internet deployment
 - some tests are deterministic against a local OpenAI-compatible mock rather than the live API
 - device testing is strongest when run on the same LAN as the operator machine
+
+## Submission-side reminders
+
+These items are required in the Devpost submission but are not automatically enforced by this repository:
+
+- final category selection
+- public YouTube demo link
+- `/feedback` Codex Session ID from the main Codex build thread
+- final project description written in your own voice
 
 ## Troubleshooting
 

@@ -114,3 +114,20 @@ func TestBuilderDeterministicSensesAndBodyReplySetsDerivedSensesImmediately(t *t
 		t.Fatalf("expected reply to mention derived senses, got %q", reply)
 	}
 }
+
+func TestVerifyCharacterBuilderCompletionPreservesAdviceReplyWithoutPatch(t *testing.T) {
+	character := Character{
+		ClassAndLevel: "Paladin 1",
+		Metadata: map[string]any{
+			"language":      "de",
+			"builder_stage": "equipment_and_money",
+		},
+	}
+	completion := verifyCharacterBuilderCompletion(character, characterBuilderCompletion{
+		Reply: "Für Paladin auf Stufe 1 stehen im SRD 5.1 diese Startausrüstungsoptionen zur Verfügung: Waffenwahl, Paket und Kettenhemd. Wenn du möchtest, übernehme ich genau diese Auswahl direkt.",
+		Patch: CharacterBuilderPatch{},
+	}, &LLMSession{})
+	if !strings.Contains(completion.Reply, "Startausrüstungsoptionen") {
+		t.Fatalf("expected advice reply to be preserved, got %q", completion.Reply)
+	}
+}

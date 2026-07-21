@@ -85,7 +85,7 @@ test("english builder spell step stays fully localized in chat and sheet", async
   await expect(page.getByText("Ranged fire spell attack.", { exact: true })).toBeVisible();
   await expect(page.getByText("Additional Spells", { exact: true })).toBeVisible();
   await expect(page.getByText("Shield", { exact: true })).toBeVisible();
-  await expect(page.getByText("Reaction spell that grants +5 AC until your next turn.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reaction spell that raises AC briefly.", { exact: true })).toBeVisible();
 
   await expect(page.getByText("Zaubertrick", { exact: false })).toHaveCount(0);
   await expect(page.getByText("Zauberangriff", { exact: false })).toHaveCount(0);

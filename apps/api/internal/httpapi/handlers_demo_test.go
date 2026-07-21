@@ -77,3 +77,21 @@ func TestFungalDemoCharactersAreCompleteLevelOneParty(t *testing.T) {
 		}
 	}
 }
+
+func TestBundledDemoCharactersAreStandaloneAndComplete(t *testing.T) {
+	characters := bundledDemoCharacters()
+	if len(characters) != 4 {
+		t.Fatalf("expected 4 bundled demo characters, got %d", len(characters))
+	}
+	for _, character := range characters {
+		if character.CampaignID != nil {
+			t.Fatalf("%s should not require a campaign id", character.Name)
+		}
+		if character.Name == "" || character.ClassAndLevel == "" {
+			t.Fatalf("incomplete bundled demo character: %#v", character)
+		}
+		if metadataString(character.Metadata, "demo_id") != fungalCavernsDemoID {
+			t.Fatalf("%s missing demo id", character.Name)
+		}
+	}
+}

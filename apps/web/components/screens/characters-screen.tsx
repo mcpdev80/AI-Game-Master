@@ -788,6 +788,29 @@ function parseSpellNoteRows(spellsValue: string, notesValue: string, excludedSpe
   return [...rows.entries()].map(([spell, description]) => ({ spell, description }));
 }
 
+function localizeSpellCellValue(value: string, locale: "en" | "de", columnIndex: number) {
+  const trimmed = value.trim();
+  if (!trimmed || locale !== "de") {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  if (columnIndex === 0) {
+    if (lower === "cantrip") {
+      return "Zaubertrick";
+    }
+    if (lower === "level 1" || lower === "1st" || lower === "1st level") {
+      return "Grad 1";
+    }
+  }
+  if (lower === "spell attack") {
+    return "Zauberangriff";
+  }
+  if (lower === "saving throw") {
+    return "Rettungswurf";
+  }
+  return trimmed;
+}
+
 type CharacterSheetCanvasProps = {
   sheetForm: SheetFormState;
   assignment: Record<AbilityKey, number>;
@@ -1187,7 +1210,11 @@ function CharacterSheetCanvas({
                     <div className="sheet-table-entry" key={`spell-row-${index}`}>
                       <div className="sheet-table sheet-table--combat sheet-table--values">
                         {row.columns.map((column, columnIndex) => (
-                          <div className="sheet-table__cell" key={`spell-${index}-${columnIndex}`}>{columnIndex === 3 ? localizeMeasurementText(column || "—", locale) : (column || "—")}</div>
+                          <div className="sheet-table__cell" key={`spell-${index}-${columnIndex}`}>
+                            {columnIndex === 3
+                              ? localizeMeasurementText(column || "—", locale)
+                              : (localizeSpellCellValue(column || "—", locale, columnIndex) || "—")}
+                          </div>
                         ))}
                       </div>
                       <div className="sheet-table-entry__description">

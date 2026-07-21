@@ -1,5 +1,7 @@
 # Project Handoff for Codex
 
+This repository was built with substantial help from Codex and primarily targets the GPT-5.6-based Build Week implementation path.
+
 ## Project name
 
 AI Game Master

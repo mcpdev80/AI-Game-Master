@@ -708,6 +708,14 @@ func fungalDemoCharacters(campaignID string) []Character {
 	}
 }
 
+func bundledDemoCharacters() []Character {
+	characters := fungalDemoCharacters("bundled-demo")
+	for index := range characters {
+		characters[index].CampaignID = nil
+	}
+	return characters
+}
+
 func demoIntPtr(value int) *int {
 	return &value
 }

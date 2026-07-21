@@ -1,5 +1,7 @@
 # AI Game Master
 
+> This repository was built with substantial help from Codex and primarily uses GPT-5.6 for the judged Build Week implementation path. The public Build Week version centers on Codex-assisted development plus OpenAI APIs for GM turns, speech transcription, and speech synthesis.
+
 A browser-based, 5E-compatible AI game master for shared tabletop sessions. The operator controls the adventure and releases information, while players join from their phones, speak or type actions, roll physical dice, and receive synchronized narration.
 
 > The Build Week implementation uses GPT-5.6 through the OpenAI Responses API, `gpt-4o-transcribe` for player speech, and `gpt-4o-mini-tts` for narrated output. Encounter turns and camera-assisted dice results use strict, versioned Structured Outputs; local providers remain available as optional fallbacks.
@@ -27,6 +29,25 @@ This repository documents the Build Week conversion of an existing local project
 - adding deterministic tests for the full gameplay path and critical failure cases
 - preparing local HTTPS/LAN hosting for real device testing
 
+## Build Week submission checklist
+
+This repository is set up to satisfy the current OpenAI Build Week submission requirements:
+
+- Working project built with Codex and GPT-5.6
+- Clear category/track mapping: best fit is `Apps for your life`
+- Public repository with an open-source license
+- README with setup instructions and guidance for local judging
+- Demo video asset and script included in the repository
+- Explicit documentation of where Codex accelerated implementation and where GPT-5.6 is used in the product
+- Deterministic no-key golden path for fast verification, plus the live OpenAI-backed path for the full demo
+
+Important submission items that are not stored automatically in the repo and must still be entered on Devpost:
+
+- public YouTube link for the final sub-3-minute demo video
+- the `/feedback` Codex Session ID from the primary Codex build thread
+- the final chosen category in the submission form
+- the final project description entered in your own voice
+
 ## What is new in the Build Week version
 
 - GPT-5.6 is the default turn engine for structured encounter resolution
@@ -39,6 +60,7 @@ This repository documents the Build Week conversion of an existing local project
 ## Demo video
 
 - [Final demo video (MP4)](docs/media/demo-final-hd.mp4)
+- Public YouTube submission link: add this manually in Devpost before final submission
 
 ## Release metadata
 

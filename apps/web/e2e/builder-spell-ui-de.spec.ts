@@ -87,7 +87,7 @@ test("deutscher builder-zauberschritt bleibt in chat und charakterbogen vollstae
   await expect(page.getByText("Fernzauberangriff mit Feuer.", { exact: true })).toBeVisible();
   await expect(page.getByText("Weitere Zauber", { exact: true })).toBeVisible();
   await expect(page.getByText("Schild", { exact: true })).toBeVisible();
-  await expect(page.getByText("Reaktionszauber mit +5 RK bis zum Beginn deines nächsten Zuges.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reaktionszauber erhöht kurz die RK.", { exact: true })).toBeVisible();
 
   await expect(page.getByText("Cantrip", { exact: false })).toHaveCount(0);
   await expect(page.getByText("Spell Attack", { exact: false })).toHaveCount(0);

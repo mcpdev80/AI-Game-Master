@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -228,6 +229,383 @@ func TestBuilderDeterministicHitPointsReplyCorrectsMulticlassPrimaryHitDie(t *te
 	}
 	if got := patch.Metadata["builder_stage"]; got != "languages_senses_and_body" {
 		t.Fatalf("expected next stage body step, got %#v", got)
+	}
+}
+
+func TestBuilderDeterministicAbilityAssignmentReplyParsesGermanShortKeysAndAppliesRaceBonuses(t *testing.T) {
+	reply, patch, ok := builderDeterministicAbilityAssignmentReply(Character{
+		Race: "Drachenblütiger",
+		Metadata: map[string]any{
+			"resolved_values": []any{17, 16, 16, 15, 14, 13},
+			"concept":         "Multiclass-Charakter: Paladin 3 / Zauberer 1",
+		},
+	}, "CH: 17 Ko: 16 WE: 16 In: 14 GE: 15 St: 13")
+	if !ok {
+		t.Fatal("expected deterministic ability assignment reply")
+	}
+	if !strings.Contains(reply, "Stärke 15") || !strings.Contains(reply, "Charisma 18") {
+		t.Fatalf("reply should mention final race-adjusted values, got: %s", reply)
+	}
+	if patch.ClassAndLevel == nil || *patch.ClassAndLevel != "Paladin 3 / Zauberer 1" {
+		t.Fatalf("expected inferred multiclass text, got %#v", patch.ClassAndLevel)
+	}
+	if got := patch.Metadata["builder_stage"]; got != "class_proficiencies_and_choices" {
+		t.Fatalf("expected next stage class_proficiencies_and_choices, got %#v", got)
+	}
+	if patch.Abilities["strength"] != 15 || patch.Abilities["charisma"] != 18 || patch.Abilities["constitution"] != 16 || patch.Abilities["wisdom"] != 16 {
+		t.Fatalf("unexpected final assignment: %#v", patch.Abilities)
+	}
+}
+
+func TestBuilderDeterministicHitPointsReplyRefusesToAdvanceWithoutStoredAbilities(t *testing.T) {
+	reply, patch, ok := builderDeterministicHitPointsReply(Character{
+		Race:          "Drachenblütiger",
+		ClassAndLevel: "Paladin 3 / Zauberer 1",
+	}, "weiter")
+	if !ok {
+		t.Fatal("expected deterministic guard reply")
+	}
+	if !strings.Contains(reply, "Attributswerte") {
+		t.Fatalf("expected ability guard in reply, got: %s", reply)
+	}
+	if got := patch.Metadata["builder_stage"]; got != "ability_scores" {
+		t.Fatalf("expected builder stage to return to ability_scores, got %#v", got)
+	}
+}
+
+func TestBuilderDeterministicCoreFieldRepairReplyRepairsMissingRaceAndClassFromCorrection(t *testing.T) {
+	reply, patch, ok := builderDeterministicCoreFieldRepairReply(Character{
+		Metadata: map[string]any{
+			"builder_stage": "background_and_alignment",
+			"concept":       "Mehrklassiger Charakter: Paladin Stufe 3 und Zauberer Stufe 1",
+		},
+	}, "du hast das volk nicht eingetragen!!!! Drachenblut")
+	if !ok {
+		t.Fatal("expected core field repair reply")
+	}
+	if patch.Race == nil || *patch.Race != "Drachenblütiger" {
+		t.Fatalf("expected repaired race, got %#v", patch.Race)
+	}
+	if patch.ClassAndLevel == nil || *patch.ClassAndLevel != "Paladin 3 / Zauberer 1" {
+		t.Fatalf("expected repaired class text, got %#v", patch.ClassAndLevel)
+	}
+	if got := patch.Metadata["builder_stage"]; got != "background_and_alignment" {
+		t.Fatalf("expected stage to remain on background_and_alignment, got %#v", got)
+	}
+	if !strings.Contains(reply, "Volk eingetragen: Drachenblütiger.") || !strings.Contains(reply, "Klassenfolge eingetragen: Paladin 3 / Zauberer 1.") {
+		t.Fatalf("unexpected repair reply: %s", reply)
+	}
+}
+
+func TestBuilderDeterministicRaceChoiceReplySetsRaceAndAdvancesToClassStage(t *testing.T) {
+	reply, patch, ok := builderDeterministicRaceChoiceReply(Character{
+		Metadata: map[string]any{
+			"builder_stage": "race",
+			"concept":       "Mehrklassiger Charakter: Paladin Stufe 3 und Zauberer Stufe 1",
+		},
+	}, "Drachenblütiger")
+	if !ok {
+		t.Fatal("expected deterministic race choice reply")
+	}
+	if patch.Race == nil || *patch.Race != "Drachenblütiger" {
+		t.Fatalf("expected race patch, got %#v", patch.Race)
+	}
+	if got := patch.Metadata["builder_stage"]; got != "class_and_level" {
+		t.Fatalf("expected next stage class_and_level, got %#v", got)
+	}
+	if !strings.Contains(reply, "Volk: Drachenblütiger.") || !strings.Contains(reply, "Wähle als Startklasse Paladin oder Zauberer.") {
+		t.Fatalf("unexpected race choice reply: %s", reply)
+	}
+}
+
+func TestBuilderDeterministicRaceChoiceReplyAcceptsDrachenblutAlias(t *testing.T) {
+	reply, patch, ok := builderDeterministicRaceChoiceReply(Character{
+		Metadata: map[string]any{
+			"builder_stage": "race",
+			"concept":       "Mehrklassiger Charakter: Paladin Stufe 3 und Zauberer Stufe 1",
+		},
+	}, "Drachenblut")
+	if !ok {
+		t.Fatal("expected deterministic race alias reply")
+	}
+	if patch.Race == nil || *patch.Race != "Drachenblütiger" {
+		t.Fatalf("expected canonical dragonborn race, got %#v", patch.Race)
+	}
+	if got := patch.Metadata["builder_stage"]; got != "class_and_level" {
+		t.Fatalf("expected next stage class_and_level, got %#v", got)
+	}
+	if !strings.Contains(reply, "Drachenblütiger") {
+		t.Fatalf("expected canonical race name in reply, got: %s", reply)
+	}
+}
+
+func TestSanitizeCharacterBuilderPatchForCurrentStagePreservesRaceDuringRaceToClassTransition(t *testing.T) {
+	race := "Drachenblütiger"
+	patch := CharacterBuilderPatch{
+		Race: &race,
+		Metadata: map[string]any{
+			"builder_stage": "class_and_level",
+		},
+	}
+	sanitizeCharacterBuilderPatchForStage(&patch, "race")
+	if patch.Race == nil || *patch.Race != "Drachenblütiger" {
+		t.Fatalf("expected race to survive current-stage sanitization, got %#v", patch.Race)
+	}
+	if got := patch.Metadata["builder_stage"]; got != "class_and_level" {
+		t.Fatalf("expected next stage metadata to remain intact, got %#v", got)
+	}
+}
+
+func TestSanitizeCharacterBuilderPatchForCurrentStagePreservesClassAndLevelDuringClassTransition(t *testing.T) {
+	classAndLevel := "Paladin 3 / Zauberer 1"
+	patch := CharacterBuilderPatch{
+		ClassAndLevel: &classAndLevel,
+		Metadata: map[string]any{
+			"builder_stage": "background_and_alignment",
+		},
+	}
+	sanitizeCharacterBuilderPatchForStage(&patch, "class_and_level")
+	if patch.ClassAndLevel == nil || *patch.ClassAndLevel != classAndLevel {
+		t.Fatalf("expected class_and_level to survive current-stage sanitization, got %#v", patch.ClassAndLevel)
+	}
+}
+
+func TestSanitizeCharacterBuilderPatchForCurrentStagePreservesBackgroundAndAlignmentDuringBackgroundTransition(t *testing.T) {
+	background := "Akolyth"
+	alignment := "Rechtschaffen gut"
+	patch := CharacterBuilderPatch{
+		Background: &background,
+		Alignment:  &alignment,
+		Metadata: map[string]any{
+			"builder_stage": "ability_method",
+		},
+	}
+	sanitizeCharacterBuilderPatchForStage(&patch, "background_and_alignment")
+	if patch.Background == nil || *patch.Background != background {
+		t.Fatalf("expected background to survive current-stage sanitization, got %#v", patch.Background)
+	}
+	if patch.Alignment == nil || *patch.Alignment != alignment {
+		t.Fatalf("expected alignment to survive current-stage sanitization, got %#v", patch.Alignment)
+	}
+}
+
+func TestSanitizeCharacterBuilderPatchForCurrentStagePreservesAbilitiesDuringAbilityTransition(t *testing.T) {
+	patch := CharacterBuilderPatch{
+		Abilities: map[string]int{
+			"strength":     15,
+			"dexterity":    12,
+			"constitution": 14,
+			"intelligence": 10,
+			"wisdom":       8,
+			"charisma":     16,
+		},
+		Metadata: map[string]any{
+			"builder_stage": "class_proficiencies_and_choices",
+		},
+	}
+	sanitizeCharacterBuilderPatchForStage(&patch, "ability_scores")
+	if len(patch.Abilities) != 6 {
+		t.Fatalf("expected abilities to survive current-stage sanitization, got %#v", patch.Abilities)
+	}
+}
+
+func TestSanitizeCharacterBuilderPatchForCurrentStagePreservesHitPointFieldsDuringHitPointTransition(t *testing.T) {
+	hp := 13
+	speed := "30 Fuß"
+	prof := "+2"
+	patch := CharacterBuilderPatch{
+		HitPointMax: &hp,
+		Speed:       &speed,
+		Proficiency: &prof,
+		Metadata: map[string]any{
+			"builder_stage": "languages_senses_and_body",
+			"hit_dice":      "1W10",
+		},
+	}
+	sanitizeCharacterBuilderPatchForStage(&patch, "hit_points_hit_dice_and_movement")
+	if patch.HitPointMax == nil || *patch.HitPointMax != hp {
+		t.Fatalf("expected hit points to survive current-stage sanitization, got %#v", patch.HitPointMax)
+	}
+	if patch.Speed == nil || *patch.Speed != speed {
+		t.Fatalf("expected speed to survive current-stage sanitization, got %#v", patch.Speed)
+	}
+	if patch.Proficiency == nil || *patch.Proficiency != prof {
+		t.Fatalf("expected proficiency to survive current-stage sanitization, got %#v", patch.Proficiency)
+	}
+	if got := patch.Metadata["hit_dice"]; got != "1W10" {
+		t.Fatalf("expected hit_dice metadata to survive current-stage sanitization, got %#v", got)
+	}
+}
+
+func TestBuilderDeterministicSensesAndBodyReplyParsesGermanFreeformBodyDetailsAndRefreshesSenses(t *testing.T) {
+	reply, patch, ok := builderDeterministicSensesAndBodyReply(Character{
+		Race: "Drachenblütiger",
+		ClassAndLevel: "Paladin 1",
+		Abilities: map[string]int{
+			"wisdom": 14,
+		},
+		Metadata: map[string]any{
+			"builder_stage":       "languages_senses_and_body",
+			"passive_perception":  14,
+			"senses":              "Passive Wahrnehmung 5",
+			"skill_proficiencies": []string{"Wahrnehmung"},
+		},
+	}, "alter 80 grösse 205 cm gewicht 150 Kg Augen Blau haut Lila Harre keine ist drachenblüter hat schuppen ;-) passive warhnemnung ist 14!")
+	if !ok {
+		t.Fatal("expected deterministic senses/body reply")
+	}
+	if got := patch.Metadata["age"]; got != "80" {
+		t.Fatalf("expected age 80, got %#v", got)
+	}
+	if got := patch.Metadata["size"]; got != "205 cm" {
+		t.Fatalf("expected size 205 cm, got %#v", got)
+	}
+	if got := patch.Metadata["weight"]; got != "150 Kg" {
+		t.Fatalf("expected weight 150 Kg, got %#v", got)
+	}
+	if got := patch.Metadata["eyes"]; got != "Blau" {
+		t.Fatalf("expected eyes Blau, got %#v", got)
+	}
+	if got := patch.Metadata["skin"]; got != "Lila" {
+		t.Fatalf("expected skin Lila, got %#v", got)
+	}
+	if got := patch.Metadata["hair"]; got != "keine ist drachenblüter hat schuppen" {
+		t.Fatalf("expected parsed hair text, got %#v", got)
+	}
+	if got := patch.Metadata["senses"]; got != "Passive Wahrnehmung 14" {
+		t.Fatalf("expected refreshed senses, got %#v", got)
+	}
+	if got := patch.Metadata["builder_stage"]; got != "personality" {
+		t.Fatalf("expected next stage personality, got %#v", got)
+	}
+	if !strings.Contains(reply, "Sinne und Körperdaten sind festgelegt") {
+		t.Fatalf("unexpected reply: %s", reply)
+	}
+}
+
+func TestBuilderQuestionLooksLikeRecommendationRequestRecognizesSchlaegstDuVor(t *testing.T) {
+	if !builderQuestionLooksLikeRecommendationRequest("was schlägst du vor") {
+		t.Fatal("expected recommendation intent for 'was schlägst du vor'")
+	}
+	if !builderQuestionLooksLikeRecommendationRequest("ok was schlägst du vor") {
+		t.Fatal("expected recommendation intent for 'ok was schlägst du vor'")
+	}
+}
+
+func TestBuilderDeterministicGuidedChoiceCompletionReturnsEquipmentAdviceForWasSchlaegstDuVor(t *testing.T) {
+	character := &Character{
+		ClassAndLevel: "Paladin 1",
+		Race:          "Drachenblütiger",
+		Background:    "Ritter",
+		Alignment:     "Neutral",
+		Abilities: map[string]int{
+			"strength":     16,
+			"dexterity":    14,
+			"constitution": 16,
+			"intelligence": 13,
+			"wisdom":       14,
+			"charisma":     18,
+		},
+		Metadata: map[string]any{
+			"builder_stage": "equipment_and_money",
+		},
+	}
+	completion, ok := builderDeterministicGuidedChoiceCompletion(character, "equipment_and_money", "was schlägst du vor", "")
+	if !ok {
+		t.Fatal("expected deterministic guided completion")
+	}
+	if !strings.Contains(completion.Reply, "Startausrüstungsoptionen") && !strings.Contains(completion.Reply, "empfehle") {
+		t.Fatalf("expected equipment advice reply, got: %s", completion.Reply)
+	}
+}
+
+func TestEquipmentStageRecommendationBypassesGenericFallbackInCompleteCharacterBuilder(t *testing.T) {
+	handler := &Handler{}
+	character := &Character{
+		ID:            "test-char",
+		ClassAndLevel: "Paladin 1",
+		Race:          "Drachenblütiger",
+		Background:    "Ritter",
+		Alignment:     "Neutral",
+		Metadata: map[string]any{
+			"language":        "de",
+			"ruleset_work":    "5E",
+			"ruleset_version": "2014",
+			"builder_stage":   "equipment_and_money",
+		},
+	}
+	session := &LLMSession{
+		StructuredState: map[string]any{},
+		WorkingSummary:  map[string]any{},
+	}
+	transcript := []CharacterBuilderMessage{
+		{Role: "assistant", Content: "Jetzt tragen wir die Ausrüstung und das Geld sauber ein."},
+		{Role: "user", Content: "was schlägst du vor"},
+	}
+	completion, err := handler.completeCharacterBuilder(context.Background(), character, session, nil, transcript)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(completion.Reply, "Startausrüstungsoptionen") && !strings.Contains(completion.Reply, "empfehle") {
+		t.Fatalf("expected direct equipment advice reply, got: %s", completion.Reply)
+	}
+}
+
+func TestEnforceBuilderStageConsistencyRewindsWhenStoredStageIsAheadOfActualState(t *testing.T) {
+	character := Character{
+		Race: "",
+		Metadata: map[string]any{
+			"builder_stage": "background_and_alignment",
+			"concept":       "Paladin level 3 Wizard level 1 multiclass",
+		},
+	}
+	enforceBuilderStageConsistency(&character)
+	if got := safeOptionalString(character.Metadata["builder_stage"]); got != "race" {
+		t.Fatalf("expected stage rewind to race, got %q", got)
+	}
+}
+
+func TestEnforceBuilderStageConsistencyWorksIndependentlyOfLanguage(t *testing.T) {
+	character := Character{
+		Race:          "Dragonborn",
+		ClassAndLevel: "Paladin 3 / Wizard 1",
+		Metadata: map[string]any{
+			"builder_stage": "hit_points_hit_dice_and_movement",
+			"concept":       "Paladin level 3 Wizard level 1 multiclass",
+		},
+	}
+	enforceBuilderStageConsistency(&character)
+	if got := safeOptionalString(character.Metadata["builder_stage"]); got != "background_and_alignment" {
+		t.Fatalf("expected stage rewind to background_and_alignment, got %q", got)
+	}
+}
+
+func TestVerifyCharacterBuilderCompletionReplacesOvereagerReplyWithFallbackForActualStage(t *testing.T) {
+	character := Character{
+		Name: "Dragonis",
+		Metadata: map[string]any{
+			"language":      "en",
+			"builder_stage": "race",
+			"concept":       "Paladin level 3 Wizard level 1 multiclass",
+		},
+	}
+	completion := characterBuilderCompletion{
+		Reply: "Race set: Dragonborn. Next, choose the rules background and alignment.",
+		Patch: CharacterBuilderPatch{
+			Metadata: map[string]any{
+				"builder_stage": "background_and_alignment",
+			},
+		},
+	}
+	verified := verifyCharacterBuilderCompletion(character, completion, nil)
+	if got := safeOptionalString(verified.Patch.Metadata["builder_stage"]); got != "race" {
+		t.Fatalf("expected verified stage race, got %q", got)
+	}
+	if strings.Contains(strings.ToLower(verified.Reply), "background and alignment") {
+		t.Fatalf("reply should have been rewound to race fallback, got: %s", verified.Reply)
+	}
+	if !strings.Contains(strings.ToLower(verified.Reply), "which ancestry should the character have") {
+		t.Fatalf("expected race fallback reply, got: %s", verified.Reply)
 	}
 }
 

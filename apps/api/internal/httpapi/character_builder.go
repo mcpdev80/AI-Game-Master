@@ -170,7 +170,7 @@ var builderCoreRaceRules = []builderRaceRule{
 	{RaceName: "Halbling", Aliases: []string{"halbling", "halfling"}, Speed: "25 Fuß", FixedAbilityBonuses: []string{"+2 Geschicklichkeit"}, FixedLanguages: []string{"Gemeinsprache", "Halblingisch"}},
 	{RaceName: "Felsgnom", Aliases: []string{"felsgnom", "rock gnome"}, Speed: "25 Fuß", Darkvision: "60 Fuß", FixedAbilityBonuses: []string{"+2 Intelligenz", "+1 Konstitution"}, FixedLanguages: []string{"Gemeinsprache", "Gnomisch"}},
 	{RaceName: "Gnom", Aliases: []string{"gnom", "gnome"}, Speed: "25 Fuß", Darkvision: "60 Fuß", FixedAbilityBonuses: []string{"+2 Intelligenz"}, FixedLanguages: []string{"Gemeinsprache", "Gnomisch"}},
-	{RaceName: "Drachenblütiger", Aliases: []string{"drachenbluetiger", "drachenblütiger", "dragonborn"}, Speed: "30 Fuß", FixedAbilityBonuses: []string{"+2 Stärke", "+1 Charisma"}, FixedLanguages: []string{"Gemeinsprache", "Drakonisch"}, NotableTraits: []string{"Atemwaffe", "elementare Resistenz"}},
+	{RaceName: "Drachenblütiger", Aliases: []string{"drachenblut", "drachenbluetiger", "drachenblütiger", "dragonborn"}, Speed: "30 Fuß", FixedAbilityBonuses: []string{"+2 Stärke", "+1 Charisma"}, FixedLanguages: []string{"Gemeinsprache", "Drakonisch"}, NotableTraits: []string{"Atemwaffe", "elementare Resistenz"}},
 }
 
 var builderSRDSpellClassProfiles = map[string]builderSpellClassProfile{
@@ -502,11 +502,8 @@ func (h *Handler) characterBuilderMessage(c *gin.Context) {
 
 	currentStage := currentBuilderStage(character, &llmSession)
 	completion.Reply = builderMaybeAppendStepConfirmation(completion.Reply, completion.Patch)
-	sanitizeStage := currentStage
-	if nextStage := normalizeBuilderStage(safeOptionalString(completion.Patch.Metadata["builder_stage"])); nextStage != "" {
-		sanitizeStage = nextStage
-	}
-	sanitizeCharacterBuilderPatchForStage(&completion.Patch, sanitizeStage)
+	sanitizeCharacterBuilderPatchForStage(&completion.Patch, currentStage)
+	completion = verifyCharacterBuilderCompletion(character, completion, &llmSession)
 	if isBuilderStoryTransferMessage(req.Message, latestBuilderAssistantReply(messages)) {
 		applyBuilderStoryTransferPatch(&completion.Patch, latestBuilderStoryDraft(messages, completion.Reply))
 	}
@@ -518,6 +515,7 @@ func (h *Handler) characterBuilderMessage(c *gin.Context) {
 	messages = append(messages, assistantMessage)
 
 	applyCharacterPatch(&character, completion.Patch)
+	enforceBuilderStageConsistency(&character)
 	if character.Metadata == nil {
 		character.Metadata = map[string]any{}
 	}
@@ -587,6 +585,7 @@ func (h *Handler) applyCharacterBuilderPatch(c *gin.Context) {
 	}
 
 	applyCharacterPatch(&character, req.Patch)
+	enforceBuilderStageConsistency(&character)
 	if character.Metadata == nil {
 		character.Metadata = map[string]any{}
 	}
@@ -695,6 +694,14 @@ func (h *Handler) completeCharacterBuilder(ctx context.Context, character *Chara
 	previousAssistant := latestBuilderAssistantReply(transcript)
 	latestStoryOptions := latestBuilderStoryOptions(transcript)
 	language := builderCharacterLanguage(character)
+
+	if language == "de" && normalizeBuilderStage(builderStage) == "equipment_and_money" {
+		if builderQuestionLooksLikeRecommendationRequest(latestUserMessage) || builderQuestionLooksLikeListRequest(latestUserMessage) {
+			if reply, ok := builderDeterministicEquipmentAdviceReply(*character, latestUserMessage); ok {
+				return characterBuilderCompletion{Reply: reply, Patch: CharacterBuilderPatch{}}, nil
+			}
+		}
+	}
 
 	if language == "de" {
 		if storyCompletion, ok := builderDeterministicStorySelectionCompletion(character, latestUserMessage, latestStoryOptions); ok {
@@ -1426,6 +1433,12 @@ func builderDeterministicGuidedChoiceCompletion(character *Character, stage stri
 	if completion, ok := builderDeterministicLevelUpCompletion(character, stage, latestUserMessage); ok {
 		return completion, true
 	}
+	if reply, patch, ok := builderDeterministicCoreFieldRepairReply(*character, latestUserMessage); ok {
+		return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+	}
+	if reply, patch, ok := builderDeterministicAbilityAssignmentReply(*character, latestUserMessage); ok {
+		return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+	}
 	if character != nil && normalizeBuilderStage(stage) == "hit_points_hit_dice_and_movement" {
 		if reply, patch, ok := builderDeterministicHitPointsReply(*character, latestUserMessage); ok {
 			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
@@ -1438,6 +1451,10 @@ func builderDeterministicGuidedChoiceCompletion(character *Character, stage stri
 		return characterBuilderCompletion{Reply: reply, Patch: CharacterBuilderPatch{}}, true
 	}
 	switch normalizeBuilderStage(stage) {
+	case "race":
+		if reply, patch, ok := builderDeterministicRaceChoiceReply(*character, latestUserMessage); ok {
+			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
+		}
 	case "ability_scores":
 		if reply, patch, ok := builderDeterministicHalfElfAbilityReply(character, latestUserMessage); ok {
 			return characterBuilderCompletion{Reply: reply, Patch: patch}, true
@@ -2123,6 +2140,119 @@ func builderDeterministicRaceAdviceReply(character Character, message string) (s
 	return strings.Join(parts, " "), true
 }
 
+func builderDeterministicRaceChoiceReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
+	raceRule, ok := builderRaceRuleForText(latestUserMessage)
+	if !ok {
+		return "", CharacterBuilderPatch{}, false
+	}
+
+	raceName := raceRule.RaceName
+	patch := CharacterBuilderPatch{
+		Race: &raceName,
+		Metadata: map[string]any{
+			"builder_stage": "class_and_level",
+		},
+	}
+
+	if strings.TrimSpace(character.ClassAndLevel) != "" {
+		patch.Metadata["builder_stage"] = "background_and_alignment"
+		return fmt.Sprintf("Volk festgelegt: %s. Als Nächstes folgen regeltechnischer Hintergrund und Gesinnung.", raceRule.RaceName), patch, true
+	}
+
+	inferred := inferBuilderClassAndLevel(character)
+	if inferred == "" {
+		return fmt.Sprintf("Volk festgelegt: %s. Als Nächstes brauche ich Klasse und Stufe, damit ich den Bogen sauber fortsetzen kann.", raceRule.RaceName), patch, true
+	}
+
+	classEntries := parseCharacterClassLevels(inferred)
+	if len(classEntries) > 1 {
+		first := strings.TrimSpace(classEntries[0].ClassName)
+		second := strings.TrimSpace(classEntries[1].ClassName)
+		if first != "" && second != "" && !strings.EqualFold(first, second) {
+			return fmt.Sprintf("Volk: %s. Die Klassenverteilung steht mit %s fest; für die Anfangs-Fertigkeiten muss noch die Startklasse bestimmt werden. Wähle als Startklasse %s oder %s.", raceRule.RaceName, inferred, first, second), patch, true
+		}
+	}
+
+	return fmt.Sprintf("Volk festgelegt: %s. Die Klasse ist als %s vorgemerkt. Bestätige jetzt Klasse und Stufe, damit ich die Anfangs-Proficiencies sauber setze.", raceRule.RaceName, inferred), patch, true
+}
+
+func builderLooksLikeCorrectionIntent(message string) bool {
+	normalized := normalizeBuilderIntentText(message)
+	if normalized == "" {
+		return false
+	}
+	markers := []string{
+		"stimmt nicht",
+		"passt nicht",
+		"nicht eingetragen",
+		"nicht uebernommen",
+		"nicht übernommen",
+		"nicht gesetzt",
+		"fehlt",
+		"fehlen",
+		"korrigier",
+		"korrigiere",
+		"wrong",
+		"missing",
+		"not entered",
+		"not set",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func builderDeterministicCoreFieldRepairReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
+	message := normalizeBuilderIntentText(latestUserMessage)
+	if !builderLooksLikeCorrectionIntent(message) {
+		return "", CharacterBuilderPatch{}, false
+	}
+
+	patch := CharacterBuilderPatch{Metadata: map[string]any{}}
+	parts := make([]string, 0, 4)
+
+	if strings.TrimSpace(character.Race) == "" {
+		if raceRule, ok := builderRaceRuleForText(latestUserMessage); ok {
+			raceName := raceRule.RaceName
+			patch.Race = &raceName
+			parts = append(parts, fmt.Sprintf("Volk eingetragen: %s.", raceRule.RaceName))
+		}
+	}
+
+	if strings.TrimSpace(character.ClassAndLevel) == "" {
+		if inferred := inferBuilderClassAndLevel(character); inferred != "" {
+			patch.ClassAndLevel = &inferred
+			parts = append(parts, fmt.Sprintf("Klassenfolge eingetragen: %s.", inferred))
+		}
+	}
+
+	if len(parts) == 0 {
+		return "", CharacterBuilderPatch{}, false
+	}
+
+	nextStage := "background_and_alignment"
+	if strings.TrimSpace(character.Race) == "" && patch.Race == nil {
+		nextStage = "race"
+	}
+	if classText := strings.TrimSpace(character.ClassAndLevel); classText == "" && patch.ClassAndLevel == nil {
+		nextStage = "class_and_level"
+	}
+	patch.Metadata["builder_stage"] = nextStage
+
+	switch nextStage {
+	case "background_and_alignment":
+		parts = append(parts, "Wähle jetzt den regeltechnischen Hintergrund und die Gesinnung.")
+	case "class_and_level":
+		parts = append(parts, "Lege jetzt Klasse und Stufe fest, damit ich den Bogen sauber fortsetzen kann.")
+	default:
+		parts = append(parts, "Wähle jetzt das fehlende Volk, damit ich den Bogen sauber fortsetzen kann.")
+	}
+	return strings.Join(parts, " "), patch, true
+}
+
 func builderDeterministicClassStageAdviceReply(character Character, message string) (string, bool) {
 	options := make([]string, 0, len(builderCoreClassRules))
 	for _, rule := range builderCoreClassRules {
@@ -2167,6 +2297,13 @@ func builderDeterministicEquipmentReply(character Character, latestUserMessage s
 		return "", CharacterBuilderPatch{}, false
 	}
 	message := normalizeBuilderIntentText(latestUserMessage)
+	if len(stringListFromAny(character.Metadata["starting_equipment"])) == 0 &&
+		!builderMessageConfirmsPreviousSuggestion(latestUserMessage) &&
+		!strings.Contains(message, "uebernimm") &&
+		!strings.Contains(message, "nimm") {
+		reply, ok := builderDeterministicEquipmentAdviceReply(character, latestUserMessage)
+		return reply, CharacterBuilderPatch{}, ok
+	}
 	if builderQuestionLooksLikeListRequest(message) || builderQuestionLooksLikeRecommendationRequest(message) {
 		reply, ok := builderDeterministicEquipmentAdviceReply(character, latestUserMessage)
 		return reply, CharacterBuilderPatch{}, ok
@@ -3177,6 +3314,12 @@ func builderDeterministicSkillRepairReply(character Character, stage string, lat
 		return "", CharacterBuilderPatch{}, false
 	}
 	backgroundSkills, classSkills, _ := builderSkillSources(character)
+	if len(backgroundSkills) == 0 {
+		previousSkills := parseSkillChoicesFromMessageOrdered(previousAssistant)
+		if len(previousSkills) > classRule.SkillChoiceCount {
+			backgroundSkills = uniqueCanonicalSkills(previousSkills[:len(previousSkills)-classRule.SkillChoiceCount])
+		}
+	}
 	selected := parseSkillChoicesFromMessage(latestUserMessage)
 	if len(selected) == 0 && builderMessageConfirmsPreviousSuggestion(latestUserMessage) {
 		selected = builderSuggestedSkillsFromAssistantReply(previousAssistant)
@@ -3209,8 +3352,10 @@ func builderDeterministicSkillRepairReply(character Character, stage string, lat
 	allSkills := uniqueCanonicalSkills(append(backgroundSkills, newClassSkills...))
 	patch := CharacterBuilderPatch{
 		Metadata: map[string]any{
+			"background_skill_proficiencies": selectedOrNil(backgroundSkills),
 			"class_skill_proficiencies": selectedOrNil(newClassSkills),
 			"skill_proficiencies":       allSkills,
+			"saving_throw_proficiencies": classRule.SavingThrows,
 		},
 	}
 	if normalizeBuilderStage(stage) == "class_proficiencies_and_choices" && len(newClassSkills) >= classRule.SkillChoiceCount {
@@ -3226,6 +3371,25 @@ func builderDeterministicHitPointsReply(character Character, latestUserMessage s
 	message := normalizeBuilderIntentText(latestUserMessage)
 	if !builderLooksLikeContinueIntent(message) && !builderLooksLikeHitPointQuestion(message) {
 		return "", CharacterBuilderPatch{}, false
+	}
+	if builderLooksLikeContinueIntent(message) && len(character.Abilities) < 6 {
+		reply := "Die Attributswerte sind noch nicht sauber im Bogen eingetragen. Ich bleibe deshalb bei den Attributen, bis Stärke, Geschicklichkeit, Konstitution, Intelligenz, Weisheit und Charisma wirklich übernommen sind."
+		return reply, CharacterBuilderPatch{Metadata: map[string]any{"builder_stage": "ability_scores"}}, true
+	}
+	if builderLooksLikeContinueIntent(message) && strings.TrimSpace(character.ClassAndLevel) == "" {
+		if inferred := inferBuilderClassAndLevel(character); inferred != "" {
+			reply := fmt.Sprintf("Ich habe die Klassenverteilung jetzt erst sauber übernommen: %s. Danach gehen wir direkt bei den Klassenentscheidungen weiter.", inferred)
+			return reply, CharacterBuilderPatch{
+				ClassAndLevel: &inferred,
+				Metadata:      map[string]any{"builder_stage": "class_proficiencies_and_choices"},
+			}, true
+		}
+		reply := "Die Klasse und Stufe sind noch nicht sauber im Bogen eingetragen. Lege zuerst Klasse und Stufe fest, dann leite ich Trefferpunkte, Trefferwürfel und Bewegung daraus ab."
+		return reply, CharacterBuilderPatch{Metadata: map[string]any{"builder_stage": "class_and_level"}}, true
+	}
+	if builderLooksLikeContinueIntent(message) && (len(stringListFromAny(defaultMetadata(character.Metadata)["skill_proficiencies"])) == 0 || len(stringListFromAny(defaultMetadata(character.Metadata)["saving_throw_proficiencies"])) == 0) {
+		reply := "Die Fertigkeiten und Rettungswurf-Übungen sind noch nicht vollständig im Bogen eingetragen. Ich gehe deshalb zuerst zurück zu den Klassenentscheidungen und markiere diese sauber, bevor ich Trefferpunkte und Bewegung ableite."
+		return reply, CharacterBuilderPatch{Metadata: map[string]any{"builder_stage": "class_proficiencies_and_choices"}}, true
 	}
 
 	hitPointMax := builderDerivedHitPointMax(character)
@@ -3268,7 +3432,6 @@ func builderDeterministicHitPointsReply(character Character, latestUserMessage s
 
 func builderDeterministicSensesAndBodyReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
 	raceRule, hasRace := builderRaceRuleForCharacter(character)
-	metadata := defaultMetadata(character.Metadata)
 	message := normalizeBuilderIntentText(latestUserMessage)
 
 	patch := CharacterBuilderPatch{
@@ -3277,10 +3440,18 @@ func builderDeterministicSensesAndBodyReply(character Character, latestUserMessa
 		},
 	}
 
-	sensesValue := safeOptionalString(metadata["senses"])
-	if sensesValue == "" {
-		sensesValue = builderDerivedSenses(character)
+	for key, value := range parseBuilderBodyDetails(latestUserMessage) {
+		patch.Metadata[key] = value
 	}
+
+	if correctedPassive := parsePassivePerceptionCorrection(latestUserMessage); correctedPassive > 0 {
+		patch.Metadata["passive_perception"] = correctedPassive
+	}
+
+	previewCharacter := character
+	applyCharacterPatch(&previewCharacter, patch)
+
+	sensesValue := builderDerivedSenses(previewCharacter)
 	if sensesValue == "" && hasRace && strings.TrimSpace(raceRule.Darkvision) != "" {
 		sensesValue = fmt.Sprintf("Dunkelsicht %s", raceRule.Darkvision)
 	}
@@ -3303,7 +3474,7 @@ func builderDeterministicSensesAndBodyReply(character Character, latestUserMessa
 		}
 	}
 
-	missingBodyFields := builderMissingBodyFieldLabels(metadata)
+	missingBodyFields := builderMissingBodyFieldLabels(defaultMetadata(previewCharacter.Metadata))
 	parts := []string{}
 	if len(currentLanguages) > 0 {
 		parts = append(parts, fmt.Sprintf("Die Sprachen sind festgelegt: %s.", joinGermanList(currentLanguages)))
@@ -3318,6 +3489,142 @@ func builderDeterministicSensesAndBodyReply(character Character, latestUserMessa
 		parts = append(parts, "Sinne und Körperdaten sind festgelegt. Lege jetzt Persönlichkeitsmerkmale, Ideale, Bindungen und Makel fest.")
 	}
 	return strings.Join(parts, " "), patch, true
+}
+
+func parseBuilderBodyDetails(message string) map[string]any {
+	raw := strings.Join(strings.Fields(strings.TrimSpace(message)), " ")
+	if raw == "" {
+		return nil
+	}
+	normalized := normalizeBuilderIntentText(raw)
+	result := map[string]any{}
+	type fieldDef struct {
+		key     string
+		aliases []string
+	}
+	fields := []fieldDef{
+		{key: "age", aliases: []string{"alter", "age"}},
+		{key: "size", aliases: []string{"groesse", "große", "groesse", "height", "size"}},
+		{key: "weight", aliases: []string{"gewicht", "weight"}},
+		{key: "eyes", aliases: []string{"augenfarbe", "augen", "eyes", "eye color"}},
+		{key: "skin", aliases: []string{"hautfarbe", "haut", "skin", "schuppen"}},
+		{key: "hair", aliases: []string{"haare", "haar", "harre", "hair"}},
+	}
+	orderedKeys := []string{"age", "size", "weight", "eyes", "skin", "hair"}
+	bounds := make([]struct {
+		key   string
+		start int
+		end   int
+	}, 0, len(fields))
+	for _, field := range fields {
+		bestStart := -1
+		bestEnd := -1
+		for _, alias := range field.aliases {
+			aliasNorm := normalizeBuilderIntentText(alias)
+			if aliasNorm == "" {
+				continue
+			}
+			idx := strings.Index(normalized, aliasNorm)
+			if idx < 0 {
+				continue
+			}
+			if bestStart == -1 || idx < bestStart {
+				bestStart = idx
+				bestEnd = idx + len(aliasNorm)
+			}
+		}
+		if bestStart >= 0 {
+			bounds = append(bounds, struct {
+				key   string
+				start int
+				end   int
+			}{key: field.key, start: bestStart, end: bestEnd})
+		}
+	}
+	sort.Slice(bounds, func(i, j int) bool { return bounds[i].start < bounds[j].start })
+	for i, bound := range bounds {
+		segmentEnd := len(raw)
+		if i+1 < len(bounds) {
+			segmentEnd = bounds[i+1].start
+		}
+		if bound.end > len(raw) || bound.start >= len(raw) || bound.start >= segmentEnd {
+			continue
+		}
+		segment := strings.TrimSpace(raw[bound.end:segmentEnd])
+		segment = strings.TrimLeft(segment, " :=-")
+		segment = strings.TrimSpace(segment)
+		if cut := findBuilderBodySegmentCutoff(segment); cut >= 0 {
+			segment = strings.TrimSpace(segment[:cut])
+		}
+		segment = strings.Trim(segment, ".,;:! ")
+		if segment == "" {
+			continue
+		}
+		result[bound.key] = segment
+	}
+	for _, key := range orderedKeys {
+		if value, ok := result[key]; ok {
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text != "" {
+				result[key] = text
+			}
+		}
+	}
+	if ageValue, ok := result["age"]; ok {
+		if match := regexp.MustCompile(`\d{1,4}`).FindString(fmt.Sprint(ageValue)); match != "" {
+			result["age"] = match
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func parsePassivePerceptionCorrection(message string) int {
+	normalized := normalizeBuilderIntentText(message)
+	if normalized == "" {
+		return 0
+	}
+	if !strings.Contains(normalized, "passive wahrnehmung") &&
+		!strings.Contains(normalized, "passive warhnemnung") &&
+		!strings.Contains(normalized, "passive perception") {
+		return 0
+	}
+	match := regexp.MustCompile(`\b(\d{1,2})\b`).FindStringSubmatch(normalized)
+	if len(match) < 2 {
+		return 0
+	}
+	value, err := strconv.Atoi(match[1])
+	if err != nil || value <= 0 {
+		return 0
+	}
+	return value
+}
+
+func findBuilderBodySegmentCutoff(segment string) int {
+	normalized := normalizeBuilderIntentText(segment)
+	if normalized == "" {
+		return -1
+	}
+	markers := []string{
+		" passive wahrnehmung",
+		" passive warhnemnung",
+		" passive perception",
+		" sinne ",
+		" senses ",
+	}
+	best := -1
+	for _, marker := range markers {
+		idx := strings.Index(normalized, strings.TrimSpace(marker))
+		if idx < 0 {
+			continue
+		}
+		if best == -1 || idx < best {
+			best = idx
+		}
+	}
+	return best
 }
 
 func builderLooksLikeContinueIntent(message string) bool {
@@ -3536,6 +3843,46 @@ func parseSkillChoicesFromMessage(message string) []string {
 	return uniqueCanonicalSkills(found)
 }
 
+func parseSkillChoicesFromMessageOrdered(message string) []string {
+	normalized := normalizeBuilderIntentText(message)
+	if normalized == "" {
+		return []string{}
+	}
+	type foundSkill struct {
+		name string
+		pos  int
+	}
+	found := make([]foundSkill, 0, 4)
+	for _, skill := range builderCanonicalSkills {
+		bestPos := -1
+		for _, alias := range skill.Aliases {
+			pos := strings.Index(normalized, normalizeBuilderIntentText(alias))
+			if pos >= 0 && (bestPos == -1 || pos < bestPos) {
+				bestPos = pos
+			}
+		}
+		if bestPos >= 0 {
+			found = append(found, foundSkill{name: skill.Name, pos: bestPos})
+		}
+	}
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].pos == found[j].pos {
+			return found[i].name < found[j].name
+		}
+		return found[i].pos < found[j].pos
+	})
+	ordered := make([]string, 0, len(found))
+	seen := map[string]bool{}
+	for _, item := range found {
+		if seen[item.name] {
+			continue
+		}
+		seen[item.name] = true
+		ordered = append(ordered, item.name)
+	}
+	return ordered
+}
+
 func builderMessageConfirmsPreviousSuggestion(message string) bool {
 	normalized := normalizeBuilderIntentText(message)
 	if normalized == "" {
@@ -3748,6 +4095,205 @@ func parseAbilityChoiceKeys(message string) []string {
 		}
 	}
 	return keys
+}
+
+func parseAbilityAssignmentFromMessage(message string) map[string]int {
+	normalized := normalizeBuilderIntentText(message)
+	if normalized == "" {
+		return nil
+	}
+	pattern := regexp.MustCompile(`(?i)\b(ch|cha|charisma|ko|con|konstitution|we|wis|weisheit|in|int|intelligenz|ge|dex|geschicklichkeit|st|str|staerke|stärke|strength|dexterity|constitution|intelligence|wisdom)\b\s*[:=]?\s*(\d{1,2})`)
+	matches := pattern.FindAllStringSubmatch(normalized, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	assignment := map[string]int{}
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		key := normalizeAbilityKey(match[1])
+		if key == "" {
+			continue
+		}
+		value, err := strconv.Atoi(strings.TrimSpace(match[2]))
+		if err != nil {
+			continue
+		}
+		assignment[key] = value
+	}
+	if len(assignment) == 0 {
+		return nil
+	}
+	return assignment
+}
+
+func intSliceFromAny(value any) []int {
+	switch typed := value.(type) {
+	case []int:
+		return append([]int(nil), typed...)
+	case []any:
+		items := make([]int, 0, len(typed))
+		for _, entry := range typed {
+			switch number := entry.(type) {
+			case int:
+				items = append(items, number)
+			case int32:
+				items = append(items, int(number))
+			case int64:
+				items = append(items, int(number))
+			case float64:
+				items = append(items, int(number))
+			case string:
+				parsed, err := strconv.Atoi(strings.TrimSpace(number))
+				if err == nil {
+					items = append(items, parsed)
+				}
+			}
+		}
+		return items
+	default:
+		return nil
+	}
+}
+
+func normalizeAbilityKey(value string) string {
+	switch normalizeBuilderIntentText(value) {
+	case "st", "str", "staerke", "strength":
+		return "strength"
+	case "ge", "dex", "geschicklichkeit", "dexterity":
+		return "dexterity"
+	case "ko", "con", "konstitution", "constitution":
+		return "constitution"
+	case "in", "int", "intelligenz", "intelligence":
+		return "intelligence"
+	case "we", "wis", "weisheit", "wisdom":
+		return "wisdom"
+	case "ch", "cha", "charisma":
+		return "charisma"
+	default:
+		return ""
+	}
+}
+
+func inferBuilderClassAndLevel(character Character) string {
+	if text := strings.TrimSpace(character.ClassAndLevel); text != "" {
+		return text
+	}
+	metadata := defaultMetadata(character.Metadata)
+	if text := strings.TrimSpace(safeOptionalString(metadata["builder_multiclass_target"])); text != "" {
+		return text
+	}
+	if text := strings.TrimSpace(safeOptionalString(metadata["concept"])); text != "" {
+		normalized := strings.ReplaceAll(text, " und ", " / ")
+		normalized = strings.ReplaceAll(normalized, " and ", " / ")
+		if entries := parseCharacterClassLevels(normalized); len(entries) > 0 {
+			parts := make([]string, 0, len(entries))
+			for _, entry := range entries {
+				if strings.TrimSpace(entry.ClassName) == "" || entry.Level <= 0 {
+					continue
+				}
+				parts = append(parts, fmt.Sprintf("%s %d", entry.ClassName, entry.Level))
+			}
+			if len(parts) > 0 {
+				return strings.Join(parts, " / ")
+			}
+		}
+	}
+	return ""
+}
+
+func applyBuilderRaceAbilityBonuses(character Character, base map[string]int) map[string]int {
+	final := map[string]int{}
+	for key, value := range base {
+		final[key] = value
+	}
+	raceRule, ok := builderRaceRuleForCharacter(character)
+	if !ok {
+		return final
+	}
+	for _, bonus := range raceRule.FixedAbilityBonuses {
+		text := normalizeBuilderIntentText(bonus)
+		if strings.Contains(text, "auf alle attribute") {
+			for _, key := range []string{"strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"} {
+				final[key]++
+			}
+			continue
+		}
+		match := regexp.MustCompile(`(\d+)\s+([a-zA-ZäöüÄÖÜß]+)`).FindStringSubmatch(text)
+		if len(match) < 3 {
+			continue
+		}
+		amount, err := strconv.Atoi(match[1])
+		if err != nil {
+			continue
+		}
+		key := normalizeAbilityKey(match[2])
+		if key == "" {
+			continue
+		}
+		final[key] += amount
+	}
+	if strings.Contains(normalizeBuilderIntentText(raceRule.RaceName), "halbelf") {
+		for _, key := range stringListFromAny(defaultMetadata(character.Metadata)["race_bonus_choices"]) {
+			normalizedKey := normalizeAbilityKey(key)
+			if normalizedKey == "" || normalizedKey == "charisma" {
+				continue
+			}
+			final[normalizedKey]++
+		}
+	}
+	return final
+}
+
+func builderDeterministicAbilityAssignmentReply(character Character, latestUserMessage string) (string, CharacterBuilderPatch, bool) {
+	values := intSliceFromAny(defaultMetadata(character.Metadata)["resolved_values"])
+	if len(values) == 0 {
+		return "", CharacterBuilderPatch{}, false
+	}
+	baseAssignment := parseAbilityAssignmentFromMessage(latestUserMessage)
+	if len(baseAssignment) == 0 {
+		return "", CharacterBuilderPatch{}, false
+	}
+	validation := validateAbilityAssignment(ValidateAbilityAssignmentRequest{
+		Values:     values,
+		Assignment: baseAssignment,
+		Class:      firstNonEmpty(singleOrPrimaryClassName(inferBuilderClassAndLevel(character)), strings.TrimSpace(character.ClassAndLevel)),
+	})
+	if !validation.Valid {
+		reply := "Ich konnte diese Attributsverteilung noch nicht sauber übernehmen."
+		if len(validation.MissingAbilities) > 0 {
+			reply += fmt.Sprintf(" Es fehlen noch %s.", joinGermanList(validation.MissingAbilities))
+		}
+		if len(validation.DuplicateValues) > 0 {
+			reply += fmt.Sprintf(" Doppelt verwendet wurden %v.", validation.DuplicateValues)
+		}
+		reply += " Nenne jetzt genau sechs Werte für Stärke, Geschicklichkeit, Konstitution, Intelligenz, Weisheit und Charisma."
+		return reply, CharacterBuilderPatch{Metadata: map[string]any{"builder_stage": "ability_scores"}}, true
+	}
+	finalAssignment := applyBuilderRaceAbilityBonuses(character, baseAssignment)
+	patch := CharacterBuilderPatch{
+		Abilities: finalAssignment,
+		Metadata: map[string]any{
+			"builder_stage":       "class_proficiencies_and_choices",
+			"suggested_assignment": baseAssignment,
+		},
+	}
+	if strings.TrimSpace(character.ClassAndLevel) == "" {
+		if inferred := inferBuilderClassAndLevel(character); inferred != "" {
+			patch.ClassAndLevel = &inferred
+		}
+	}
+	reply := fmt.Sprintf("Die Attributswerte sind jetzt übernommen: Stärke %d, Geschicklichkeit %d, Konstitution %d, Intelligenz %d, Weisheit %d und Charisma %d.", finalAssignment["strength"], finalAssignment["dexterity"], finalAssignment["constitution"], finalAssignment["intelligence"], finalAssignment["wisdom"], finalAssignment["charisma"])
+	classText := strings.TrimSpace(character.ClassAndLevel)
+	if classText == "" && patch.ClassAndLevel != nil {
+		classText = strings.TrimSpace(*patch.ClassAndLevel)
+	}
+	if classText != "" {
+		reply += fmt.Sprintf(" Für %s gehen wir jetzt direkt zu den Klassen-Fertigkeiten weiter.", classText)
+	}
+	reply += " Nenne jetzt die noch offenen Klassen-Fertigkeiten oder bestätige die bereits vorgeschlagenen."
+	return reply, patch, true
 }
 
 func abilityKeyLabel(key string) string {
@@ -4503,6 +5049,72 @@ func currentBuilderStage(character Character, session *LLMSession) string {
 	return inferBuilderStageFromCharacter(character)
 }
 
+func builderStageRank(stage string) int {
+	switch normalizeBuilderStage(stage) {
+	case "":
+		return 0
+	case "concept":
+		return 1
+	case "race":
+		return 2
+	case "class_and_level":
+		return 3
+	case "background_and_alignment":
+		return 4
+	case "ability_method":
+		return 5
+	case "ability_scores":
+		return 6
+	case "class_proficiencies_and_choices":
+		return 7
+	case "hit_points_hit_dice_and_movement":
+		return 8
+	case "languages_senses_and_body":
+		return 9
+	case "personality":
+		return 10
+	case "equipment_and_money":
+		return 11
+	case "class_features_not_spells":
+		return 12
+	case "derived_stats":
+		return 13
+	case "combat":
+		return 14
+	case "review":
+		return 15
+	case "level_up":
+		return 100
+	default:
+		return 999
+	}
+}
+
+func enforceBuilderStageConsistency(character *Character) {
+	if character == nil {
+		return
+	}
+	if parseMetadataBool(defaultMetadata(character.Metadata)["level_up_in_progress"]) {
+		return
+	}
+	inferred := inferBuilderStageFromCharacter(*character)
+	if character.Metadata == nil {
+		character.Metadata = map[string]any{}
+	}
+	stored := normalizeBuilderStage(safeOptionalString(character.Metadata["builder_stage"]))
+	if inferred == "" {
+		if stored != "" {
+			character.Metadata["builder_stage"] = stored
+		}
+		return
+	}
+	if stored == "" || builderStageRank(inferred) < builderStageRank(stored) {
+		character.Metadata["builder_stage"] = inferred
+		return
+	}
+	character.Metadata["builder_stage"] = stored
+}
+
 func builderHasPendingRaceChoice(character Character) bool {
 	race := normalizeBuilderIntentText(character.Race)
 	metadata := defaultMetadata(character.Metadata)
@@ -4893,8 +5505,13 @@ func builderFallbackReply(stage string, character *Character, language string) s
 	case "languages_senses_and_body":
 		return "Jetzt fehlen nur noch Sprache, Sinne und die Körperdaten der Figur."
 	case "personality":
-		return "Lass uns der Figur jetzt Persönlichkeit geben: Merkmale, Ideale, Bindungen und Makel."
+		return "Jetzt geht es um Persönlichkeit. Sinnvoll sind jeweils kurze Entscheidungen für Merkmal, Ideal, Bindung und Makel. Für einen disziplinierten Ritter würden zum Beispiel Pflichtbewusstsein, Ehre, Treue zum Lehnsherrn und Stolz gut passen. Nenne jetzt diese vier Punkte oder bitte mich um drei passende Vorschlagssets."
 	case "equipment_and_money":
+		if character != nil {
+			if reply, ok := builderDeterministicEquipmentAdviceReply(*character, ""); ok {
+				return reply
+			}
+		}
 		return "Jetzt tragen wir die Ausrüstung und das Geld sauber ein."
 	case "class_features_not_spells":
 		return "Dann sammeln wir die Klassenmerkmale ein, die auf diesem Stand wirklich schon gelten."
@@ -4914,6 +5531,78 @@ func builderFallbackReply(stage string, character *Character, language string) s
 		}
 		return "Lass uns mit dem nächsten klaren Schritt weitermachen."
 	}
+}
+
+func verifyCharacterBuilderCompletion(character Character, completion characterBuilderCompletion, session *LLMSession) characterBuilderCompletion {
+	postPatch := character
+	applyCharacterPatch(&postPatch, completion.Patch)
+	enforceBuilderStageConsistency(&postPatch)
+	actualStage := currentBuilderStage(postPatch, session)
+	claimedStage := normalizeBuilderStage(safeOptionalString(postPatch.Metadata["builder_stage"]))
+	if claimedStage == "" {
+		claimedStage = actualStage
+	}
+	if builderStageRank(actualStage) < builderStageRank(claimedStage) {
+		if postPatch.Metadata == nil {
+			postPatch.Metadata = map[string]any{}
+		}
+		postPatch.Metadata["builder_stage"] = actualStage
+	}
+	if completion.Patch.Metadata == nil {
+		completion.Patch.Metadata = map[string]any{}
+	}
+	completion.Patch.Metadata["builder_stage"] = actualStage
+
+	verified := character
+	applyCharacterPatch(&verified, completion.Patch)
+	enforceBuilderStageConsistency(&verified)
+	finalStage := currentBuilderStage(verified, session)
+	if finalStage != actualStage {
+		completion.Patch.Metadata["builder_stage"] = finalStage
+		actualStage = finalStage
+	}
+
+	materialChange := builderPatchHasMaterialChange(completion.Patch)
+	if normalizeBuilderIntentText(completion.Reply) == "" {
+		completion.Reply = builderFallbackReply(actualStage, &verified, builderCharacterLanguage(&verified))
+		return completion
+	}
+
+	if !materialChange && !builderReplyImpliesProgressBeyondStage(completion.Reply, actualStage) {
+		return completion
+	}
+
+	if builderReplyImpliesProgressBeyondStage(completion.Reply, actualStage) {
+		completion.Reply = builderFallbackReply(actualStage, &verified, builderCharacterLanguage(&verified))
+	}
+	return completion
+}
+
+func builderReplyImpliesProgressBeyondStage(reply string, actualStage string) bool {
+	normalized := normalizeBuilderIntentText(reply)
+	if normalized == "" {
+		return false
+	}
+	stageMarkers := map[string][]string{
+		"race":                            {"volk festgelegt", "race set", "ancestry set"},
+		"class_and_level":                 {"klassenfolge festgelegt", "klasse und stufe festgelegt", "class progression set", "class and level set"},
+		"background_and_alignment":        {"hintergrund ist damit festgelegt", "background is now fixed", "alignment is set"},
+		"ability_scores":                  {"grundwerte sind verteilt", "ability scores are assigned", "attribute sind uebernommen", "attribute are now recorded"},
+		"class_proficiencies_and_choices": {"fertigkeiten sind jetzt festgelegt", "skills are now fixed", "proficiencies are now set"},
+		"hit_points_hit_dice_and_movement": {"trefferpunkte sind festgelegt", "hit points are set", "hit dice", "bewegungsrate"},
+	}
+	actualRank := builderStageRank(actualStage)
+	for stage, markers := range stageMarkers {
+		if builderStageRank(stage) <= actualRank {
+			continue
+		}
+		for _, marker := range markers {
+			if strings.Contains(normalized, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func mustJSON(value any) string {
@@ -5398,13 +6087,18 @@ func builderQuestionLooksLikeListRequest(message string) bool {
 }
 
 func builderQuestionLooksLikeRecommendationRequest(message string) bool {
-	lower := strings.ToLower(strings.TrimSpace(message))
+	lower := normalizeBuilderIntentText(message)
 	if lower == "" {
 		return false
 	}
 	keywords := []string{
 		"empfehl",
 		"vorschlag",
+		"schlag",
+		"schlagst",
+		"schlaeg",
+		"schlag vor",
+		"schlaegst du vor",
 		"sinn",
 		"pass",
 		"besten",

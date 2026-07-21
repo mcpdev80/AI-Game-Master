@@ -40,6 +40,10 @@ func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
+	if err := store.ensureBundledDemoCharacters(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("ensure bundled demo characters: %w", err)
+	}
 
 	return store, nil
 }
@@ -50,6 +54,26 @@ func (s *Store) Close() {
 
 func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
+}
+
+func (s *Store) ensureBundledDemoCharacters(ctx context.Context) error {
+	rows, err := s.pool.Query(ctx, `SELECT id::text FROM characters LIMIT 1`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return rows.Err()
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, character := range bundledDemoCharacters() {
+		if _, err := s.CreateCharacter(ctx, character); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) ListHiddenSystemDocumentIDs(ctx context.Context) (map[string]struct{}, error) {
@@ -205,6 +229,23 @@ func (s *Store) migrate(ctx context.Context) error {
 			joined_at TIMESTAMPTZ NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
+		`CREATE TABLE IF NOT EXISTS session_companions (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+			character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+			display_name TEXT NOT NULL DEFAULT '',
+			control_mode TEXT NOT NULL DEFAULT 'dm',
+			status TEXT NOT NULL DEFAULT 'active',
+			tactics_note TEXT NOT NULL DEFAULT '',
+			visibility TEXT NOT NULL DEFAULT 'player_visible',
+			current_hit_points INT NULL,
+			temporary_hit_points INT NULL,
+			conditions_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+			resource_overrides_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE (session_id, character_id)
+		)`,
 		`CREATE TABLE IF NOT EXISTS player_access_links (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			player_slot_id UUID NOT NULL REFERENCES player_slots(id) ON DELETE CASCADE,
@@ -275,6 +316,8 @@ func (s *Store) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_characters_campaign_id ON characters(campaign_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_characters_document_id ON characters(document_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_player_slots_session_id ON player_slots(session_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_companions_session_id ON session_companions(session_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_companions_character_id ON session_companions(character_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_player_access_links_slot_id ON player_access_links(player_slot_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_llm_sessions_scope ON llm_sessions(scope_type, scope_id)`,
