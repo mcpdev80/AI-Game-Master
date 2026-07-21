@@ -1023,7 +1023,7 @@ func builderSpellAttackRowsForEntries(entries []builderSpellCatalogEntry, classN
 	language := builderCharacterLanguage(&character)
 	rows := []string{}
 	for _, entry := range entries {
-		if entry.AttackCategory == "" {
+		if entry.AttackCategory != "attack" && entry.AttackCategory != "save" {
 			continue
 		}
 		levelLabel := "Spell"

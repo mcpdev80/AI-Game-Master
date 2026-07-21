@@ -333,8 +333,27 @@ func TestBuilderDeterministicSpellcastingReplyStoresStructuredSpellAttackRows(t 
 			t.Fatalf("expected spell attack rows to contain %q, got %q", expected, rows)
 		}
 	}
+	for _, forbidden := range []string{"Magierhand", "Fingerfertigkeit", "Schild", "Magische Rüstung"} {
+		if strings.Contains(rows, forbidden) {
+			t.Fatalf("did not expect non-attack spell %q in spell attack rows: %q", forbidden, rows)
+		}
+	}
 	if !strings.Contains(rows, "Beschreibung:") {
 		t.Fatalf("expected german spell descriptions, got %q", rows)
+	}
+	notes, ok := patch.Metadata["spell_notes"].(string)
+	if !ok {
+		t.Fatalf("expected spell_notes string, got %#v", patch.Metadata["spell_notes"])
+	}
+	for _, expected := range []string{"Magierhand:", "Fingerfertigkeit:", "Schild:", "Magische Rüstung:"} {
+		if !strings.Contains(notes, expected) {
+			t.Fatalf("expected spell notes to contain %q, got %q", expected, notes)
+		}
+	}
+	for _, forbidden := range []string{"Feuerpfeil:", "Magisches Geschoss:", "Schlaf:"} {
+		if strings.Contains(notes, forbidden) {
+			t.Fatalf("did not expect attack/save spell %q in spell notes: %q", forbidden, notes)
+		}
 	}
 }
 
@@ -360,6 +379,9 @@ func TestBuilderDeterministicGuidedChoiceCompletionKeepsSpellcastingStageConfirm
 	rows, ok := completion.Patch.Metadata["spell_attacks"].(string)
 	if !ok || !strings.Contains(rows, "Zaubertrick |") {
 		t.Fatalf("expected structured spell attack rows in patch, got %#v", completion.Patch.Metadata["spell_attacks"])
+	}
+	if strings.Contains(rows, "Magierhand") {
+		t.Fatalf("did not expect non-attack spell in spell attack rows, got %q", rows)
 	}
 	if !strings.Contains(rows, "Beschreibung:") {
 		t.Fatalf("expected german spell descriptions in patch, got %q", rows)

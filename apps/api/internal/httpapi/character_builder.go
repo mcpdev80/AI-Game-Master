@@ -64,6 +64,7 @@ type builderFeatureAdvice struct {
 type builderSpellAdvice struct {
 	Options          []string
 	Recommendation   []string
+	SpellSummary     string
 	SpellNotes       string
 	SpellAttacks     []string
 	SpellAttackRows  string
@@ -2295,7 +2296,7 @@ func builderDeterministicSpellcastingAdviceReply(character Character, latestUser
 		parts := []string{
 			fmt.Sprintf("For %s at level 1, these SRD 5.1 spell options fit the build: %s.", localizedClassNameOrFallback(character, language), joinLocalizedList(advice.Options, language)),
 			fmt.Sprintf("Recommended default selection: %s.", joinLocalizedList(advice.Recommendation, language)),
-			advice.SpellNotes,
+			advice.SpellSummary,
 		}
 		if len(advice.SpellAttacks) > 0 {
 			parts = append(parts, fmt.Sprintf("Important spell attacks or save values: %s.", joinLocalizedList(advice.SpellAttacks, language)))
@@ -2306,7 +2307,7 @@ func builderDeterministicSpellcastingAdviceReply(character Character, latestUser
 	parts := []string{
 		fmt.Sprintf("Für %s auf Stufe 1 stehen im SRD 5.1 diese sinnvollen Zauberoptionen bereit: %s.", classNameOrFallback(character), joinGermanList(advice.Options)),
 		fmt.Sprintf("Empfohlene Standardauswahl: %s.", joinGermanList(advice.Recommendation)),
-		advice.SpellNotes,
+		advice.SpellSummary,
 	}
 	if len(advice.SpellAttacks) > 0 {
 		parts = append(parts, fmt.Sprintf("Wichtige Zauberangriffe oder SG-Werte: %s.", joinGermanList(advice.SpellAttacks)))
@@ -2699,6 +2700,22 @@ func builderLocalizedSpellNotesForProfile(profile builderSpellClassProfile, mod 
 	}
 }
 
+func builderAdditionalSpellNotesForEntries(entries []builderSpellCatalogEntry, language string) string {
+	lines := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		switch entry.AttackCategory {
+		case "attack", "save":
+			continue
+		}
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s", name, localizedShortSpellDescription(entry, language)))
+	}
+	return strings.Join(uniquePreserveOrder(lines), "\n")
+}
+
 func builderSpellAdviceForCharacter(character Character) (builderSpellAdvice, bool) {
 	if !builderHasLevelOneSpellcasting(character) {
 		return builderSpellAdvice{}, false
@@ -2749,7 +2766,8 @@ func builderSpellAdviceForCharacter(character Character) (builderSpellAdvice, bo
 	return builderSpellAdvice{
 		Options:          optionLines,
 		Recommendation:   recommendedNames,
-		SpellNotes:       builderLocalizedSpellNotesForProfile(profile, mod, language),
+		SpellSummary:     builderLocalizedSpellNotesForProfile(profile, mod, language),
+		SpellNotes:       builderAdditionalSpellNotesForEntries(recommendation, language),
 		SpellAttacks:     builderLocalizedSpellAttackSummaries(recommendation, prof, mod, language),
 		SpellAttackRows:  builderSpellAttackRowsForEntries(recommendation, classRule.ClassName, character),
 		SpellSaveDC:      fmt.Sprintf("%d", 8+prof+mod),
@@ -3260,8 +3278,13 @@ func builderDeterministicSensesAndBodyReply(character Character, latestUserMessa
 	}
 
 	sensesValue := safeOptionalString(metadata["senses"])
-	if hasRace && sensesValue == "" && strings.TrimSpace(raceRule.Darkvision) != "" {
+	if sensesValue == "" {
+		sensesValue = builderDerivedSenses(character)
+	}
+	if sensesValue == "" && hasRace && strings.TrimSpace(raceRule.Darkvision) != "" {
 		sensesValue = fmt.Sprintf("Dunkelsicht %s", raceRule.Darkvision)
+	}
+	if sensesValue != "" {
 		patch.Metadata["senses"] = sensesValue
 	}
 
