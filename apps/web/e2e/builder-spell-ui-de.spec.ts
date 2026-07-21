@@ -58,6 +58,9 @@ test("deutscher builder-zauberschritt bleibt in chat und charakterbogen vollstae
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: "Bearbeiten" }).click();
   await expect(page.getByRole("heading", { name: "KI-geführter Charakterentwurf" })).toBeVisible();
+  await expect(page.getByText("Kernmerkmale", { exact: true })).toBeVisible();
+  await expect(page.getByText("Zauberwirken, Arkane Erholung", { exact: false })).toBeVisible();
+  await expect(page.getByText("Dunkelsicht 18 m, passive Wahrnehmung 10", { exact: false })).toBeVisible();
 
   await page.getByPlaceholder("Beschreibe Konzept, Rolle oder Herkunft oder beantworte die letzte Frage der KI.").fill("welche zauber sollte ich nehmen?");
   await page.getByRole("button", { name: "Nachricht senden" }).click();
@@ -82,6 +85,9 @@ test("deutscher builder-zauberschritt bleibt in chat und charakterbogen vollstae
   await expect(page.getByText("Rettungswurf", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Beschreibung", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Fernzauberangriff mit Feuer.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Weitere Zauber", { exact: true })).toBeVisible();
+  await expect(page.getByText("Schild", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reaktionszauber mit +5 RK bis zum Beginn deines nächsten Zuges.", { exact: true })).toBeVisible();
 
   await expect(page.getByText("Cantrip", { exact: false })).toHaveCount(0);
   await expect(page.getByText("Spell Attack", { exact: false })).toHaveCount(0);

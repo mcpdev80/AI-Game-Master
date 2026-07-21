@@ -56,6 +56,9 @@ test("english builder spell step stays fully localized in chat and sheet", async
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: "Edit" }).click();
   await expect(page.getByRole("heading", { name: "AI-guided Character Draft" })).toBeVisible();
+  await expect(page.getByText("Core Traits", { exact: true })).toBeVisible();
+  await expect(page.getByText("Spellcasting, Arcane Recovery", { exact: false })).toBeVisible();
+  await expect(page.getByText("darkvision 60 ft., passive Perception 10", { exact: false })).toBeVisible();
 
   await page.getByPlaceholder("Describe your concept, role, origin, or answer the AI's latest question.").fill("which spells should I take?");
   await page.getByRole("button", { name: "Send message" }).click();
@@ -80,6 +83,9 @@ test("english builder spell step stays fully localized in chat and sheet", async
   await expect(page.getByText("Saving Throw", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Description", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Ranged fire spell attack.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Additional Spells", { exact: true })).toBeVisible();
+  await expect(page.getByText("Shield", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reaction spell that grants +5 AC until your next turn.", { exact: true })).toBeVisible();
 
   await expect(page.getByText("Zaubertrick", { exact: false })).toHaveCount(0);
   await expect(page.getByText("Zauberangriff", { exact: false })).toHaveCount(0);

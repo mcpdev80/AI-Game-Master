@@ -60,6 +60,7 @@ type SheetFormState = {
   background: string;
   alignment: string;
   languages: string;
+  features: string;
   armor_class: string;
   hit_point_max: string;
   current_hit_points: string;
@@ -747,6 +748,46 @@ function parseStructuredRows(value: string, expectedColumns: number) {
   return rows;
 }
 
+function parseSpellNoteRows(spellsValue: string, notesValue: string, excludedSpellNames: string[] = []) {
+  const rows = new Map<string, string>();
+  const excluded = new Set(excludedSpellNames.map((name) => name.trim().toLowerCase()).filter(Boolean));
+  for (const spell of splitMetadataList(spellsValue)) {
+    const trimmed = spell.trim();
+    if (trimmed && !excluded.has(trimmed.toLowerCase())) {
+      rows.set(trimmed, "");
+    }
+  }
+
+  const lines = notesValue
+    .replaceAll("\r", "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const colonIndex = line.indexOf(":");
+    if (colonIndex > 0) {
+      const spell = line.slice(0, colonIndex).trim();
+      const description = line.slice(colonIndex + 1).trim();
+      if (spell && !excluded.has(spell.toLowerCase())) {
+        rows.set(spell, description);
+        continue;
+      }
+    }
+    if (rows.size === 0) {
+      rows.set(line, "");
+      continue;
+    }
+    const lastSpell = [...rows.keys()].at(-1);
+    if (lastSpell) {
+      const previous = rows.get(lastSpell) ?? "";
+      rows.set(lastSpell, previous ? `${previous} ${line}` : line);
+    }
+  }
+
+  return [...rows.entries()].map(([spell, description]) => ({ spell, description }));
+}
+
 type CharacterSheetCanvasProps = {
   sheetForm: SheetFormState;
   assignment: Record<AbilityKey, number>;
@@ -787,7 +828,30 @@ function CharacterSheetCanvas({
   const derivedSpellAttackBonus =
     spellcastingModifier === null ? "—" : formatModifier(proficiency + spellcastingModifier);
   const combatRows = parseStructuredRows(sheetForm.combat_attacks, 7);
-  const spellAttackRows = parseStructuredRows(sheetForm.spell_attacks, 7);
+  const rawSpellRows = parseStructuredRows(sheetForm.spell_attacks, 7);
+  const isSpellAttackRow = (row: ParsedTableRow) => {
+    const finalColumn = String(row.columns[6] ?? "").trim().toLowerCase();
+    return !["effekt", "effect", "utility", "sonstiges", "other"].includes(finalColumn);
+  };
+  const spellAttackRows = rawSpellRows.filter(isSpellAttackRow);
+  const legacyAdditionalSpellRows = rawSpellRows
+    .filter((row) => !isSpellAttackRow(row))
+    .map((row) => ({
+      spell: String(row.columns[1] ?? "").trim(),
+      description: row.description || "—",
+    }))
+    .filter((row) => row.spell);
+  const additionalSpellRows = parseSpellNoteRows(
+    sheetForm.spells,
+    sheetForm.spell_notes,
+    spellAttackRows.map((row) => row.columns[1] ?? "")
+  );
+  const mergedAdditionalSpellRows = [
+    ...legacyAdditionalSpellRows,
+    ...additionalSpellRows.filter(
+      (row) => !legacyAdditionalSpellRows.some((legacy) => legacy.spell.toLowerCase() === row.spell.toLowerCase())
+    ),
+  ];
   const renderInlineField = (
     field: keyof SheetFormState,
     options?: { multiline?: boolean; displayFallback?: string; inputPlaceholder?: string }
@@ -888,6 +952,14 @@ function CharacterSheetCanvas({
               </div>
               <p>{renderInlineField("concept", { multiline: true, displayFallback: tr("No clear concept entered yet.", "Noch kein klares Konzept eingetragen.") })}</p>
               <p>{renderInlineField("backstory", { multiline: true, displayFallback: tr("The backstory develops through the builder conversation.", "Die Hintergrundgeschichte wächst mit dem Builder-Dialog.") })}</p>
+            </section>
+            <section className="sheet-box">
+              <strong>{tr("Core Traits", "Kernmerkmale")}</strong>
+              <dl className="sheet-detail-list">
+                <div><dt>{tr("Features", "Merkmale")}</dt><dd>{renderInlineField("features", { multiline: true, displayFallback: "—" })}</dd></div>
+                <div><dt>{tr("Senses", "Sinne")}</dt><dd>{renderInlineField("senses", { displayFallback: "—" })}</dd></div>
+                <div><dt>{tr("Languages", "Sprachen")}</dt><dd>{renderInlineField("languages", { multiline: true, displayFallback: "—" })}</dd></div>
+              </dl>
             </section>
             <section className="sheet-box">
               <strong>{tr("Basic Details", "Grunddaten")}</strong>
@@ -1135,12 +1207,39 @@ function CharacterSheetCanvas({
           <section className="sheet-box">
             <div className="sheet-box__title-row">
               <strong>{tr("Additional Spells", "Weitere Zauber")}</strong>
-              <span>{tr("short descriptions for other spells", "Kurzbeschreibungen für andere Zauber")}</span>
+              <span>{tr("spell list with short descriptions", "Zauberliste mit Kurzbeschreibungen")}</span>
             </div>
-            {renderInlineField("spell_notes", {
-              multiline: true,
-              inputPlaceholder: "Wirkung, Konzentration, Dauer, taktische Hinweise oder Kurzbeschreibung.",
-            })}
+            <div className="sheet-table-card">
+              {isEditMode ? (
+                <div className="sheet-table__body-copy">
+                  {renderInlineField("spell_notes", {
+                    multiline: true,
+                    inputPlaceholder:
+                      tr(
+                        "Example:\nShield: Reaction spell that grants +5 AC until your next turn.\nSleep: Puts creatures to sleep starting with the lowest current HP.",
+                        "Beispiel:\nSchild: Reaktionszauber mit +5 RK bis zum Beginn deines nächsten Zuges.\nSchlaf: Schickt Kreaturen mit den niedrigsten aktuellen TP zuerst in Schlaf."
+                      ),
+                  })}
+                </div>
+              ) : mergedAdditionalSpellRows.length > 0 ? (
+                <div className="sheet-table-list">
+                  <div className="sheet-table sheet-table--spell-notes">
+                    <div className="sheet-table__head">{tr("Spell", "Zauber")}</div>
+                    <div className="sheet-table__head">{tr("Description", "Beschreibung")}</div>
+                  </div>
+                  {mergedAdditionalSpellRows.map((row, index) => (
+                    <div className="sheet-table sheet-table--spell-notes sheet-table--values" key={`spell-note-${index}`}>
+                      <div className="sheet-table__cell">{row.spell || "—"}</div>
+                      <div className="sheet-table__cell">{row.description || "—"}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="sheet-table__body-copy">
+                  <p className="muted-copy">{tr("No additional spells entered yet.", "Noch keine weiteren Zauber eingetragen.")}</p>
+                </div>
+              )}
+            </div>
           </section>
         </div>
       ) : null}
@@ -1168,6 +1267,7 @@ function CharacterSheetCanvas({
                 <div><dt>{tr("Hair", "Haare")}</dt><dd>{renderInlineField("hair")}</dd></div>
                 <div><dt>{tr("Languages", "Sprachen")}</dt><dd>{renderInlineField("languages", { multiline: true, displayFallback: "—" })}</dd></div>
                 <div><dt>{tr("Senses", "Sinne")}</dt><dd>{renderInlineField("senses")}</dd></div>
+                <div><dt>{tr("Features", "Merkmale")}</dt><dd>{renderInlineField("features", { multiline: true, displayFallback: "—" })}</dd></div>
               </dl>
             </section>
           </div>
@@ -1247,6 +1347,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
     background: "",
     alignment: "",
     languages: "",
+    features: "",
     armor_class: "",
     hit_point_max: "",
     current_hit_points: "",
@@ -1520,6 +1621,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       background: character.background,
       alignment: character.alignment,
       languages: character.languages.join(", "),
+      features: character.features.join(", "),
       armor_class: character.armor_class != null ? String(character.armor_class) : "",
       hit_point_max: character.hit_point_max != null ? String(character.hit_point_max) : "",
       current_hit_points: safeString(character.metadata.current_hit_points),
@@ -2090,6 +2192,7 @@ export function CharactersScreen({ characters, campaigns, documents, initialBuil
       background: sheetForm.background,
       alignment: sheetForm.alignment,
       languages: splitMetadataList(sheetForm.languages),
+      features: splitMetadataList(sheetForm.features),
       armor_class: parseNumericText(sheetForm.armor_class),
       hit_point_max: parseNumericText(sheetForm.hit_point_max),
       speed: sheetForm.speed,
