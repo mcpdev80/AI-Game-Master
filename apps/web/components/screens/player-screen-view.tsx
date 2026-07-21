@@ -1672,9 +1672,10 @@ export function PlayerScreenView({
                   {combatInitiative.map((turn, index) => {
                     const linkedCharacter = findCombatCharacter(turn, liveCharacters, livePlayerLinks);
                     const indicator = combatIndicatorForTurn(turn, linkedCharacter, tr);
+                    const sideClass = turn.side === "enemy" ? "is-enemy" : turn.side === "ally" ? "is-ally" : "is-player";
                     return (
                       <div
-                        className={`player-initiative-board__item ${turn.side === "enemy" ? "is-enemy" : "is-player"} ${index === combatState.active_turn_index ? "is-active" : ""}`}
+                        className={`player-initiative-board__item ${sideClass} ${index === combatState.active_turn_index ? "is-active" : ""}`}
                         key={`${turn.id}-${index}`}
                       >
                         <div className="player-initiative-board__combatant">

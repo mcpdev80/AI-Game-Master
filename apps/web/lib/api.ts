@@ -137,10 +137,20 @@ export type SessionState = {
     active_turn_index: number;
     initiative_order: {
       id: string;
+      character_id?: string;
       name: string;
       side: string;
+      participant_type?: string;
+      control_mode?: string;
       initiative: number;
       status?: string;
+      armor_class?: number;
+      hit_point_max?: number;
+      current_hit_points?: number;
+      temporary_hit_points?: number;
+      death_save_successes?: number;
+      death_save_failures?: number;
+      stable?: boolean;
     }[];
     log: {
       timestamp: string;
@@ -211,6 +221,25 @@ export type Session = {
   language: string;
   default_voice_profile_id: string | null;
   state: SessionState;
+  companions?: SessionCompanion[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type SessionCompanion = {
+  id: string;
+  session_id: string;
+  character_id: string;
+  display_name: string;
+  control_mode: string;
+  status: string;
+  tactics_note: string;
+  visibility: string;
+  current_hit_points?: number | null;
+  temporary_hit_points?: number | null;
+  conditions: string[];
+  resource_overrides: Record<string, unknown>;
+  character?: Character | null;
   created_at: string;
   updated_at: string;
 };
@@ -518,6 +547,43 @@ export async function fetchSessions(): Promise<Session[]> {
 
 export async function fetchSession(sessionId: string): Promise<Session> {
   return apiGet<Session>(`/api/sessions/${sessionId}`);
+}
+
+export async function fetchSessionCompanions(sessionId: string): Promise<SessionCompanion[]> {
+  const response = await apiGet<{ items: SessionCompanion[] }>(`/api/sessions/${sessionId}/companions`);
+  return response.items;
+}
+
+export async function createSessionCompanion(
+  sessionId: string,
+  payload: {
+    character_id: string;
+    display_name?: string;
+    tactics_note?: string;
+    visibility?: string;
+  },
+): Promise<SessionCompanion> {
+  return apiPost<SessionCompanion>(`/api/sessions/${sessionId}/companions`, payload);
+}
+
+export async function updateSessionCompanion(
+  companionId: string,
+  payload: {
+    display_name?: string;
+    status?: string;
+    tactics_note?: string;
+    visibility?: string;
+    current_hit_points?: number | null;
+    temporary_hit_points?: number | null;
+    conditions?: string[];
+    resource_overrides?: Record<string, unknown>;
+  },
+): Promise<SessionCompanion> {
+  return apiPut<SessionCompanion>(`/api/session-companions/${companionId}`, payload);
+}
+
+export async function deleteSessionCompanion(companionId: string): Promise<{ deleted: boolean }> {
+  return apiDelete<{ deleted: boolean }>(`/api/session-companions/${companionId}`);
 }
 
 export async function updateSession(

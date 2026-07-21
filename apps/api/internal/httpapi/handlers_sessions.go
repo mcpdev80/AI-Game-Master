@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -33,6 +35,11 @@ func (h *Handler) getSession(c *gin.Context) {
 		return
 	}
 
+	if err := h.attachSessionCompanions(c.Request.Context(), &item); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "load session companions", err)
+		return
+	}
+
 	c.JSON(http.StatusOK, item)
 }
 
@@ -48,8 +55,25 @@ func (h *Handler) listSessionEvents(c *gin.Context) {
 
 func (h *Handler) createSession(c *gin.Context) {
 	var req CreateSessionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	rawBody, err := io.ReadAll(c.Request.Body)
+	if err != nil {
 		errorResponse(c, http.StatusBadRequest, "invalid session payload", err)
+		return
+	}
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid session payload", err)
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" || len(strings.TrimSpace(req.Name)) < 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+	if strings.TrimSpace(req.RulesetWork) == "" || strings.TrimSpace(req.RulesetVersion) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ruleset_work and ruleset_version are required"})
+		return
+	}
+	if req.TargetPlayerCount < 1 || req.TargetPlayerCount > 12 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_player_count must be between 1 and 12"})
 		return
 	}
 
@@ -68,6 +92,10 @@ func (h *Handler) createSession(c *gin.Context) {
 	}
 	if strings.TrimSpace(req.CampaignID) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "campaign_id is required or must be derivable from adventure"})
+		return
+	}
+	if len(req.CompanionTemplates) > 3 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "a maximum of 3 companion templates is allowed"})
 		return
 	}
 
@@ -164,6 +192,80 @@ func (h *Handler) createSession(c *gin.Context) {
 	}
 	if err := h.store.UpdateSessionState(c.Request.Context(), item.ID, item.State); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "link llm sessions to session", err)
+		return
+	}
+
+	for _, template := range req.CompanionTemplates {
+		if strings.TrimSpace(template.TemplateCharacterID) == "" || strings.TrimSpace(template.Name) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "each companion template requires a source character and new name"})
+			return
+		}
+		source, err := h.store.GetCharacter(c.Request.Context(), template.TemplateCharacterID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "companion template character not found"})
+				return
+			}
+			errorResponse(c, http.StatusInternalServerError, "load companion template", err)
+			return
+		}
+
+		clonedMetadata := map[string]any{}
+		if len(source.Metadata) > 0 {
+			raw, _ := json.Marshal(source.Metadata)
+			_ = json.Unmarshal(raw, &clonedMetadata)
+		}
+		if clonedMetadata == nil {
+			clonedMetadata = map[string]any{}
+		}
+		clonedMetadata["is_session_clone"] = true
+		clonedMetadata["clone_source_character_id"] = source.ID
+		clonedMetadata["clone_source_character_name"] = source.Name
+		clonedMetadata["cloned_for_session_id"] = item.ID
+		if source.HitPointMax != nil {
+			clonedMetadata["current_hit_points"] = *source.HitPointMax
+		}
+		if _, ok := clonedMetadata["temporary_hit_points"]; !ok {
+			clonedMetadata["temporary_hit_points"] = 0
+		}
+
+		cloned := Character{
+			CampaignID:    &item.CampaignID,
+			DocumentID:    nil,
+			Name:          strings.TrimSpace(template.Name),
+			PlayerName:    "AI DM",
+			ClassAndLevel: source.ClassAndLevel,
+			Background:    source.Background,
+			Race:          source.Race,
+			Alignment:     source.Alignment,
+			ArmorClass:    source.ArmorClass,
+			Speed:         source.Speed,
+			HitPointMax:   source.HitPointMax,
+			Proficiency:   source.Proficiency,
+			Abilities:     source.Abilities,
+			Languages:     source.Languages,
+			Features:      source.Features,
+			Metadata:      clonedMetadata,
+		}
+		createdClone, err := h.store.CreateCharacter(c.Request.Context(), cloned)
+		if err != nil {
+			errorResponse(c, http.StatusInternalServerError, "create companion clone", err)
+			return
+		}
+		_, err = h.store.CreateSessionCompanion(c.Request.Context(), item.ID, createdClone.ID, CreateSessionCompanionRequest{
+			CharacterID: createdClone.ID,
+			DisplayName: strings.TrimSpace(template.Name),
+			TacticsNote: strings.TrimSpace(template.TacticsNote),
+			Visibility:  "player_visible",
+		})
+		if err != nil {
+			errorResponse(c, http.StatusInternalServerError, "attach companion clone", err)
+			return
+		}
+	}
+
+	if err := h.attachSessionCompanions(c.Request.Context(), &item); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "load session companions", err)
 		return
 	}
 

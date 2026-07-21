@@ -541,6 +541,75 @@ func activeCharactersForSession(ctx context.Context, store *Store, session Sessi
 			"weapon_notes":            defaultMetadata(character.Metadata)["weapon_notes"],
 			"starting_equipment":      defaultMetadata(character.Metadata)["starting_equipment"],
 			"private_sidebar_context": privateSidebarContext,
+			"control_mode":            "player",
+			"participant_type":        "player_character",
+			"tactics_note":            "",
+			"current_hit_points":      defaultMetadata(character.Metadata)["current_hit_points"],
+			"temporary_hit_points":    defaultMetadata(character.Metadata)["temporary_hit_points"],
+			"death_save_successes":    defaultMetadata(character.Metadata)["death_save_successes"],
+			"death_save_failures":     defaultMetadata(character.Metadata)["death_save_failures"],
+			"death_save_stable":       defaultMetadata(character.Metadata)["death_save_stable"],
+		})
+	}
+	companions, err := store.ListSessionCompanions(ctx, session.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, companion := range companions {
+		character, err := store.GetCharacter(ctx, companion.CharacterID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			return nil, err
+		}
+		name := strings.TrimSpace(companion.DisplayName)
+		if name == "" {
+			name = character.Name
+		}
+		currentHP := any(nil)
+		if companion.CurrentHitPoints != nil {
+			currentHP = *companion.CurrentHitPoints
+		} else {
+			currentHP = defaultMetadata(character.Metadata)["current_hit_points"]
+		}
+		items = append(items, map[string]any{
+			"id":                      companion.ID,
+			"character_id":            character.ID,
+			"name":                    name,
+			"player_name":             "AI DM",
+			"slot_display":            "DM Companion",
+			"status":                  companion.Status,
+			"class_and_level":         character.ClassAndLevel,
+			"race":                    character.Race,
+			"background":              character.Background,
+			"alignment":               character.Alignment,
+			"armor_class":             character.ArmorClass,
+			"speed":                   character.Speed,
+			"hit_point_max":           character.HitPointMax,
+			"proficiency_bonus":       character.Proficiency,
+			"abilities":               character.Abilities,
+			"current_money":           defaultMetadata(character.Metadata)["current_money"],
+			"current_inventory":       defaultMetadata(character.Metadata)["current_inventory"],
+			"experience_points":       defaultMetadata(character.Metadata)["experience_points"],
+			"level_up_available":      defaultMetadata(character.Metadata)["level_up_available"],
+			"features":                character.Features,
+			"languages":               character.Languages,
+			"senses":                  defaultMetadata(character.Metadata)["senses"],
+			"skill_proficiencies":     metadataStringList(defaultMetadata(character.Metadata)["skill_proficiencies"]),
+			"passive_perception":      passivePerceptionForCharacter(character),
+			"combat_attacks":          defaultMetadata(character.Metadata)["combat_attacks"],
+			"weapon_notes":            defaultMetadata(character.Metadata)["weapon_notes"],
+			"starting_equipment":      defaultMetadata(character.Metadata)["starting_equipment"],
+			"private_sidebar_context": "",
+			"control_mode":            companion.ControlMode,
+			"participant_type":        "dm_companion",
+			"tactics_note":            companion.TacticsNote,
+			"current_hit_points":      currentHP,
+			"temporary_hit_points":    defaultMetadata(character.Metadata)["temporary_hit_points"],
+			"death_save_successes":    defaultMetadata(character.Metadata)["death_save_successes"],
+			"death_save_failures":     defaultMetadata(character.Metadata)["death_save_failures"],
+			"death_save_stable":       defaultMetadata(character.Metadata)["death_save_stable"],
 		})
 	}
 	return items, nil
@@ -576,6 +645,10 @@ func activeCharacterContextChunks(activeCharacters []map[string]any) []GMContext
 			fmt.Sprintf("Kampfangriffe: %v", character["combat_attacks"]),
 			fmt.Sprintf("Waffenhinweise: %v", character["weapon_notes"]),
 			fmt.Sprintf("Startausrüstung: %v", character["starting_equipment"]),
+			fmt.Sprintf("Steuerung: %v", character["control_mode"]),
+			fmt.Sprintf("Teilnehmertyp: %v", character["participant_type"]),
+			fmt.Sprintf("Taktik: %v", character["tactics_note"]),
+			fmt.Sprintf("HP aktuell: %v", character["current_hit_points"]),
 			fmt.Sprintf("Private Sidebar: %v", character["private_sidebar_context"]),
 		}
 		items = append(items, GMContextChunk{
@@ -615,6 +688,8 @@ type enemyCombatProfile struct {
 	AttackBonus int
 	DamageDice  string
 	DamageType  string
+	ArmorClass  int
+	HitPointMax int
 }
 
 type enemyEncounterDefinition struct {
@@ -699,6 +774,287 @@ func rollTotalFromEvent(event *DiceRollEvent) int {
 		total += die.Value
 	}
 	return total
+}
+
+func parseLeadingInt(value string) int {
+	matches := regexp.MustCompile(`\d+`).FindString(strings.TrimSpace(value))
+	if matches == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(matches)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
+
+func parseIntFromAny(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case *int:
+		if typed != nil {
+			return *typed
+		}
+		return 0
+	case *int32:
+		if typed != nil {
+			return int(*typed)
+		}
+		return 0
+	case *int64:
+		if typed != nil {
+			return int(*typed)
+		}
+		return 0
+	case string:
+		return parseMetadataInt(typed)
+	default:
+		return parseMetadataInt(fmt.Sprintf("%v", value))
+	}
+}
+
+func parseBoolFromAny(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		normalized := strings.ToLower(strings.TrimSpace(typed))
+		return normalized == "true" || normalized == "1" || normalized == "yes" || normalized == "ja" || normalized == "stable" || normalized == "stabil"
+	case int:
+		return typed != 0
+	default:
+		return false
+	}
+}
+
+func combatTurnFromActiveCharacter(character map[string]any, initiative int) CombatTurnEntry {
+	participantType := strings.TrimSpace(fmt.Sprintf("%v", character["participant_type"]))
+	controlMode := strings.TrimSpace(fmt.Sprintf("%v", character["control_mode"]))
+	rawCharacterID, hasCharacterID := character["character_id"]
+	characterID := ""
+	if hasCharacterID && rawCharacterID != nil {
+		characterID = strings.TrimSpace(fmt.Sprintf("%v", rawCharacterID))
+	}
+	side := "player"
+	if participantType == "dm_companion" || controlMode == "dm" {
+		side = "ally"
+	}
+	turn := CombatTurnEntry{
+		ID:                 strings.TrimSpace(fmt.Sprintf("%v", character["id"])),
+		CharacterID:        characterID,
+		Name:               firstNonEmpty(strings.TrimSpace(fmt.Sprintf("%v", character["name"])), "Character"),
+		Side:               side,
+		ParticipantType:    participantType,
+		ControlMode:        controlMode,
+		Initiative:         initiative,
+		Status:             firstNonEmpty(strings.TrimSpace(fmt.Sprintf("%v", character["status"])), "ready"),
+		ArmorClass:         parseIntFromAny(character["armor_class"]),
+		HitPointMax:        parseIntFromAny(character["hit_point_max"]),
+		CurrentHitPoints:   parseIntFromAny(character["current_hit_points"]),
+		TemporaryHitPoints: parseIntFromAny(character["temporary_hit_points"]),
+		DeathSaveSuccesses: parseIntFromAny(character["death_save_successes"]),
+		DeathSaveFailures:  parseIntFromAny(character["death_save_failures"]),
+		Stable:             parseBoolFromAny(character["death_save_stable"]),
+	}
+	if turn.CharacterID == "" && participantType != "dm_companion" {
+		turn.CharacterID = turn.ID
+	}
+	if turn.CurrentHitPoints <= 0 && turn.HitPointMax > 0 && turn.Side != "enemy" {
+		turn.CurrentHitPoints = turn.HitPointMax
+	}
+	return turn
+}
+
+func turnCanAct(turn CombatTurnEntry) bool {
+	status := strings.ToLower(strings.TrimSpace(turn.Status))
+	if turn.CurrentHitPoints <= 0 {
+		return false
+	}
+	return !containsAny(status, "dead", "slain", "killed", "down", "unconscious", "tot", "bewusstlos")
+}
+
+func firstAliveEnemyIndex(state CombatState) int {
+	for index, turn := range state.InitiativeOrder {
+		if turn.Side == "enemy" && turnCanAct(turn) {
+			return index
+		}
+	}
+	return -1
+}
+
+func hasLivingEnemies(state CombatState) bool {
+	return firstAliveEnemyIndex(state) >= 0
+}
+
+func finalizeCombatIfResolved(state *CombatState) bool {
+	if state == nil {
+		return false
+	}
+	if hasLivingEnemies(*state) {
+		return false
+	}
+	state.Active = false
+	state.ActiveTurnIndex = 0
+	return true
+}
+
+func partyCombatantIndexes(state CombatState) []int {
+	indexes := make([]int, 0)
+	for index, turn := range state.InitiativeOrder {
+		if (turn.Side == "player" || turn.Side == "ally") && turnCanAct(turn) {
+			indexes = append(indexes, index)
+		}
+	}
+	return indexes
+}
+
+func firstHumanPlayerTurn(state CombatState) *CombatTurnEntry {
+	for index := range state.InitiativeOrder {
+		turn := &state.InitiativeOrder[index]
+		if turn.Side == "player" && turnCanAct(*turn) {
+			return turn
+		}
+	}
+	return nil
+}
+
+func pendingRollRequestFromSession(session Session) *RollRequest {
+	if session.State.VisualMode != "dice_capture" || session.State.VisualPayload == nil {
+		return nil
+	}
+	payload := defaultMetadata(session.State.VisualPayload)
+	if strings.TrimSpace(fmt.Sprintf("%v", payload["type"])) != "roll_request" {
+		return nil
+	}
+	request := &RollRequest{
+		Type:         strings.TrimSpace(fmt.Sprintf("%v", payload["roll_type"])),
+		Label:        strings.TrimSpace(fmt.Sprintf("%v", payload["roll_label"])),
+		Ability:      strings.TrimSpace(fmt.Sprintf("%v", payload["roll_ability"])),
+		Skill:        strings.TrimSpace(fmt.Sprintf("%v", payload["roll_skill"])),
+		Reason:       strings.TrimSpace(fmt.Sprintf("%v", payload["roll_reason"])),
+		Instructions: strings.TrimSpace(fmt.Sprintf("%v", payload["instructions"])),
+	}
+	if dice, ok := payload["roll_dice"].([]any); ok {
+		request.Dice = make([]string, 0, len(dice))
+		for _, item := range dice {
+			token := strings.TrimSpace(fmt.Sprintf("%v", item))
+			if token != "" && token != "<nil>" {
+				request.Dice = append(request.Dice, token)
+			}
+		}
+	}
+	return request
+}
+
+func deterministicDamageTypeForActiveTurn(activeTurn *CombatTurnEntry, activeCharacters []map[string]any) string {
+	if activeTurn == nil {
+		return "damage"
+	}
+	for _, character := range activeCharacters {
+		characterID := strings.TrimSpace(fmt.Sprintf("%v", character["id"]))
+		linkedCharacterID := strings.TrimSpace(fmt.Sprintf("%v", character["character_id"]))
+		if characterID != activeTurn.ID && linkedCharacterID != activeTurn.CharacterID {
+			continue
+		}
+		for _, field := range []string{"combat_attacks", "spell_attacks"} {
+			text := strings.TrimSpace(fmt.Sprintf("%v", character[field]))
+			if text == "" || text == "<nil>" {
+				continue
+			}
+			for _, line := range strings.Split(text, "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(strings.ToLower(line), "description:") {
+					continue
+				}
+				parts := strings.Split(line, "|")
+				if len(parts) >= 7 {
+					damageType := strings.TrimSpace(parts[6])
+					if damageType != "" {
+						return damageType
+					}
+				}
+			}
+		}
+	}
+	return "damage"
+}
+
+func resolveDeterministicPendingDamageTurn(session Session, req GMRespondRequest, activeCharacters []map[string]any) (GMResponse, CombatState, bool) {
+	pending := pendingRollRequestFromSession(session)
+	if pending == nil || !strings.EqualFold(strings.TrimSpace(pending.Type), "damage") || req.DiceRoll == nil || !session.State.Combat.Active {
+		return GMResponse{}, session.State.Combat, false
+	}
+	nextCombat := session.State.Combat
+	activeTurn := activeCombatTurn(nextCombat)
+	if activeTurn == nil || activeTurn.Side != "player" {
+		return GMResponse{}, session.State.Combat, false
+	}
+	targetIndex := firstAliveEnemyIndex(nextCombat)
+	if targetIndex < 0 {
+		return GMResponse{}, session.State.Combat, false
+	}
+	target := &nextCombat.InitiativeOrder[targetIndex]
+	damage := rollTotalFromEvent(req.DiceRoll)
+	damageType := deterministicDamageTypeForActiveTurn(activeTurn, activeCharacters)
+	entry := CombatLogEntry{
+		Timestamp: time.Now().UTC(),
+		ActorID:   activeTurn.ID,
+		ActorName: activeTurn.Name,
+		Side:      "player",
+		Kind:      "player_damage",
+		Summary:   fmt.Sprintf("%s deals %d %s damage to %s.", activeTurn.Name, damage, damageType, target.Name),
+		Details: map[string]any{
+			"dice_roll":    req.DiceRoll,
+			"damage_total": damage,
+			"damage_type":  damageType,
+			"target_name":  target.Name,
+		},
+	}
+	applyDamageToTurn(target, damage)
+	nextCombat.Log = append(nextCombat.Log, entry)
+
+	defeatedNow := !hasLivingEnemies(nextCombat)
+	if defeatedNow {
+		finalizeCombatIfResolved(&nextCombat)
+		narration := fmt.Sprintf("%s’s strike lands cleanly for %d %s damage and drops %s where it stands. The immediate clash is over. What does the party do next?", activeTurn.Name, damage, damageType, target.Name)
+		return GMResponse{
+			SessionID:    session.ID,
+			Language:     chooseLanguage(req.Language, session.Language),
+			Narration:    narration,
+			StateUpdates: []StateUpdate{},
+			SceneEvents:  []SceneEvent{},
+			DMNotes:      []string{"Deterministic combat damage resolution used."},
+			CreatedAt:    time.Now().UTC(),
+		}, nextCombat, true
+	}
+
+	advanceCombatTurn(&nextCombat)
+	autoNarration, autoEntries := resolveAutomatedCombatTurns(chooseLanguage(req.Language, session.Language), &nextCombat, activeCharacters)
+	if len(autoEntries) > 0 {
+		nextCombat.Log = append(nextCombat.Log, autoEntries...)
+	}
+	finalizeCombatIfResolved(&nextCombat)
+	narration := fmt.Sprintf("%s’s strike lands for %d %s damage on %s.", activeTurn.Name, damage, damageType, target.Name)
+	if strings.TrimSpace(autoNarration) != "" {
+		narration = strings.TrimSpace(strings.Join([]string{narration, autoNarration}, " "))
+	}
+	narration = ensureInteractiveNarration(chooseLanguage(req.Language, session.Language), narration, nil)
+	return GMResponse{
+		SessionID:    session.ID,
+		Language:     chooseLanguage(req.Language, session.Language),
+		Narration:    narration,
+		StateUpdates: []StateUpdate{},
+		SceneEvents:  []SceneEvent{},
+		DMNotes:      []string{"Deterministic combat damage resolution used."},
+		CreatedAt:    time.Now().UTC(),
+	}, nextCombat, true
 }
 
 func looksLikeInitiativePrompt(input string) bool {
@@ -863,6 +1219,12 @@ func enemyProfileForName(name string, language string) enemyCombatProfile {
 		for _, profile := range definition.VariantProfiles {
 			if strings.Contains(lower, strings.ToLower(profile.Name)) {
 				profile.Name = localizedMonsterName(profile.Name, language)
+				if profile.ArmorClass <= 0 || profile.HitPointMax <= 0 {
+					if monster, ok := srdMonsterCatalogEntryByName(strings.TrimSpace(encounterSuffixNumberPattern.ReplaceAllString(profile.Name, ""))); ok {
+						profile.ArmorClass = parseLeadingInt(monster.ArmorClass)
+						profile.HitPointMax = parseLeadingInt(monster.HitPoints)
+					}
+				}
 				return profile
 			}
 		}
@@ -874,18 +1236,20 @@ func enemyProfileForName(name string, language string) enemyCombatProfile {
 			AttackBonus: monster.AttackBonus,
 			DamageDice:  monster.DamageDice,
 			DamageType:  monster.DamageType,
+			ArmorClass:  parseLeadingInt(monster.ArmorClass),
+			HitPointMax: parseLeadingInt(monster.HitPoints),
 		}
 	}
 	if strings.Contains(lower, "spinne") || strings.Contains(lower, "spider") {
-		return enemyCombatProfile{Name: localizedMonsterName("Giant Spider", language), AttackBonus: 5, DamageDice: "1d8+3", DamageType: "piercing"}
+		return enemyCombatProfile{Name: localizedMonsterName("Giant Spider", language), AttackBonus: 5, DamageDice: "1d8+3", DamageType: "piercing", ArmorClass: 14, HitPointMax: 26}
 	}
 	if strings.Contains(lower, "goblin") {
-		return enemyCombatProfile{Name: localizedMonsterName("Goblin Raider", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing"}
+		return enemyCombatProfile{Name: localizedMonsterName("Goblin Raider", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing", ArmorClass: 15, HitPointMax: 7}
 	}
 	if strings.Contains(lower, "wolf") || strings.Contains(lower, "wölf") || strings.Contains(lower, "woelf") {
-		return enemyCombatProfile{Name: localizedMonsterName("Wolf", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing"}
+		return enemyCombatProfile{Name: localizedMonsterName("Wolf", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing", ArmorClass: 13, HitPointMax: 11}
 	}
-	return enemyCombatProfile{Name: localizedMonsterName("Enemy", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "damage"}
+	return enemyCombatProfile{Name: localizedMonsterName("Enemy", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "damage", ArmorClass: 12, HitPointMax: 10}
 }
 
 var simpleDiceFormulaPattern = regexp.MustCompile(`(?i)^\s*(\d+)\s*[dw]\s*(\d+)(?:\s*([+-])\s*(\d+))?\s*$`)
@@ -942,11 +1306,11 @@ func currentPlayerTurnCharacter(activeCharacters []map[string]any) map[string]an
 
 func activeCombatPlayerCharacter(state CombatState, activeCharacters []map[string]any) map[string]any {
 	activeTurn := activeCombatTurn(state)
-	if activeTurn == nil || activeTurn.Side != "player" {
+	if activeTurn == nil || (activeTurn.Side != "player" && activeTurn.Side != "ally") {
 		return currentPlayerTurnCharacter(activeCharacters)
 	}
 	for _, character := range activeCharacters {
-		if strings.TrimSpace(fmt.Sprintf("%v", character["id"])) == activeTurn.ID {
+		if strings.TrimSpace(fmt.Sprintf("%v", character["id"])) == activeTurn.ID || strings.TrimSpace(fmt.Sprintf("%v", character["character_id"])) == activeTurn.CharacterID {
 			return character
 		}
 	}
@@ -983,22 +1347,24 @@ func initializeCombatState(session Session, req GMRespondRequest, response GMRes
 		if playerID == rolledPlayerID && rolledPlayerInit > 0 {
 			playerInit = rolledPlayerInit
 		}
-		order = append(order, CombatTurnEntry{
-			ID:         playerID,
-			Name:       firstNonEmpty(strings.TrimSpace(fmt.Sprintf("%v", player["name"])), "Spieler"),
-			Side:       "player",
-			Initiative: playerInit,
-			Status:     "ready",
-		})
+		turn := combatTurnFromActiveCharacter(player, playerInit)
+		turn.ID = playerID
+		order = append(order, turn)
 	}
 	for index, enemyName := range enemyNames {
+		profile := enemyProfileForName(enemyName, response.Language)
 		enemyInit := rand.Intn(20) + 1
 		order = append(order, CombatTurnEntry{
-			ID:         fmt.Sprintf("enemy:%d:%s", index+1, strings.ToLower(strings.ReplaceAll(enemyName, " ", "-"))),
-			Name:       enemyName,
-			Side:       "enemy",
-			Initiative: enemyInit,
-			Status:     "ready",
+			ID:               fmt.Sprintf("enemy:%d:%s", index+1, strings.ToLower(strings.ReplaceAll(enemyName, " ", "-"))),
+			Name:             enemyName,
+			Side:             "enemy",
+			ParticipantType:  "enemy_npc",
+			ControlMode:      "dm",
+			Initiative:       enemyInit,
+			Status:           "ready",
+			ArmorClass:       profile.ArmorClass,
+			HitPointMax:      profile.HitPointMax,
+			CurrentHitPoints: profile.HitPointMax,
 		})
 	}
 	for i := 0; i < len(order)-1; i++ {
@@ -1045,70 +1411,210 @@ func activeCombatTurn(state CombatState) *CombatTurnEntry {
 	return &state.InitiativeOrder[state.ActiveTurnIndex]
 }
 
-func resolveEnemyTurns(language string, state *CombatState, activeCharacters []map[string]any) (string, []CombatLogEntry) {
+type combatActionProfile struct {
+	Name        string
+	AttackBonus int
+	DamageDice  string
+	DamageType  string
+}
+
+func choosePartyTargetIndex(state CombatState) int {
+	candidates := partyCombatantIndexes(state)
+	if len(candidates) == 0 {
+		return -1
+	}
+	return candidates[rand.Intn(len(candidates))]
+}
+
+func applyDamageToTurn(turn *CombatTurnEntry, damage int) {
+	if turn == nil || damage <= 0 {
+		return
+	}
+	if turn.TemporaryHitPoints > 0 {
+		absorbed := damage
+		if absorbed > turn.TemporaryHitPoints {
+			absorbed = turn.TemporaryHitPoints
+		}
+		turn.TemporaryHitPoints -= absorbed
+		damage -= absorbed
+	}
+	if damage <= 0 {
+		return
+	}
+	turn.CurrentHitPoints -= damage
+	if turn.CurrentHitPoints <= 0 {
+		turn.CurrentHitPoints = 0
+		if turn.Side == "enemy" {
+			turn.Status = "dead"
+		} else {
+			turn.Status = "down"
+		}
+	}
+}
+
+func firstAvailableAttackLine(character map[string]any) string {
+	for _, key := range []string{"combat_attacks", "spell_attacks"} {
+		text := strings.TrimSpace(fmt.Sprintf("%v", character[key]))
+		if text == "" || text == "<nil>" {
+			continue
+		}
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(strings.ToLower(line), "description:") {
+				continue
+			}
+			if strings.Count(line, "|") >= 5 {
+				return line
+			}
+		}
+	}
+	return ""
+}
+
+func combatActionProfileForCompanion(character map[string]any) combatActionProfile {
+	line := firstAvailableAttackLine(character)
+	if line == "" {
+		return combatActionProfile{Name: "Aid", AttackBonus: 2, DamageDice: "1d4", DamageType: "force"}
+	}
+	parts := strings.Split(line, "|")
+	for index := range parts {
+		parts[index] = strings.TrimSpace(parts[index])
+	}
+	profile := combatActionProfile{Name: parts[0], DamageType: "damage", DamageDice: "1d4"}
+	if len(parts) > 4 {
+		profile.AttackBonus = parseIntFromAny(strings.TrimPrefix(parts[4], "+"))
+	}
+	if len(parts) > 5 && strings.TrimSpace(parts[5]) != "" {
+		profile.DamageDice = normalizeDiceToken(parts[5])
+	}
+	if len(parts) > 6 && strings.TrimSpace(parts[6]) != "" {
+		profile.DamageType = strings.TrimSpace(parts[6])
+	}
+	return profile
+}
+
+func resolveAutomatedCombatTurns(language string, state *CombatState, activeCharacters []map[string]any) (string, []CombatLogEntry) {
 	if state == nil || !state.Active {
 		return "", nil
 	}
-	target := activeCombatPlayerCharacter(*state, activeCharacters)
-	if target == nil {
-		return "", nil
-	}
-	targetName := firstNonEmpty(strings.TrimSpace(fmt.Sprintf("%v", target["name"])), "Der Held")
-	targetAC := 10
-	switch typed := target["armor_class"].(type) {
-	case int:
-		targetAC = typed
-	case *int:
-		if typed != nil {
-			targetAC = *typed
-		}
-	}
 	paragraphs := make([]string, 0)
 	entries := make([]CombatLogEntry, 0)
-	for turn := activeCombatTurn(*state); turn != nil && turn.Side == "enemy"; turn = activeCombatTurn(*state) {
-		profile := enemyProfileForName(turn.Name, language)
-		baseRoll := rand.Intn(20) + 1
-		attackTotal := baseRoll + profile.AttackBonus
-		hit := attackTotal >= targetAC
-		entry := CombatLogEntry{
-			Timestamp: time.Now().UTC(),
-			ActorID:   turn.ID,
-			ActorName: turn.Name,
-			Side:      "enemy",
-			Kind:      "attack_roll",
-			Details: map[string]any{
-				"roll":         baseRoll,
-				"attack_bonus": profile.AttackBonus,
-				"total":        attackTotal,
-				"target_ac":    targetAC,
-				"target_name":  targetName,
-			},
+	lookup := map[string]map[string]any{}
+	for _, character := range activeCharacters {
+		lookup[strings.TrimSpace(fmt.Sprintf("%v", character["id"]))] = character
+	}
+	for turn := activeCombatTurn(*state); turn != nil && turn.Side != "player"; turn = activeCombatTurn(*state) {
+		if !turnCanAct(*turn) {
+			advanceCombatTurn(state)
+			continue
 		}
-		if hit {
-			damageTotal, damageRolls := rollDiceFormula(profile.DamageDice)
-			entry.Summary = fmt.Sprintf("%s trifft %s (%d gegen RK %d) und verursacht %d %s.", turn.Name, targetName, attackTotal, targetAC, damageTotal, profile.DamageType)
-			entry.Details["damage_rolls"] = damageRolls
-			entry.Details["damage_total"] = damageTotal
-			entry.Details["damage_formula"] = profile.DamageDice
-			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
-				entry.PublicText = fmt.Sprintf("%s schießt plötzlich vor, zwingt %s aus dem Gleichgewicht und trifft hart. %s verliert %d Trefferpunkte.", turn.Name, targetName, targetName, damageTotal)
-				paragraphs = append(paragraphs, fmt.Sprintf("%s stößt blitzartig vor, erwischt %s trotz aller Deckung und reißt eine schmerzhafte Wunde. %s verliert %d Trefferpunkte.", turn.Name, targetName, targetName, damageTotal))
-			} else {
-				entry.PublicText = fmt.Sprintf("%s lunges forward, throws %s off balance, and lands a solid hit. %s loses %d hit points.", turn.Name, targetName, targetName, damageTotal)
-				paragraphs = append(paragraphs, fmt.Sprintf("%s darts in with startling speed, slips past %s's guard, and tears open a painful wound. %s loses %d hit points.", turn.Name, targetName, targetName, damageTotal))
+		if turn.Side == "ally" {
+			companion := lookup[turn.ID]
+			targetIndex := firstAliveEnemyIndex(*state)
+			if companion == nil || targetIndex < 0 {
+				advanceCombatTurn(state)
+				continue
 			}
-		} else {
-			entry.Summary = fmt.Sprintf("%s verfehlt %s (%d gegen RK %d).", turn.Name, targetName, attackTotal, targetAC)
-			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
-				entry.PublicText = fmt.Sprintf("%s greift an, aber %s weicht im letzten Moment aus.", turn.Name, targetName)
-				paragraphs = append(paragraphs, fmt.Sprintf("%s schnellt nach vorn, doch %s fängt den Angriff im letzten Moment ab und lässt die Attacke wirkungslos an sich vorbeiziehen.", turn.Name, targetName))
-			} else {
-				entry.PublicText = fmt.Sprintf("%s attacks, but %s slips away at the last second.", turn.Name, targetName)
-				paragraphs = append(paragraphs, fmt.Sprintf("%s snaps forward, but %s catches the movement just in time and lets the strike glance away harmlessly.", turn.Name, targetName))
+			target := &state.InitiativeOrder[targetIndex]
+			action := combatActionProfileForCompanion(companion)
+			baseRoll := rand.Intn(20) + 1
+			attackTotal := baseRoll + action.AttackBonus
+			hit := attackTotal >= max(target.ArmorClass, 10)
+			entry := CombatLogEntry{
+				Timestamp: time.Now().UTC(),
+				ActorID:   turn.ID,
+				ActorName: turn.Name,
+				Side:      "ally",
+				Kind:      "companion_action",
+				Details: map[string]any{
+					"roll":         baseRoll,
+					"attack_bonus": action.AttackBonus,
+					"total":        attackTotal,
+					"target_name":  target.Name,
+					"target_ac":    target.ArmorClass,
+					"action_name":  action.Name,
+				},
 			}
+			if hit {
+				damageTotal, damageRolls := rollDiceFormula(action.DamageDice)
+				applyDamageToTurn(target, damageTotal)
+				entry.Summary = fmt.Sprintf("%s uses %s against %s (%d vs AC %d) for %d %s damage.", turn.Name, action.Name, target.Name, attackTotal, target.ArmorClass, damageTotal, action.DamageType)
+				entry.Details["damage_rolls"] = damageRolls
+				entry.Details["damage_total"] = damageTotal
+				entry.Details["damage_formula"] = action.DamageDice
+				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+					entry.PublicText = fmt.Sprintf("%s greift im richtigen Moment ein und trifft %s mit %s.", turn.Name, target.Name, action.Name)
+					paragraphs = append(paragraphs, fmt.Sprintf("%s bewegt sich im Takt der Gruppe, nutzt die entstandene Lücke und setzt %s mit %s unter Druck.", turn.Name, target.Name, action.Name))
+				} else {
+					entry.PublicText = fmt.Sprintf("%s steps in at the perfect moment and hits %s with %s.", turn.Name, target.Name, action.Name)
+					paragraphs = append(paragraphs, fmt.Sprintf("%s reads the flow of the fight, slips into the opening the party created, and drives %s back with %s.", turn.Name, target.Name, action.Name))
+				}
+			} else {
+				entry.Summary = fmt.Sprintf("%s misses %s with %s (%d vs AC %d).", turn.Name, target.Name, action.Name, attackTotal, target.ArmorClass)
+				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+					entry.PublicText = fmt.Sprintf("%s setzt %s unter Druck, doch der Schlag geht knapp vorbei.", turn.Name, target.Name)
+					paragraphs = append(paragraphs, fmt.Sprintf("%s koordiniert sich sichtbar mit der Gruppe, doch %s entzieht sich im letzten Augenblick dem Angriff.", turn.Name, target.Name))
+				} else {
+					entry.PublicText = fmt.Sprintf("%s presses %s, but the strike misses by inches.", turn.Name, target.Name)
+					paragraphs = append(paragraphs, fmt.Sprintf("%s moves in step with the rest of the party, but %s twists away at the last instant.", turn.Name, target.Name))
+				}
+			}
+			entries = append(entries, entry)
+			advanceCombatTurn(state)
+			continue
 		}
-		entries = append(entries, entry)
-		advanceCombatTurn(state)
+		if turn.Side == "enemy" {
+			targetIndex := choosePartyTargetIndex(*state)
+			if targetIndex < 0 {
+				advanceCombatTurn(state)
+				continue
+			}
+			target := &state.InitiativeOrder[targetIndex]
+			profile := enemyProfileForName(turn.Name, language)
+			baseRoll := rand.Intn(20) + 1
+			attackTotal := baseRoll + profile.AttackBonus
+			hit := attackTotal >= max(target.ArmorClass, 10)
+			entry := CombatLogEntry{
+				Timestamp: time.Now().UTC(),
+				ActorID:   turn.ID,
+				ActorName: turn.Name,
+				Side:      "enemy",
+				Kind:      "attack_roll",
+				Details: map[string]any{
+					"roll":         baseRoll,
+					"attack_bonus": profile.AttackBonus,
+					"total":        attackTotal,
+					"target_ac":    target.ArmorClass,
+					"target_name":  target.Name,
+				},
+			}
+			if hit {
+				damageTotal, damageRolls := rollDiceFormula(profile.DamageDice)
+				applyDamageToTurn(target, damageTotal)
+				entry.Summary = fmt.Sprintf("%s hits %s (%d vs AC %d) for %d %s damage.", turn.Name, target.Name, attackTotal, target.ArmorClass, damageTotal, profile.DamageType)
+				entry.Details["damage_rolls"] = damageRolls
+				entry.Details["damage_total"] = damageTotal
+				entry.Details["damage_formula"] = profile.DamageDice
+				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+					entry.PublicText = fmt.Sprintf("%s bricht durch die Verteidigung von %s und verursacht %d Schaden.", turn.Name, target.Name, damageTotal)
+					paragraphs = append(paragraphs, fmt.Sprintf("%s reißt die Initiative an sich, zwingt %s in die Defensive und landet einen harten Treffer.", turn.Name, target.Name))
+				} else {
+					entry.PublicText = fmt.Sprintf("%s breaks through %s's guard and deals %d damage.", turn.Name, target.Name, damageTotal)
+					paragraphs = append(paragraphs, fmt.Sprintf("%s seizes the opening, drives %s back, and lands a punishing blow.", turn.Name, target.Name))
+				}
+			} else {
+				entry.Summary = fmt.Sprintf("%s misses %s (%d vs AC %d).", turn.Name, target.Name, attackTotal, target.ArmorClass)
+				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+					entry.PublicText = fmt.Sprintf("%s greift %s an, doch der Angriff verfehlt sein Ziel.", turn.Name, target.Name)
+					paragraphs = append(paragraphs, fmt.Sprintf("%s fährt aggressiv vor, doch %s weicht im letzten Moment aus und lässt den Angriff ins Leere laufen.", turn.Name, target.Name))
+				} else {
+					entry.PublicText = fmt.Sprintf("%s attacks %s, but the blow misses.", turn.Name, target.Name)
+					paragraphs = append(paragraphs, fmt.Sprintf("%s surges forward, but %s turns aside at the last possible moment and lets the attack glance away.", turn.Name, target.Name))
+				}
+			}
+			entries = append(entries, entry)
+			advanceCombatTurn(state)
+		}
 	}
 	if len(paragraphs) == 0 {
 		return "", entries
@@ -1122,7 +1628,28 @@ func buildCombatStateNarration(language string, state CombatState) string {
 	}
 	orderParts := make([]string, 0, len(state.InitiativeOrder))
 	for _, turn := range state.InitiativeOrder {
-		orderParts = append(orderParts, fmt.Sprintf("%s %d", turn.Name, turn.Initiative))
+		role := turn.Side
+		switch turn.Side {
+		case "ally":
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+				role = "Verbündeter"
+			} else {
+				role = "Ally"
+			}
+		case "player":
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+				role = "Spieler"
+			} else {
+				role = "Player"
+			}
+		case "enemy":
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+				role = "Gegner"
+			} else {
+				role = "Enemy"
+			}
+		}
+		orderParts = append(orderParts, fmt.Sprintf("%s (%s %d)", turn.Name, role, turn.Initiative))
 	}
 	if current := activeCombatTurn(state); current != nil {
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
@@ -2047,6 +2574,12 @@ func (h *Handler) gmRespond(c *gin.Context) {
 
 	nextCombat := session.State.Combat
 	combatJustStarted := false
+	deterministicCombatResolved := false
+	if deterministicResponse, deterministicCombat, ok := resolveDeterministicPendingDamageTurn(session, req, activeCharacters); ok {
+		response = deterministicResponse
+		nextCombat = deterministicCombat
+		deterministicCombatResolved = true
+	}
 	if shouldAutoStartCombat(session, req, response, activeCharacters) && !nextCombat.Active {
 		nextCombat = initializeCombatState(session, req, response, activeCharacters)
 		if nextCombat.Active {
@@ -2056,6 +2589,9 @@ func (h *Handler) gmRespond(c *gin.Context) {
 		}
 	}
 	if nextCombat.Active {
+		if deterministicCombatResolved {
+			goto afterGenericCombatFlow
+		}
 		if req.DiceRoll != nil {
 			if activeTurn := activeCombatTurn(nextCombat); activeTurn != nil && activeTurn.Side == "player" {
 				playerName := firstNonEmpty(strings.TrimSpace(activeTurn.Name), "Spieler")
@@ -2073,25 +2609,33 @@ func (h *Handler) gmRespond(c *gin.Context) {
 		}
 		if response.RollRequest == nil {
 			preResolutionNarration := ""
+			skipAutomatedResolution := false
 			if combatJustStarted {
 				preResolutionNarration = buildCombatStateNarration(response.Language, nextCombat)
+				if activeTurn := activeCombatTurn(nextCombat); activeTurn != nil && activeTurn.Side == "player" {
+					response.Narration = ensureInteractiveNarration(response.Language, preResolutionNarration, nil)
+					skipAutomatedResolution = true
+				}
 			}
-			if activeTurn := activeCombatTurn(nextCombat); activeTurn != nil && activeTurn.Side == "player" {
-				advanceCombatTurn(&nextCombat)
-			}
-			enemyNarration, enemyLogEntries := resolveEnemyTurns(response.Language, &nextCombat, activeCharacters)
-			if len(enemyLogEntries) > 0 {
-				nextCombat.Log = append(nextCombat.Log, enemyLogEntries...)
-			}
-			if combatJustStarted {
-				response.Narration = strings.TrimSpace(strings.Join([]string{preResolutionNarration, enemyNarration}, " "))
-				response.Narration = ensureInteractiveNarration(response.Language, response.Narration, nil)
-			} else if strings.TrimSpace(enemyNarration) != "" {
-				response.Narration = strings.TrimSpace(strings.Join([]string{strings.TrimSpace(response.Narration), enemyNarration}, " "))
-				response.Narration = ensureInteractiveNarration(response.Language, response.Narration, nil)
+			if !skipAutomatedResolution {
+				if activeTurn := activeCombatTurn(nextCombat); activeTurn != nil && activeTurn.Side == "player" {
+					advanceCombatTurn(&nextCombat)
+				}
+				autoNarration, autoLogEntries := resolveAutomatedCombatTurns(response.Language, &nextCombat, activeCharacters)
+				if len(autoLogEntries) > 0 {
+					nextCombat.Log = append(nextCombat.Log, autoLogEntries...)
+				}
+				if combatJustStarted {
+					response.Narration = strings.TrimSpace(strings.Join([]string{preResolutionNarration, autoNarration}, " "))
+					response.Narration = ensureInteractiveNarration(response.Language, response.Narration, nil)
+				} else if strings.TrimSpace(autoNarration) != "" {
+					response.Narration = strings.TrimSpace(strings.Join([]string{strings.TrimSpace(response.Narration), autoNarration}, " "))
+					response.Narration = ensureInteractiveNarration(response.Language, response.Narration, nil)
+				}
 			}
 		}
 	}
+afterGenericCombatFlow:
 	activeLLMSession.MessageHistory = appendLLMMessage(activeLLMSession.MessageHistory, "assistant", response.Narration, time.Now().UTC())
 	activeLLMSession.LastActiveAt = time.Now().UTC()
 	activeLLMSession.EstimatedPromptTokens = estimatePromptTokens(messageHistoryToStrings(activeLLMSession.MessageHistory))
@@ -2114,13 +2658,13 @@ func (h *Handler) gmRespond(c *gin.Context) {
 	nextState.LastNarration = response.Narration
 	nextState.LastDMNotes = response.DMNotes
 	nextState.SceneSummary = firstNonEmpty(response.Narration, session.State.SceneSummary)
-	if req.DiceRoll != nil {
+	if req.DiceRoll != nil && response.RollRequest == nil {
 		nextState.VisualMode = "scene"
 		nextState.VisualPayload = map[string]any{
 			"narration": response.Narration,
 		}
 	}
-	if response.RollRequest != nil && req.DiceRoll == nil {
+	if response.RollRequest != nil {
 		nextState.VisualMode = "dice_capture"
 		nextState.VisualPayload = map[string]any{
 			"type":                 "roll_request",
@@ -2147,7 +2691,8 @@ func (h *Handler) gmRespond(c *gin.Context) {
 		nextState.ActiveSpeakerRole = "narrator"
 		nextState.ActiveVoiceProfileID = "narrator-default"
 		nextState.TTSStatus = "queued"
-	} else if req.DiceRoll != nil {
+	}
+	if req.DiceRoll != nil {
 		nextState.LastDiceRoll = req.DiceRoll
 		nextState.LastConfirmedRoll = req.DiceRoll
 	}

@@ -2645,6 +2645,10 @@ pre {
   border-color: rgba(76, 201, 240, 0.22);
 }
 
+.player-initiative-board__item.is-ally {
+  border-color: rgba(111, 207, 151, 0.26);
+}
+
 .player-initiative-board__item.is-enemy {
   border-color: rgba(226, 95, 95, 0.22);
 }

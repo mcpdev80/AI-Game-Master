@@ -138,7 +138,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
   const [privateMessages, setPrivateMessages] = useState<PrivateChatMessage[]>([]);
   const [privateDraft, setPrivateDraft] = useState("");
   const [privateChatLoading, setPrivateChatLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<PortalSection>("overview");
+  const [activeSection, setActiveSection] = useState<PortalSection>("session");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const previousAssistantMessageCountRef = useRef(0);
 
@@ -148,6 +148,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
   const releasedNarration = portal.session.state.scene_summary || portal.session.state.last_narration || tr("The AI has not released a player-safe scene yet.", "Die KI hat noch keine spielersichere Szene freigegeben.");
   const visibleHandouts = portal.visible_state.visible_handouts;
   const visibleMedia = portal.visible_state.visible_media;
+  const visibleCompanions = (portal.session.companions ?? []).filter((companion) => companion.visibility !== "hidden");
   const spellList = useMemo(() => metaList(portal.character, "spells"), [portal.character]);
   const languages = portal.character?.languages ?? [];
   const features = portal.character?.features ?? [];
@@ -470,6 +471,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                         <div><dt>{tr("Notes", "Notizen")}</dt><dd style={{ whiteSpace: "pre-wrap" }}>{sessionNotes || "—"}</dd></div>
                         <div><dt>{tr("Inventory", "Inventar")}</dt><dd style={{ whiteSpace: "pre-wrap" }}>{currentInventory || "—"}</dd></div>
                         <div><dt>{tr("Group Inventory", "Gruppeninventar")}</dt><dd>{`${groupGold}${textToRows(groupItems).length ? ` · ${textToRows(groupItems).join(", ")}` : ""}` || "—"}</dd></div>
+                        <div><dt>{tr("Companions", "Companions")}</dt><dd>{visibleCompanions.map((companion) => companion.display_name || companion.character?.name || "—").join(", ") || "—"}</dd></div>
                       </div>
                       {overviewActionRows.length > 0 ? (
                         <div className="page-stack">
@@ -584,6 +586,17 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                       <article className="scope-card"><strong>{tr("Status", "Status")}</strong><p>{portal.session.status}</p></article>
                       <article className="scope-card"><strong>{tr("Board mode", "Board-Modus")}</strong><p>{portal.session.state.visual_mode || "pause_or_recap"}</p></article>
                     </div>
+                    {visibleCompanions.length > 0 ? (
+                      <div className="meta-list">
+                        <div>
+                          <dt>{tr("Companions", "Companions")}</dt>
+                          <dd>{visibleCompanions.map((companion) => {
+                            const summary = companion.character ? `${companion.character.race || "—"} · ${companion.character.class_and_level || "—"}` : "";
+                            return `${companion.display_name || companion.character?.name || "—"}${summary ? ` (${summary})` : ""}`;
+                          }).join(", ")}</dd>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </Panel>
               </div>

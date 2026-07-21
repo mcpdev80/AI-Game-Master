@@ -816,6 +816,7 @@ func gmUserPrompt(session Session, req GMRespondRequest, documents []Document, c
 		"translation_rule":      "If selected adventure context or uploaded material is written in another language, translate or paraphrase it into the requested output language while preserving proper nouns, item names, place names, and exact rule terms when needed.",
 		"player_options_rule":   "If the player asks what they can do, respond as a DM inside the fiction. Suggest options drawn from the scene, the adventure, the group situation, and the active character sheets, but phrase them as natural possibilities in the story rather than as sheet commentary.",
 		"private_sidebar_rule":  "Some active characters may include private_sidebar_context. Treat it as confidential DM knowledge for that character only. Never reveal another character's private sidebar content to the table unless it has become visible in the fiction or was explicitly disclosed.",
+		"companion_rule":        "Some active characters may have participant_type=dm_companion or control_mode=dm. These are party companions controlled by the AI DM, not by a human player. Decide and narrate their actions when appropriate, keep them consistent with their class, gear, tactics_note, and personality context, and let them interact naturally with the group. They may protect, advise, heal, attack, warn, or react emotionally, but player characters must remain the protagonists and companions must not dominate major decisions.",
 		"scene_event_contract": map[string]any{
 			"allowed_types":         []string{"sfx", "music", "ambience", "video", "image", "map", "portrait"},
 			"asset_cue_rule":        "For image, map, or portrait events, use an exact cue key explicitly present in the selected adventure context. Never invent an asset cue.",
@@ -918,6 +919,7 @@ func compactActiveCharactersForPrompt(activeCharacters []map[string]any) []map[s
 			"abilities":               defaultMetadata(asMap(character["abilities"])),
 			"current_inventory":       character["current_inventory"],
 			"current_money":           character["current_money"],
+			"current_hit_points":      character["current_hit_points"],
 			"features":                defaultStringSlice(asStringSlice(character["features"])),
 			"languages":               defaultStringSlice(asStringSlice(character["languages"])),
 			"senses":                  strings.TrimSpace(fmt.Sprintf("%v", character["senses"])),
@@ -926,6 +928,9 @@ func compactActiveCharactersForPrompt(activeCharacters []map[string]any) []map[s
 			"combat_attacks":          strings.TrimSpace(fmt.Sprintf("%v", character["combat_attacks"])),
 			"weapon_notes":            strings.TrimSpace(fmt.Sprintf("%v", character["weapon_notes"])),
 			"starting_equipment":      strings.TrimSpace(fmt.Sprintf("%v", character["starting_equipment"])),
+			"control_mode":            strings.TrimSpace(fmt.Sprintf("%v", character["control_mode"])),
+			"participant_type":        strings.TrimSpace(fmt.Sprintf("%v", character["participant_type"])),
+			"tactics_note":            strings.TrimSpace(fmt.Sprintf("%v", character["tactics_note"])),
 			"private_sidebar_context": strings.TrimSpace(fmt.Sprintf("%v", character["private_sidebar_context"])),
 		})
 	}

@@ -532,6 +532,9 @@ func (h *Handler) loadPlayerPortalSession(ctx context.Context, token string) (Pl
 	if err != nil {
 		return PlayerPortalSession{}, err
 	}
+	if err := h.attachSessionCompanions(ctx, &portal.Session); err != nil {
+		return PlayerPortalSession{}, err
+	}
 
 	characters, err := h.store.ListCharacters(ctx)
 	if err != nil {
@@ -547,20 +550,29 @@ func (h *Handler) loadPlayerPortalSession(ctx context.Context, token string) (Pl
 			claimed[*slot.CharacterID] = true
 		}
 	}
+
+	companionCharacterIDs := make(map[string]bool, len(portal.Session.Companions))
+	for _, companion := range portal.Session.Companions {
+		if strings.TrimSpace(companion.CharacterID) != "" {
+			companionCharacterIDs[companion.CharacterID] = true
+		}
+	}
+
 	available := make([]Character, 0)
-	fallbackAvailable := make([]Character, 0)
 	for _, character := range characters {
 		if claimed[character.ID] {
 			continue
 		}
-		if character.CampaignID != nil && *character.CampaignID == portal.Session.CampaignID {
-			available = append(available, character)
+		if companionCharacterIDs[character.ID] {
 			continue
 		}
-		fallbackAvailable = append(fallbackAvailable, character)
-	}
-	if len(available) == 0 {
-		available = fallbackAvailable
+		if isSessionClone, ok := character.Metadata["is_session_clone"].(bool); ok && isSessionClone {
+			continue
+		}
+		if clonedForSessionID := strings.TrimSpace(fmt.Sprintf("%v", character.Metadata["cloned_for_session_id"])); clonedForSessionID != "" {
+			continue
+		}
+		available = append(available, character)
 	}
 	portal.AvailableCharacters = available
 	portal.Session = sanitizeSessionForPlayers(portal.Session)

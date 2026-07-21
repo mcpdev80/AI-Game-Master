@@ -48,6 +48,72 @@ func TestInitializeCombatStateIncludesMultiplePlayers(t *testing.T) {
 	}
 }
 
+func TestInitializeCombatStateIncludesDMCompanionAsAlly(t *testing.T) {
+	activeCharacters := []map[string]any{
+		{"id": "p1", "name": "Aria", "status": "ready", "participant_type": "player_character", "control_mode": "player", "abilities": map[string]int{"dexterity": 14}, "armor_class": 15, "hit_point_max": 10, "current_hit_points": 10},
+		{"id": "comp1", "character_id": "c1", "name": "Brother Alden", "status": "active", "participant_type": "dm_companion", "control_mode": "dm", "abilities": map[string]int{"dexterity": 10}, "armor_class": 18, "hit_point_max": 11, "current_hit_points": 11},
+	}
+	state := initializeCombatState(
+		Session{},
+		GMRespondRequest{
+			PlayerInput: "I roll initiative against a goblin.",
+			DiceRoll: &DiceRollEvent{
+				Dice: []DiceResult{{Type: "d20", Value: 15}},
+			},
+		},
+		GMResponse{Narration: "A goblin lunges out from the ruined archway.", Language: "en"},
+		activeCharacters,
+	)
+	if !state.Active {
+		t.Fatal("expected combat to be active")
+	}
+	foundAlly := false
+	for _, turn := range state.InitiativeOrder {
+		if turn.ID == "comp1" {
+			foundAlly = true
+			if turn.Side != "ally" {
+				t.Fatalf("expected companion side ally, got %q", turn.Side)
+			}
+			if turn.CharacterID != "c1" {
+				t.Fatalf("expected companion character id c1, got %q", turn.CharacterID)
+			}
+		}
+	}
+	if !foundAlly {
+		t.Fatal("expected DM companion in initiative order")
+	}
+}
+
+func TestResolveAutomatedCombatTurnsProcessesAllyAndEnemyUntilPlayerTurn(t *testing.T) {
+	state := CombatState{
+		Active:          true,
+		Round:           1,
+		ActiveTurnIndex: 0,
+		InitiativeOrder: []CombatTurnEntry{
+			{ID: "comp1", CharacterID: "c1", Name: "Brother Alden", Side: "ally", ParticipantType: "dm_companion", ControlMode: "dm", Initiative: 18, Status: "active", ArmorClass: 18, HitPointMax: 11, CurrentHitPoints: 11},
+			{ID: "enemy:1:goblin", Name: "Goblin Raider", Side: "enemy", ParticipantType: "enemy_npc", ControlMode: "dm", Initiative: 14, Status: "ready", ArmorClass: 15, HitPointMax: 7, CurrentHitPoints: 7},
+			{ID: "p1", CharacterID: "p1", Name: "Aria", Side: "player", ParticipantType: "player_character", ControlMode: "player", Initiative: 12, Status: "ready", ArmorClass: 15, HitPointMax: 10, CurrentHitPoints: 10},
+		},
+	}
+	activeCharacters := []map[string]any{
+		{"id": "comp1", "character_id": "c1", "name": "Brother Alden", "participant_type": "dm_companion", "control_mode": "dm", "combat_attacks": "Mace | +2 | STR | Melee | +4 | 1d6+2 | Bludgeoning", "armor_class": 18, "hit_point_max": 11, "current_hit_points": 11},
+		{"id": "p1", "name": "Aria", "participant_type": "player_character", "control_mode": "player", "armor_class": 15, "hit_point_max": 10, "current_hit_points": 10},
+	}
+	narration, entries := resolveAutomatedCombatTurns("en", &state, activeCharacters)
+	if len(entries) < 1 {
+		t.Fatalf("expected at least one automated combat log entry, got %d", len(entries))
+	}
+	if strings.TrimSpace(narration) == "" {
+		t.Fatal("expected non-empty narration")
+	}
+	if state.ActiveTurnIndex != 2 && state.ActiveTurnIndex != 0 {
+		t.Fatalf("expected turn to resolve to the player or reset after combat, got index %d", state.ActiveTurnIndex)
+	}
+	if state.Active && state.InitiativeOrder[state.ActiveTurnIndex].Side != "player" {
+		t.Fatalf("expected active turn to be player, got %q", state.InitiativeOrder[state.ActiveTurnIndex].Side)
+	}
+}
+
 func TestEnsureInteractiveNarrationAddsGermanQuestion(t *testing.T) {
 	got := ensureInteractiveNarration("de", "Die Tür schwingt knarrend auf.", nil)
 	want := "Die Tür schwingt knarrend auf. Was tut ihr jetzt?"
