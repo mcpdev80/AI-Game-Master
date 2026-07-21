@@ -4,6 +4,14 @@
 
 Parts of the embedded 5E-compatible rules and character-builder data are adapted and condensed from SRD 5.1. Those portions are licensed under CC BY 4.0 and are not relicensed under the repository's MIT license.
 
+The repository also contains an unmodified local snapshot of the official SRD 5.1 source PDF, an extracted text snapshot used as a stable parser/reference baseline, and a dated HTML snapshot of the current SRD landing page for maintenance and verification:
+
+- `docs/reference/srd/SRD-OGL_V5.1.pdf`
+- `docs/reference/srd/SRD-OGL_V5.1.layout.txt`
+- `docs/reference/srd/SRD-v5.2.1-2026-07-21.html`
+
+These reference snapshots remain under their upstream license and copyright terms and are included to preserve a verifiable source baseline for regeneration, validation, and debugging.
+
 This work includes material taken from the System Reference Document 5.1 (“SRD 5.1”) by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
 Teile der eingebetteten 5E-kompatiblen Regeln und Charakter-Builder-Daten wurden aus dem SRD 5.1 bearbeitet und gekürzt. Diese Teile stehen unter CC BY 4.0 und nicht unter der MIT-Lizenz des Repositorys.

@@ -18,6 +18,7 @@ import (
 
 var rulesDocumentPagePattern = regexp.MustCompile(`(?i)(?:seite|page|s\.|pg\.)\s*(\d{1,4})`)
 var uuidLikePattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var encounterSuffixNumberPattern = regexp.MustCompile(`\s+\d+$`)
 
 func isUUIDLike(value string) bool {
 	return uuidLikePattern.MatchString(strings.TrimSpace(value))
@@ -261,7 +262,23 @@ func parseMetadataBool(value any) bool {
 }
 
 func parseCharacterLevel(classAndLevel string) int {
-	matches := regexp.MustCompile(`\b(\d{1,2})\b`).FindStringSubmatch(strings.TrimSpace(classAndLevel))
+	classAndLevel = strings.TrimSpace(classAndLevel)
+	if classAndLevel == "" {
+		return 1
+	}
+	if entries := parseCharacterClassLevels(classAndLevel); len(entries) > 0 {
+		total := 0
+		for _, entry := range entries {
+			total += entry.Level
+		}
+		if total > 20 {
+			return 20
+		}
+		if total > 0 {
+			return total
+		}
+	}
+	matches := regexp.MustCompile(`\b(\d{1,2})\b`).FindStringSubmatch(classAndLevel)
 	if len(matches) < 2 {
 		return 1
 	}
@@ -576,37 +593,67 @@ type enemyEncounterDefinition struct {
 	VariantProfiles []enemyCombatProfile
 }
 
-var encounterDefinitions = []enemyEncounterDefinition{
-	{
-		Keywords:       []string{"giant spider", "riesenspinne", "spider", "spinne"},
-		PluralKeywords: []string{"two giant spiders", "2 giant spiders", "zwei riesenspinnen", "spiders", "riesenspinnen"},
-		BaseName:       "spider",
-		VariantProfiles: []enemyCombatProfile{
-			{Name: "Hunting Spider", AttackBonus: 3, DamageDice: "1d4+1", DamageType: "piercing"},
-			{Name: "Young Giant Spider", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing"},
-			{Name: "Giant Spider", AttackBonus: 5, DamageDice: "1d8+3", DamageType: "piercing"},
-		},
-	},
-	{
-		Keywords:       []string{"goblin", "goblin"},
-		PluralKeywords: []string{"two goblins", "2 goblins", "zwei goblins", "goblins"},
-		BaseName:       "goblin",
-		VariantProfiles: []enemyCombatProfile{
-			{Name: "Goblin Scout", AttackBonus: 3, DamageDice: "1d4+1", DamageType: "slashing"},
-			{Name: "Goblin Raider", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing"},
-			{Name: "Goblin Skirmisher", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing"},
-		},
-	},
-	{
-		Keywords:       []string{"wolf", "wulf", "wolfe", "wölf", "woelf"},
-		PluralKeywords: []string{"two wolves", "2 wolves", "zwei wölfe", "zwei woelfe", "wolves", "wölfe", "woelfe"},
-		BaseName:       "wolf",
-		VariantProfiles: []enemyCombatProfile{
-			{Name: "Young Wolf", AttackBonus: 3, DamageDice: "1d4+1", DamageType: "piercing"},
-			{Name: "Wolf", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing"},
-			{Name: "Dire Wolf", AttackBonus: 5, DamageDice: "2d6+3", DamageType: "piercing"},
-		},
-	},
+var encounterDefinitions = srdEncounterDefinitions()
+
+func localizedEncounterVariantName(baseName string, variantIndex int, language string) string {
+	de := strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de")
+	switch baseName {
+	case "spider":
+		switch variantIndex {
+		case 0:
+			if de {
+				return "Jagdspinne"
+			}
+			return "Hunting Spider"
+		case 1:
+			if de {
+				return "Junge Riesenspinne"
+			}
+			return "Young Giant Spider"
+		default:
+			if de {
+				return "Riesenspinne"
+			}
+			return "Giant Spider"
+		}
+	case "goblin":
+		switch variantIndex {
+		case 0:
+			if de {
+				return "Goblinspäher"
+			}
+			return "Goblin Scout"
+		case 1:
+			if de {
+				return "Goblinräuber"
+			}
+			return "Goblin Raider"
+		default:
+			if de {
+				return "Goblinscharmützler"
+			}
+			return "Goblin Skirmisher"
+		}
+	case "wolf":
+		switch variantIndex {
+		case 0:
+			if de {
+				return "Junger Wolf"
+			}
+			return "Young Wolf"
+		case 1:
+			if de {
+				return "Wolf"
+			}
+			return "Wolf"
+		default:
+			if de {
+				return "Schreckenswolf"
+			}
+			return "Dire Wolf"
+		}
+	}
+	return ""
 }
 
 func rollTotalFromEvent(event *DiceRollEvent) int {
@@ -636,11 +683,11 @@ func looksLikeInitiativePrompt(input string) bool {
 	return false
 }
 
-func shouldAutoStartCombat(session Session, req GMRespondRequest, response GMResponse) bool {
+func shouldAutoStartCombat(session Session, req GMRespondRequest, response GMResponse, activeCharacters []map[string]any) bool {
 	if session.State.Combat.Active {
 		return false
 	}
-	enemyNames := detectCombatEnemyNames(session, req.PlayerInput, response, nil)
+	enemyNames := detectCombatEnemyNames(session, req.PlayerInput, response, activeCharacters)
 	if len(enemyNames) == 0 {
 		return false
 	}
@@ -667,8 +714,7 @@ func shouldAutoStartCombat(session Session, req GMRespondRequest, response GMRes
 			}
 		}
 	}
-	source := strings.ToLower(strings.Join([]string{req.PlayerInput, response.Narration}, " "))
-	return containsAny(source, "attacks", "attack", "angriff", "initiative", "combat", "kampf", "ambush", "spider", "spinne")
+	return false
 }
 
 func combatPartyLevelBand(activeCharacters []map[string]any) (partySize int, averageLevel int, highestLevel int) {
@@ -730,7 +776,7 @@ func chooseEncounterCount(explicitPlural bool, partySize, averageLevel, highestL
 	return 1
 }
 
-func balanceEncounterNames(source string, activeCharacters []map[string]any, definition enemyEncounterDefinition) []string {
+func balanceEncounterNames(source string, activeCharacters []map[string]any, definition enemyEncounterDefinition, language string) []string {
 	partySize, averageLevel, highestLevel := combatPartyLevelBand(activeCharacters)
 	explicitPlural := containsAnySubstring(source, definition.PluralKeywords)
 	explicitSingle := containsAnySubstring(source, definition.Keywords)
@@ -742,7 +788,10 @@ func balanceEncounterNames(source string, activeCharacters []map[string]any, def
 		variantIndex = len(definition.VariantProfiles) - 1
 	}
 	count := chooseEncounterCount(explicitPlural, partySize, averageLevel, highestLevel)
-	baseName := definition.VariantProfiles[variantIndex].Name
+	baseName := localizedEncounterVariantName(definition.BaseName, variantIndex, language)
+	if baseName == "" {
+		baseName = definition.VariantProfiles[variantIndex].Name
+	}
 	if count <= 1 {
 		return []string{baseName}
 	}
@@ -770,32 +819,42 @@ func detectCombatEnemyNames(session Session, input string, response GMResponse, 
 	}
 	source := strings.ToLower(strings.Join([]string{input, response.Narration}, " "))
 	for _, definition := range encounterDefinitions {
-		if enemies := balanceEncounterNames(source, activeCharacters, definition); len(enemies) > 0 {
+		if enemies := balanceEncounterNames(source, activeCharacters, definition, firstNonEmpty(response.Language, session.Language)); len(enemies) > 0 {
 			return enemies
 		}
 	}
 	return []string{}
 }
 
-func enemyProfileForName(name string) enemyCombatProfile {
+func enemyProfileForName(name string, language string) enemyCombatProfile {
 	lower := strings.ToLower(strings.TrimSpace(name))
 	for _, definition := range encounterDefinitions {
 		for _, profile := range definition.VariantProfiles {
 			if strings.Contains(lower, strings.ToLower(profile.Name)) {
+				profile.Name = localizedMonsterName(profile.Name, language)
 				return profile
 			}
 		}
 	}
+	canonicalName := strings.TrimSpace(encounterSuffixNumberPattern.ReplaceAllString(name, ""))
+	if monster, ok := srdMonsterCatalogEntryByName(canonicalName); ok && monster.AttackBonus > 0 && monster.DamageDice != "" && monster.DamageType != "" {
+		return enemyCombatProfile{
+			Name:        localizedMonsterName(monster.Name, language),
+			AttackBonus: monster.AttackBonus,
+			DamageDice:  monster.DamageDice,
+			DamageType:  monster.DamageType,
+		}
+	}
 	if strings.Contains(lower, "spinne") || strings.Contains(lower, "spider") {
-		return enemyCombatProfile{Name: "Giant Spider", AttackBonus: 5, DamageDice: "1d8+3", DamageType: "piercing"}
+		return enemyCombatProfile{Name: localizedMonsterName("Giant Spider", language), AttackBonus: 5, DamageDice: "1d8+3", DamageType: "piercing"}
 	}
 	if strings.Contains(lower, "goblin") {
-		return enemyCombatProfile{Name: "Goblin Raider", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing"}
+		return enemyCombatProfile{Name: localizedMonsterName("Goblin Raider", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing"}
 	}
 	if strings.Contains(lower, "wolf") || strings.Contains(lower, "wölf") || strings.Contains(lower, "woelf") {
-		return enemyCombatProfile{Name: "Wolf", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing"}
+		return enemyCombatProfile{Name: localizedMonsterName("Wolf", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing"}
 	}
-	return enemyCombatProfile{Name: "Enemy", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "damage"}
+	return enemyCombatProfile{Name: localizedMonsterName("Enemy", language), AttackBonus: 4, DamageDice: "1d6+2", DamageType: "damage"}
 }
 
 var simpleDiceFormulaPattern = regexp.MustCompile(`(?i)^\s*(\d+)\s*[dw]\s*(\d+)(?:\s*([+-])\s*(\d+))?\s*$`)
@@ -976,7 +1035,7 @@ func resolveEnemyTurns(language string, state *CombatState, activeCharacters []m
 	paragraphs := make([]string, 0)
 	entries := make([]CombatLogEntry, 0)
 	for turn := activeCombatTurn(*state); turn != nil && turn.Side == "enemy"; turn = activeCombatTurn(*state) {
-		profile := enemyProfileForName(turn.Name)
+		profile := enemyProfileForName(turn.Name, language)
 		baseRoll := rand.Intn(20) + 1
 		attackTotal := baseRoll + profile.AttackBonus
 		hit := attackTotal >= targetAC
@@ -1658,7 +1717,7 @@ func (h *Handler) gmRespond(c *gin.Context) {
 
 	nextCombat := session.State.Combat
 	combatJustStarted := false
-	if shouldAutoStartCombat(session, req, response) && !nextCombat.Active {
+	if shouldAutoStartCombat(session, req, response, activeCharacters) && !nextCombat.Active {
 		nextCombat = initializeCombatState(session, req, response, activeCharacters)
 		if nextCombat.Active {
 			combatJustStarted = true

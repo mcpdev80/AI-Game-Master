@@ -306,10 +306,103 @@ func TestBuilderSpellcastingAdviceReplyListsWizardDefaults(t *testing.T) {
 	if !ok {
 		t.Fatal("expected spellcasting advice")
 	}
-	for _, expected := range []string{"Fire Bolt", "Magic Missile", "Shield", "Zauber-SG 13"} {
+	for _, expected := range []string{"Feuerpfeil", "Magisches Geschoss", "Schild", "Zauber-SG 13"} {
 		if !strings.Contains(reply, expected) {
 			t.Fatalf("reply does not contain %q: %s", expected, reply)
 		}
+	}
+}
+
+func TestBuilderDeterministicSpellcastingReplyStoresStructuredSpellAttackRows(t *testing.T) {
+	character := Character{
+		ClassAndLevel: "Magier, Stufe 1",
+		Abilities: map[string]int{
+			"intelligence": 16,
+		},
+	}
+	_, patch, ok := builderDeterministicSpellcastingReply(character, "mach das", "")
+	if !ok {
+		t.Fatal("expected deterministic spellcasting reply")
+	}
+	rows, ok := patch.Metadata["spell_attacks"].(string)
+	if !ok {
+		t.Fatalf("expected spell_attacks string, got %#v", patch.Metadata["spell_attacks"])
+	}
+	for _, expected := range []string{"Zaubertrick | Feuerpfeil", "Grad 1 | Magisches Geschoss"} {
+		if !strings.Contains(rows, expected) {
+			t.Fatalf("expected spell attack rows to contain %q, got %q", expected, rows)
+		}
+	}
+	if !strings.Contains(rows, "Beschreibung:") {
+		t.Fatalf("expected german spell descriptions, got %q", rows)
+	}
+}
+
+func TestBuilderDeterministicGuidedChoiceCompletionKeepsSpellcastingStageConfirmation(t *testing.T) {
+	character := Character{
+		ClassAndLevel: "Magier, Stufe 1",
+		Abilities: map[string]int{
+			"intelligence": 16,
+		},
+		Metadata: map[string]any{
+			"builder_stage": "spellcasting_if_available",
+		},
+	}
+	completion, ok := builderDeterministicGuidedChoiceCompletion(
+		&character,
+		"spellcasting_if_available",
+		"mach das",
+		"Für Magier auf Stufe 1 stehen im SRD 5.1 diese sinnvollen Zauberoptionen bereit. Wenn du möchtest, übernehme ich genau diese Auswahl direkt.",
+	)
+	if !ok {
+		t.Fatal("expected guided completion to accept spellcasting confirmation")
+	}
+	rows, ok := completion.Patch.Metadata["spell_attacks"].(string)
+	if !ok || !strings.Contains(rows, "Zaubertrick |") {
+		t.Fatalf("expected structured spell attack rows in patch, got %#v", completion.Patch.Metadata["spell_attacks"])
+	}
+	if !strings.Contains(rows, "Beschreibung:") {
+		t.Fatalf("expected german spell descriptions in patch, got %q", rows)
+	}
+	if completion.Patch.HitPointMax != nil {
+		t.Fatalf("did not expect hit point patch in spellcasting confirmation, got %#v", completion.Patch.HitPointMax)
+	}
+}
+
+func TestBuilderDeterministicSpellcastingReplyHandlesEnglishListAndConfirmation(t *testing.T) {
+	character := Character{
+		ClassAndLevel: "Wizard, Level 1",
+		Abilities: map[string]int{
+			"intelligence": 16,
+		},
+		Metadata: map[string]any{
+			"language": "en",
+		},
+	}
+	reply, ok := builderDeterministicSpellcastingAdviceReply(character, "which spells should I take?")
+	if !ok {
+		t.Fatal("expected english spell advice")
+	}
+	if !strings.Contains(reply, "recommended") && !strings.Contains(strings.ToLower(reply), "recommended") {
+		t.Fatalf("expected recommendation in english reply, got %q", reply)
+	}
+	_, patch, ok := builderDeterministicSpellcastingReply(character, "do that", "")
+	if !ok {
+		t.Fatal("expected english confirmation to be accepted")
+	}
+	rows, _ := patch.Metadata["spell_attacks"].(string)
+	if !strings.Contains(rows, "Description:") {
+		t.Fatalf("expected english spell descriptions, got %q", rows)
+	}
+	if !strings.Contains(rows, "Cantrip |") || !strings.Contains(rows, "Level 1 |") {
+		t.Fatalf("expected english spell row labels, got %q", rows)
+	}
+	if !strings.Contains(rows, "Spell Attack") || !strings.Contains(rows, "Saving Throw") {
+		t.Fatalf("expected english spell attack/save labels, got %q", rows)
+	}
+	reply = builderMaybeAppendStepConfirmation("I’ll apply the recommended spells.", patch)
+	if !strings.Contains(reply, "Check briefly whether this looks right.") {
+		t.Fatalf("expected english confirmation suffix, got %q", reply)
 	}
 }
 
@@ -370,7 +463,7 @@ func TestBuilderDerivedStatsReplyComputesFighterDefaults(t *testing.T) {
 	if !ok {
 		t.Fatal("expected derived stats reply")
 	}
-	if !strings.Contains(reply, "Rüstungsklasse 19") || !strings.Contains(reply, "Trefferpunkte 13") || !strings.Contains(reply, "Bewegungsrate 30 Fuß") {
+	if !strings.Contains(reply, "Rüstungsklasse 19") || !strings.Contains(reply, "Trefferpunkte 13") || !strings.Contains(reply, "Bewegungsrate 9 m") {
 		t.Fatalf("unexpected reply: %s", reply)
 	}
 	if patch.ArmorClass == nil || *patch.ArmorClass != 19 {
@@ -379,7 +472,7 @@ func TestBuilderDerivedStatsReplyComputesFighterDefaults(t *testing.T) {
 	if patch.HitPointMax == nil || *patch.HitPointMax != 13 {
 		t.Fatalf("unexpected hit point max patch: %#v", patch.HitPointMax)
 	}
-	if patch.Speed == nil || *patch.Speed != "30 Fuß" {
+	if patch.Speed == nil || *patch.Speed != "9 m" {
 		t.Fatalf("unexpected speed patch: %#v", patch.Speed)
 	}
 	if patch.Proficiency == nil || *patch.Proficiency != "+2" {
@@ -436,17 +529,17 @@ func TestBuilderDeterministicCombatReplyRepairsMissingDerivedStatsAndAdvancesToR
 	if patch.ArmorClass == nil || *patch.ArmorClass != 19 {
 		t.Fatalf("expected armor class repair, got %#v", patch.ArmorClass)
 	}
-	if patch.Speed == nil || *patch.Speed != "30 Fuß" {
+	if patch.Speed == nil || *patch.Speed != "9 m" {
 		t.Fatalf("expected speed repair, got %#v", patch.Speed)
 	}
 	if got := patch.Metadata["builder_stage"]; got != "review" {
 		t.Fatalf("unexpected next stage: %v", got)
 	}
 	combatAttacks, _ := patch.Metadata["combat_attacks"].(string)
-	if !strings.Contains(combatAttacks, "Langschwert | +2 | STR | 5 ft | +5 | 1W8+3 | Hieb") {
+	if !strings.Contains(combatAttacks, "Langschwert | +2 | STR | 1,5 m | +5 | 1W8+3 | Hieb") {
 		t.Fatalf("expected structured combat attacks, got %q", combatAttacks)
 	}
-	if !strings.Contains(combatAttacks, "Leichte Armbrust | +2 | DEX | 80/320 ft | +4 | 1W8+2 | Stich") {
+	if !strings.Contains(combatAttacks, "Leichte Armbrust | +2 | DEX | 24/96 m | +4 | 1W8+2 | Stich") {
 		t.Fatalf("expected structured ranged attack, got %q", combatAttacks)
 	}
 }
@@ -476,7 +569,7 @@ func TestBuilderDeterministicReviewReplyRepairsMissingCombatTable(t *testing.T) 
 		t.Fatalf("unexpected reply: %s", reply)
 	}
 	combatAttacks, _ := patch.Metadata["combat_attacks"].(string)
-	if !strings.Contains(combatAttacks, "Langschwert | +2 | STR | 5 ft | +5 | 1W8+3 | Hieb") {
+	if !strings.Contains(combatAttacks, "Langschwert | +2 | STR | 1,5 m | +5 | 1W8+3 | Hieb") {
 		t.Fatalf("expected structured combat attacks, got %q", combatAttacks)
 	}
 	if got := patch.Metadata["builder_stage"]; got != "review" {

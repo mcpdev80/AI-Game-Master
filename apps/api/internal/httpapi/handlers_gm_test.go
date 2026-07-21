@@ -106,6 +106,12 @@ func TestParseCharacterLevel(t *testing.T) {
 	}
 }
 
+func TestTotalCharacterLevelEmptyDoesNotRecurse(t *testing.T) {
+	if got := totalCharacterLevel(""); got != 0 {
+		t.Fatalf("expected empty total level 0, got %d", got)
+	}
+}
+
 func TestCharacterEligibleForLevelUpByXPThreshold(t *testing.T) {
 	character := Character{
 		ClassAndLevel: "Fighter 1",
@@ -122,7 +128,7 @@ func TestCharacterEligibleForLevelUpByManualFlag(t *testing.T) {
 	character := Character{
 		ClassAndLevel: "Wizard 2",
 		Metadata: map[string]any{
-			"experience_points": 0,
+			"experience_points":  0,
 			"level_up_available": "true",
 		},
 	}
@@ -200,7 +206,7 @@ func TestShouldAutoStartCombatForHostileAttackRoll(t *testing.T) {
 			Dice:  []string{"1d20+4"},
 		},
 	}
-	if !shouldAutoStartCombat(session, req, response) {
+	if !shouldAutoStartCombat(session, req, response, nil) {
 		t.Fatal("expected hostile attack setup to auto-start combat")
 	}
 }
@@ -218,8 +224,21 @@ func TestShouldNotAutoStartCombatWithoutEnemies(t *testing.T) {
 			Dice:  []string{"1d20+2"},
 		},
 	}
-	if shouldAutoStartCombat(session, req, response) {
+	if shouldAutoStartCombat(session, req, response, nil) {
 		t.Fatal("did not expect peaceful scene to auto-start combat")
+	}
+}
+
+func TestShouldNotAutoStartCombatFromEnemyMentionAlone(t *testing.T) {
+	session := Session{}
+	req := GMRespondRequest{
+		PlayerInput: "I step back and ask how far away the spider is.",
+	}
+	response := GMResponse{
+		Narration: "A spider shifts in the webbing ahead.",
+	}
+	if shouldAutoStartCombat(session, req, response, []map[string]any{{"id": "p1", "class_and_level": "Fighter 1", "status": "ready"}}) {
+		t.Fatal("did not expect combat to auto-start from enemy mention alone")
 	}
 }
 
@@ -230,6 +249,16 @@ func TestDetectCombatEnemyNamesBalancesSoloLevelOneSpiderEncounter(t *testing.T)
 	got := detectCombatEnemyNames(Session{}, "I attack the spider.", GMResponse{Narration: "Two giant spiders drop from the ceiling."}, activeCharacters)
 	if len(got) != 1 || got[0] != "Hunting Spider" {
 		t.Fatalf("expected one downgraded solo spider encounter, got %#v", got)
+	}
+}
+
+func TestDetectCombatEnemyNamesLocalizesGermanSpiderEncounter(t *testing.T) {
+	activeCharacters := []map[string]any{
+		{"id": "p1", "name": "Thoras", "status": "ready", "class_and_level": "Fighter 1"},
+	}
+	got := detectCombatEnemyNames(Session{Language: "de"}, "Ich greife die Spinne an.", GMResponse{Language: "de", Narration: "Zwei Riesenspinnen fallen von der Decke."}, activeCharacters)
+	if len(got) != 1 || got[0] != "Jagdspinne" {
+		t.Fatalf("expected localized German spider name, got %#v", got)
 	}
 }
 
@@ -245,9 +274,19 @@ func TestDetectCombatEnemyNamesKeepsPluralButDowngradesLowLevelDuos(t *testing.T
 }
 
 func TestEnemyProfileForNameUsesDowngradedSpiderStats(t *testing.T) {
-	got := enemyProfileForName("Hunting Spider")
+	got := enemyProfileForName("Hunting Spider", "en")
 	if got.AttackBonus != 3 || got.DamageDice != "1d4+1" {
 		t.Fatalf("expected downgraded hunting spider profile, got %+v", got)
+	}
+}
+
+func TestEncounterDefinitionsComeFromCentralSRDCatalog(t *testing.T) {
+	if len(encounterDefinitions) != len(srdEncounterCatalog) {
+		t.Fatalf("expected %d encounter definitions from central catalog, got %d", len(srdEncounterCatalog), len(encounterDefinitions))
+	}
+	profile := enemyProfileForName("Goblin Raider", "en")
+	if profile.Name != "Goblin Raider" || profile.AttackBonus != 4 {
+		t.Fatalf("expected goblin profile from central catalog, got %#v", profile)
 	}
 }
 
@@ -276,8 +315,15 @@ func TestDetectCombatEnemyNamesBalancesHighLevelWolves(t *testing.T) {
 }
 
 func TestEnemyProfileForNameUsesGoblinVariantStats(t *testing.T) {
-	got := enemyProfileForName("Goblin Scout")
+	got := enemyProfileForName("Goblin Scout", "en")
 	if got.AttackBonus != 3 || got.DamageDice != "1d4+1" || got.DamageType != "slashing" {
 		t.Fatalf("expected goblin scout profile, got %+v", got)
+	}
+}
+
+func TestEnemyProfileForNameUsesSRDMonsterCatalogForCanonicalNames(t *testing.T) {
+	got := enemyProfileForName("Goblin", "en")
+	if got.Name != "Goblin" || got.AttackBonus != 4 || got.DamageDice != "1d6+2" || got.DamageType != "slashing" {
+		t.Fatalf("expected canonical goblin stats from SRD catalog, got %+v", got)
 	}
 }
