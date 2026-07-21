@@ -74,3 +74,38 @@ func TestMessageHistoryToStringsDropsInvalidEntries(t *testing.T) {
 		t.Fatalf("unexpected item: %#v", items[0])
 	}
 }
+
+func TestCompactActiveCharactersForPromptKeepsSensesAndLanguages(t *testing.T) {
+	items := compactActiveCharactersForPrompt([]map[string]any{
+		{
+			"id":                  "c1",
+			"name":                "Elira",
+			"player_name":         "Marcel",
+			"slot_display":        "Seat 1",
+			"status":              "ready",
+			"class_and_level":     "Wizard 1",
+			"race":                "High Elf",
+			"armor_class":         12,
+			"speed":               "30 ft",
+			"hit_point_max":       8,
+			"abilities":           map[string]any{"wisdom": 12},
+			"current_inventory":   []string{"Spellbook"},
+			"current_money":       "10 gp",
+			"features":            []string{"Darkvision"},
+			"languages":           []string{"Common", "Elvish"},
+			"senses":              "Darkvision 60 ft, Passive Perception 13",
+			"skill_proficiencies": []string{"Perception", "Arcana"},
+			"passive_perception":  13,
+		},
+	})
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if got := strings.TrimSpace(items[0]["senses"].(string)); got != "Darkvision 60 ft, Passive Perception 13" {
+		t.Fatalf("unexpected senses: %q", got)
+	}
+	langs := asStringSlice(items[0]["languages"])
+	if len(langs) != 2 || langs[0] != "Common" || langs[1] != "Elvish" {
+		t.Fatalf("unexpected languages: %#v", langs)
+	}
+}

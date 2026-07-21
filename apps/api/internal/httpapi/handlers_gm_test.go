@@ -220,6 +220,42 @@ func TestBuildSessionWorkingSummaryIncludesStorySummary(t *testing.T) {
 	}
 }
 
+func TestActiveCharacterContextIncludesSensesAndPassivePerception(t *testing.T) {
+	chunks := activeCharacterContextChunks([]map[string]any{
+		{
+			"id":                  "c1",
+			"name":                "Elira",
+			"class_and_level":     "Wizard 1",
+			"race":                "High Elf",
+			"background":          "Sage",
+			"alignment":           "Neutral Good",
+			"armor_class":         12,
+			"speed":               "30 ft",
+			"hit_point_max":       8,
+			"proficiency_bonus":   "+2",
+			"abilities":           map[string]any{"wisdom": 12},
+			"current_inventory":   []string{"Spellbook"},
+			"current_money":       "10 gp",
+			"experience_points":   "0",
+			"level_up_available":  "false",
+			"features":            []string{"Darkvision"},
+			"languages":           []string{"Common", "Elvish"},
+			"senses":              "Darkvision 60 ft, Passive Perception 13",
+			"skill_proficiencies": []string{"Perception", "Arcana"},
+			"passive_perception":  13,
+		},
+	})
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+	}
+	if !strings.Contains(chunks[0].ChunkText, "Sinne: Darkvision 60 ft, Passive Perception 13") {
+		t.Fatalf("expected senses in chunk text, got %q", chunks[0].ChunkText)
+	}
+	if !strings.Contains(chunks[0].ChunkText, "Passive Wahrnehmung: 13") {
+		t.Fatalf("expected passive perception in chunk text, got %q", chunks[0].ChunkText)
+	}
+}
+
 func TestBuildScenePromptContextIncludesMatchingAdventureEntitiesAndAssets(t *testing.T) {
 	benjamin := "Brother Benjamin"
 	crypt := "Abbey Crypt"

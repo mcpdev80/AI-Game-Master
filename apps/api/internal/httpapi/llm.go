@@ -919,6 +919,8 @@ func compactActiveCharactersForPrompt(activeCharacters []map[string]any) []map[s
 			"current_inventory":       character["current_inventory"],
 			"current_money":           character["current_money"],
 			"features":                defaultStringSlice(asStringSlice(character["features"])),
+			"languages":               defaultStringSlice(asStringSlice(character["languages"])),
+			"senses":                  strings.TrimSpace(fmt.Sprintf("%v", character["senses"])),
 			"skill_proficiencies":     defaultStringSlice(asStringSlice(character["skill_proficiencies"])),
 			"passive_perception":      character["passive_perception"],
 			"combat_attacks":          strings.TrimSpace(fmt.Sprintf("%v", character["combat_attacks"])),
