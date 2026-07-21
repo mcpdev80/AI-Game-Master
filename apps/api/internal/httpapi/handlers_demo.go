@@ -228,11 +228,14 @@ func (h *Handler) ensureFungalDemoCharacter(ctx context.Context, campaign Campai
 		return err
 	}
 	targetCharacters := fungalDemoCharacters(campaign.ID)
+	targetByName := map[string]Character{}
 	targetNames := map[string]struct{}{}
 	for _, character := range targetCharacters {
-		targetNames[strings.TrimSpace(character.Name)] = struct{}{}
+		name := strings.TrimSpace(character.Name)
+		targetNames[name] = struct{}{}
+		targetByName[name] = character
 	}
-	existingNames := map[string]struct{}{}
+	existingByName := map[string]Character{}
 	for _, character := range characters {
 		if metadataString(character.Metadata, "demo_id") == fungalCavernsDemoID {
 			name := strings.TrimSpace(character.Name)
@@ -242,11 +245,19 @@ func (h *Handler) ensureFungalDemoCharacter(ctx context.Context, campaign Campai
 				}
 				continue
 			}
-			existingNames[name] = struct{}{}
+			existingByName[name] = character
 		}
 	}
 	for _, character := range targetCharacters {
-		if _, ok := existingNames[strings.TrimSpace(character.Name)]; ok {
+		name := strings.TrimSpace(character.Name)
+		existing, ok := existingByName[name]
+		if ok {
+			replacement := targetByName[name]
+			replacement.ID = existing.ID
+			replacement.CreatedAt = existing.CreatedAt
+			if _, err := h.store.UpdateCharacter(ctx, replacement); err != nil {
+				return err
+			}
 			continue
 		}
 		if _, err := h.store.CreateCharacter(ctx, character); err != nil {
@@ -548,7 +559,7 @@ func fungalDemoCharacters(campaignID string) []Character {
 				"starting_equipment":         []string{"Chain mail", "Shield", "Longsword", "5 javelins", "Priest's pack", "Holy symbol"},
 				"current_inventory":          []string{"Chain mail", "Shield", "Longsword", "5 javelins", "Holy symbol", "Bedroll", "Rations (5 days)"},
 				"weapon_notes":               []string{"Use the longsword and shield in melee.", "Open with a javelin throw if enemies are closing at range."},
-				"combat_attacks":             "Longsword | +5 to hit | 1d8+3 slashing\nJavelin | +5 to hit | 1d6+3 piercing | 30/120 ft",
+				"combat_attacks":             "Longsword | +2 | STR | Melee | +5 | 1d8+3 | Slashing\nDescription: One-handed martial melee weapon used with shield.\nJavelin | +2 | STR | 30/120 ft | +5 | 1d6+3 | Piercing\nDescription: Thrown opening attack before enemies close.",
 				"combat_overview":            "Frontline defender with strong AC, emergency healing from Lay on Hands, and solid melee accuracy.",
 			}),
 		},
@@ -589,7 +600,7 @@ func fungalDemoCharacters(campaignID string) []Character {
 				"starting_equipment":         []string{"Leather armor", "Rapier", "Shortbow", "20 arrows", "2 daggers", "Thieves' tools", "Burglar's pack"},
 				"current_inventory":          []string{"Leather armor", "Rapier", "Shortbow", "20 arrows", "2 daggers", "Thieves' tools", "Crowbar", "Hooded lantern"},
 				"weapon_notes":               []string{"Aim for advantage to trigger Sneak Attack.", "Stay mobile and avoid ending a turn exposed in the front line."},
-				"combat_attacks":             "Rapier | +5 to hit | 1d8+3 piercing\nShortbow | +5 to hit | 1d6+3 piercing | 80/320 ft\nSneak Attack | +1d6 once per turn when eligible",
+				"combat_attacks":             "Rapier | +2 | DEX | Melee | +5 | 1d8+3 | Piercing\nDescription: Finesse melee attack for close pressure.\nShortbow | +2 | DEX | 80/320 ft | +5 | 1d6+3 | Piercing\nDescription: Preferred ranged attack for setting up Sneak Attack.",
 				"combat_overview":            "Scout, trap-handler, and precision striker. Best when attacking with advantage or beside an ally engaging the same target.",
 			}),
 		},
@@ -630,8 +641,10 @@ func fungalDemoCharacters(campaignID string) []Character {
 				"starting_equipment":         []string{"Chain mail", "Shield", "Mace", "Light crossbow", "20 bolts", "Priest's pack", "Holy symbol"},
 				"current_inventory":          []string{"Chain mail", "Shield", "Mace", "Light crossbow", "20 bolts", "Holy symbol", "Healer's kit", "Rations (5 days)"},
 				"weapon_notes":               []string{"Hold the line with shield and mace.", "Use Sacred Flame when melee would be unsafe."},
-				"combat_attacks":             "Mace | +4 to hit | 1d6+2 bludgeoning\nLight Crossbow | +2 to hit | 1d8 piercing | 80/320 ft",
-				"spell_attacks":              "Sacred Flame | DC 13 Dexterity save | 1d8 radiant\nGuiding Bolt | +5 to hit | 4d6 radiant",
+				"combat_attacks":             "Mace | +2 | STR | Melee | +4 | 1d6+2 | Bludgeoning\nDescription: Reliable close-range backup weapon.\nLight Crossbow | +2 | DEX | 80/320 ft | +2 | 1d8 | Piercing\nDescription: Ranged option when staying behind the front line.",
+				"spell_save_dc":              "13",
+				"spell_attack_bonus":         "+5",
+				"spell_attacks":              "Cantrip | Sacred Flame | WIS | 60 ft | DC 13 | 1d8 | Radiant\nDescription: Target makes a Dexterity save instead of an attack roll.\n1st | Guiding Bolt | WIS | 120 ft | +5 | 4d6 | Radiant\nDescription: Strong opening spell that grants advantage on the next attack against the target.",
 				"spell_notes":                "Prepared support-focused spell list. Life Domain keeps Bless and Cure Wounds ready.",
 				"spells":                     []string{"Guidance", "Light", "Sacred Flame", "Bless", "Cure Wounds", "Healing Word", "Guiding Bolt", "Sanctuary"},
 				"combat_overview":            "Primary healer and support caster. Strong opening turns are Bless, Guiding Bolt, or Healing Word to recover a fallen ally.",
@@ -674,8 +687,10 @@ func fungalDemoCharacters(campaignID string) []Character {
 				"starting_equipment":         []string{"Quarterstaff", "Component pouch", "Scholar's pack", "Spellbook"},
 				"current_inventory":          []string{"Quarterstaff", "Dagger", "Component pouch", "Spellbook", "Ink and quill", "Scholar's pack"},
 				"weapon_notes":               []string{"Open with control or ranged damage before enemies close.", "Cast Mage Armor early if danger is expected."},
-				"combat_attacks":             "Quarterstaff | +2 to hit | 1d6 bludgeoning\nDagger | +4 to hit | 1d4+2 piercing | 20/60 ft",
-				"spell_attacks":              "Fire Bolt | +5 to hit | 1d10 fire\nMagic Missile | automatic hit | 3d4+3 force",
+				"combat_attacks":             "Quarterstaff | +2 | STR | Melee | +2 | 1d6 | Bludgeoning\nDescription: Emergency melee option only.\nDagger | +2 | DEX | 20/60 ft | +4 | 1d4+2 | Piercing\nDescription: Backup thrown weapon when conserving spell slots.",
+				"spell_save_dc":              "13",
+				"spell_attack_bonus":         "+5",
+				"spell_attacks":              "Cantrip | Fire Bolt | INT | 120 ft | +5 | 1d10 | Fire\nDescription: Primary ranged cantrip for steady damage.\n1st | Magic Missile | INT | 120 ft | Auto | 3d4+3 | Force\nDescription: Automatically hits and is ideal for finishing a wounded target.",
 				"spell_notes":                "Prepared to solve early fights with Sleep or Magic Missile and stay safe behind Mage Armor and Shield.",
 				"spells":                     []string{"Fire Bolt", "Mage Hand", "Minor Illusion", "Light", "Mage Armor", "Magic Missile", "Shield", "Sleep", "Detect Magic", "Comprehend Languages"},
 				"combat_overview":            "Backline caster with flexible utility. Best protected by allies while she controls the pace of a fight.",
