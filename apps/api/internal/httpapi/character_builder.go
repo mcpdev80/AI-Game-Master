@@ -627,6 +627,17 @@ func (h *Handler) finishCharacterBuilder(c *gin.Context) {
 	if character.Metadata == nil {
 		character.Metadata = map[string]any{}
 	}
+	reconcileBuilderDerivedCharacterFields(&character)
+	language := builderCharacterLanguage(&character)
+	missingFields := builderMissingRequiredFields(character)
+	if len(missingFields) > 0 {
+		c.JSON(400, gin.H{
+			"error":          builderCompletionValidationMessage(missingFields, language),
+			"missing_fields": missingFields,
+			"builder_stage":  "review",
+		})
+		return
+	}
 	character.Metadata["builder_status"] = "ready"
 	character.Metadata["builder_stage"] = "complete"
 
@@ -2452,10 +2463,27 @@ func builderDeterministicReviewReply(character Character, latestUserMessage stri
 		patch.Proficiency = &prof
 		fixes = append(fixes, fmt.Sprintf("Übungsbonus %s", prof))
 	}
-	if len(fixes) == 0 {
+	postRepairCharacter := character
+	applyCharacterPatch(&postRepairCharacter, patch)
+	missingFields := builderMissingRequiredFields(postRepairCharacter)
+	if len(fixes) == 0 && len(missingFields) == 0 {
 		return "", CharacterBuilderPatch{}, false
 	}
-	reply := fmt.Sprintf("Ich habe %s jetzt direkt nachgetragen. Prüfe den Bogen noch einmal; wenn alles passt, kannst du den Draft danach abschließen.", joinGermanList(fixes))
+	reply := ""
+	if len(fixes) > 0 {
+		reply = fmt.Sprintf("Ich habe %s jetzt direkt nachgetragen.", joinGermanList(fixes))
+	}
+	if len(missingFields) > 0 {
+		if reply != "" {
+			reply += " "
+		}
+		reply += fmt.Sprintf("Vor dem Abschluss fehlen noch %s. Prüfe diese Punkte oder schärfe sie jetzt nach.", joinGermanList(missingFields))
+	} else {
+		if reply != "" {
+			reply += " "
+		}
+		reply += "Prüfe den Bogen noch einmal; wenn alles passt, kannst du den Draft danach abschließen."
+	}
 	return reply, patch, true
 }
 
@@ -4414,14 +4442,14 @@ func inferBuilderStageFromCharacter(character Character) string {
 		!metadataHasText("senses") {
 		return "languages_senses_and_body"
 	}
-	if !metadataHasText("personality_traits") &&
-		!metadataHasText("ideals") &&
-		!metadataHasText("bonds") &&
+	if !metadataHasText("personality_traits") ||
+		!metadataHasText("ideals") ||
+		!metadataHasText("bonds") ||
 		!metadataHasText("flaws") {
 		return "personality"
 	}
-	if !metadataHasList("starting_equipment") &&
-		!metadataHasText("starting_money") &&
+	if !metadataHasList("starting_equipment") ||
+		(!metadataHasText("starting_money") && !metadataHasText("current_money")) ||
 		!metadataHasList("current_inventory") {
 		return "equipment_and_money"
 	}
@@ -5704,6 +5732,111 @@ func reconcileBuilderDerivedCharacterFields(character *Character) {
 	if passive := derivedPassivePerception(*character); passive > 0 {
 		character.Metadata["passive_perception"] = passive
 	}
+	if strings.TrimSpace(safeOptionalString(character.Metadata["senses"])) == "" {
+		if senses := builderDerivedSenses(*character); senses != "" {
+			character.Metadata["senses"] = senses
+		}
+	}
+}
+
+func builderDerivedSenses(character Character) string {
+	language := builderCharacterLanguage(&character)
+	passive := derivedPassivePerception(character)
+	raceRule, hasRace := builderRaceRuleForCharacter(character)
+	if language == "en" {
+		parts := make([]string, 0, 2)
+		if hasRace && strings.TrimSpace(raceRule.Darkvision) != "" {
+			parts = append(parts, fmt.Sprintf("Darkvision %s", localizedMeasurementText(raceRule.Darkvision, "en")))
+		}
+		if passive > 0 {
+			parts = append(parts, fmt.Sprintf("Passive Perception %d", passive))
+		}
+		return strings.Join(parts, ", ")
+	}
+	parts := make([]string, 0, 2)
+	if hasRace && strings.TrimSpace(raceRule.Darkvision) != "" {
+		parts = append(parts, fmt.Sprintf("Dunkelsicht %s", raceRule.Darkvision))
+	}
+	if passive > 0 {
+		parts = append(parts, fmt.Sprintf("Passive Wahrnehmung %d", passive))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func builderMissingRequiredFields(character Character) []string {
+	metadata := defaultMetadata(character.Metadata)
+	hasText := func(key string) bool {
+		value, ok := metadata[key]
+		if !ok || value == nil {
+			return false
+		}
+		text := strings.TrimSpace(fmt.Sprint(value))
+		return text != "" && text != "<nil>" && text != "[]" && text != "{}"
+	}
+	hasList := func(key string) bool {
+		return len(stringListFromAny(metadata[key])) > 0
+	}
+	missing := make([]string, 0, 24)
+	add := func(label string, condition bool) {
+		if condition {
+			missing = append(missing, label)
+		}
+	}
+
+	add("Konzept", !hasText("concept"))
+	add("Volk", strings.TrimSpace(character.Race) == "")
+	add("Klasse und Stufe", strings.TrimSpace(character.ClassAndLevel) == "")
+	add("Hintergrund", strings.TrimSpace(character.Background) == "")
+	add("Gesinnung", strings.TrimSpace(character.Alignment) == "")
+	add("Attributsmethode", !hasText("creation_method"))
+	add("Attributswerte", len(character.Abilities) < 6)
+	add("Fertigkeiten", !hasList("skill_proficiencies"))
+	add("Rettungswurf-Übungen", !hasList("saving_throw_proficiencies"))
+	add("Trefferpunkte", character.HitPointMax == nil || *character.HitPointMax <= 0)
+	add("Bewegungsrate", strings.TrimSpace(character.Speed) == "")
+	add("Trefferwürfel", !hasText("hit_dice"))
+	add("Sprachen", len(character.Languages) == 0)
+	add("Sinne", !hasText("senses"))
+	add("Alter", !hasText("age"))
+	add("Größe", !hasText("size"))
+	add("Gewicht", !hasText("weight"))
+	add("Augen", !hasText("eyes"))
+	add("Haut", !hasText("skin"))
+	add("Haare", !hasText("hair"))
+	add("Persönlichkeitsmerkmale", !hasText("personality_traits"))
+	add("Ideale", !hasText("ideals"))
+	add("Bindungen", !hasText("bonds"))
+	add("Makel", !hasText("flaws"))
+	add("Startausrüstung", !hasList("starting_equipment"))
+	add("Aktuelles Inventar", !hasList("current_inventory"))
+	add("Geld", !hasText("current_money") && !hasText("starting_money"))
+	add("Klassenmerkmale", len(character.Features) == 0)
+	add("Rüstungsklasse", character.ArmorClass == nil || *character.ArmorClass <= 0)
+	add("Übungsbonus", strings.TrimSpace(character.Proficiency) == "")
+	add("Kampfangriffe", !hasText("combat_attacks"))
+
+	if builderHasLevelOneSpellcasting(character) {
+		add("Zauberliste", !hasList("spells") && !hasText("spells"))
+		add("Zaubernotizen", !hasText("spell_notes"))
+		classRule, ok := builderClassRuleForCharacter(character)
+		if ok && (classRule.ClassName == "Kleriker" || classRule.ClassName == "Druide" || classRule.ClassName == "Barde" || classRule.ClassName == "Hexenmeister" || classRule.ClassName == "Magier" || classRule.ClassName == "Zauberer") {
+			add("Zauberangriffe", !hasText("spell_attacks"))
+		}
+	}
+	return missing
+}
+
+func builderCompletionValidationMessage(missingFields []string, language string) string {
+	if len(missingFields) == 0 {
+		if language == "en" {
+			return "The character draft is complete."
+		}
+		return "Der Charakterentwurf ist vollständig."
+	}
+	if language == "en" {
+		return fmt.Sprintf("The character draft is not complete yet. Missing or still too vague: %s.", joinLocalizedList(missingFields, "en"))
+	}
+	return fmt.Sprintf("Der Charakterentwurf ist noch nicht vollständig. Es fehlen noch oder sind noch zu unklar: %s.", joinGermanList(missingFields))
 }
 
 func deriveCharacterProficiencyBonus(character Character) int {

@@ -86,6 +86,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
   const spellAttacks = metaString(portal.character, "spell_attacks");
   const spellNotes = metaString(portal.character, "spell_notes");
   const featureNotes = metaString(portal.character, "feature_notes");
+  const senses = metaString(portal.character, "senses");
   const weaponNotes = metaList(portal.character, "weapon_notes");
   const maxHitPoints = portal.character?.hit_point_max != null ? String(portal.character.hit_point_max) : "—";
 
@@ -302,6 +303,7 @@ export function PlayerPortalScreen({ portal }: { portal: PlayerPortalSession }) 
                   <div><dt>{tr("Speed", "Bewegung")}</dt><dd>{portal.character.speed || "—"}</dd></div>
                   <div><dt>{tr("Proficiency", "Übungsbonus")}</dt><dd>{portal.character.proficiency_bonus || "—"}</dd></div>
                   <div><dt>{tr("Languages", "Sprachen")}</dt><dd>{languages.join(", ") || "—"}</dd></div>
+                  <div><dt>{tr("Senses", "Sinne")}</dt><dd>{senses || "—"}</dd></div>
                   <div><dt>{tr("Features", "Merkmale")}</dt><dd>{features.join(", ") || "—"}</dd></div>
                 </div>
               </div>
