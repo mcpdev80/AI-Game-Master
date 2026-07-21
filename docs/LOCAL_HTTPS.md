@@ -26,7 +26,30 @@ Example entry:
 
 From the repository root:
 
-### Option A: use an existing certificate
+### Option A: use an existing certificate through `.env`
+
+Set these values in `.env`:
+
+```bash
+HTTPS_CERT_FILE=/path/to/fullchain.pem
+HTTPS_KEY_FILE=/path/to/privkey.pem
+HTTPS_HOSTNAME=dungeon-master.local
+HTTPS_HOST_IP=192.168.178.50
+```
+
+Then run:
+
+```bash
+chmod +x scripts/generate_local_https_cert.sh
+./scripts/generate_local_https_cert.sh
+```
+
+The script reads `HTTPS_CERT_FILE` and `HTTPS_KEY_FILE` automatically and copies them into:
+
+- `docker/certs/local-cert.pem`
+- `docker/certs/local-key.pem`
+
+### Option B: use an existing certificate directly on the command line
 
 ```bash
 chmod +x scripts/generate_local_https_cert.sh
@@ -36,12 +59,29 @@ chmod +x scripts/generate_local_https_cert.sh
   --key /path/to/privkey.pem
 ```
 
-This copies the provided files into:
+This also copies the provided files into:
 
 - `docker/certs/local-cert.pem`
 - `docker/certs/local-key.pem`
 
-### Option B: generate a self-signed certificate
+### Option C: generate a self-signed certificate
+
+You can either set defaults in `.env`:
+
+```bash
+HTTPS_HOSTNAME=dungeon-master.local
+HTTPS_HOST_IP=192.168.178.50
+HTTPS_CERT_DAYS=30
+```
+
+and then run:
+
+```bash
+chmod +x scripts/generate_local_https_cert.sh
+./scripts/generate_local_https_cert.sh
+```
+
+or pass values directly:
 
 ```bash
 chmod +x scripts/generate_local_https_cert.sh

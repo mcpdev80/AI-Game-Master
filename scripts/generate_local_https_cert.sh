@@ -14,15 +14,17 @@ Usage:
 
 Behavior:
   - If --cert and --key are provided, the files are copied into docker/certs/.
+  - If HTTPS_CERT_FILE and HTTPS_KEY_FILE are set, they are used like --cert/--key.
+  - HTTPS_HOSTNAME, HTTPS_HOST_IP, and HTTPS_CERT_DAYS may provide env defaults.
   - If no external cert/key are provided, a self-signed certificate is generated.
 EOF
 }
 
-host_name="dungeon-master.local"
-host_ip="127.0.0.1"
-days_valid="30"
-source_cert=""
-source_key=""
+host_name="${HTTPS_HOSTNAME:-dungeon-master.local}"
+host_ip="${HTTPS_HOST_IP:-127.0.0.1}"
+days_valid="${HTTPS_CERT_DAYS:-30}"
+source_cert="${HTTPS_CERT_FILE:-}"
+source_key="${HTTPS_KEY_FILE:-}"
 
 positionals=()
 while [[ $# -gt 0 ]]; do
@@ -82,6 +84,8 @@ if [[ -n "${source_cert}" || -n "${source_key}" ]]; then
   echo "  ${target_cert}"
   echo "  ${target_key}"
   echo
+  echo "Host: ${host_name}"
+  echo "IP:   ${host_ip}"
   echo "Source cert: ${source_cert}"
   echo "Source key:  ${source_key}"
   exit 0
