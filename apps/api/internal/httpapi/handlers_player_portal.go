@@ -548,14 +548,19 @@ func (h *Handler) loadPlayerPortalSession(ctx context.Context, token string) (Pl
 		}
 	}
 	available := make([]Character, 0)
+	fallbackAvailable := make([]Character, 0)
 	for _, character := range characters {
-		if character.CampaignID != nil && *character.CampaignID != portal.Session.CampaignID {
-			continue
-		}
 		if claimed[character.ID] {
 			continue
 		}
-		available = append(available, character)
+		if character.CampaignID != nil && *character.CampaignID == portal.Session.CampaignID {
+			available = append(available, character)
+			continue
+		}
+		fallbackAvailable = append(fallbackAvailable, character)
+	}
+	if len(available) == 0 {
+		available = fallbackAvailable
 	}
 	portal.AvailableCharacters = available
 	portal.Session = sanitizeSessionForPlayers(portal.Session)
