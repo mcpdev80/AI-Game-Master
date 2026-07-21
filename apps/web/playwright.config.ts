@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || "/usr/bin/google-chrome";
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -15,8 +15,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     launchOptions: {
-      executablePath,
       args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+      ...(executablePath ? { executablePath } : {}),
     },
   },
 });
