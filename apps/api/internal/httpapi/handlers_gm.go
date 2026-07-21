@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -16,6 +17,82 @@ import (
 )
 
 var rulesDocumentPagePattern = regexp.MustCompile(`(?i)(?:seite|page|s\.|pg\.)\s*(\d{1,4})`)
+var uuidLikePattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func isUUIDLike(value string) bool {
+	return uuidLikePattern.MatchString(strings.TrimSpace(value))
+}
+
+func embeddedDocumentChunk(document Document) (GMContextChunk, bool) {
+	content := strings.TrimSpace(fmt.Sprintf("%v", document.Metadata["embedded_content"]))
+	if content == "" {
+		content = strings.TrimSpace(fmt.Sprintf("%v", document.Metadata["guide_content"]))
+	}
+	if content == "" {
+		return GMContextChunk{}, false
+	}
+	return GMContextChunk{
+		DocumentID:   strings.TrimSpace(document.ID),
+		DocumentName: strings.TrimSpace(document.Name),
+		ChunkText:    content,
+	}, true
+}
+
+func (h *Handler) retrieveRelevantContextForDocuments(ctx context.Context, documents []Document, query string, limit int, prioritizeRules bool) ([]GMContextChunk, error) {
+	if limit <= 0 {
+		limit = 4
+	}
+	if len(documents) == 0 {
+		return []GMContextChunk{}, nil
+	}
+
+	dbDocumentIDs := make([]string, 0, len(documents))
+	embeddedChunks := make([]GMContextChunk, 0, len(documents))
+	for _, document := range documents {
+		documentID := strings.TrimSpace(document.ID)
+		if isUUIDLike(documentID) {
+			dbDocumentIDs = append(dbDocumentIDs, documentID)
+			continue
+		}
+		if chunk, ok := embeddedDocumentChunk(document); ok {
+			embeddedChunks = append(embeddedChunks, chunk)
+		}
+	}
+
+	contextChunks := make([]GMContextChunk, 0, limit)
+	if len(dbDocumentIDs) > 0 {
+		dbChunks, err := h.store.RetrieveRelevantChunksForDocuments(ctx, dbDocumentIDs, query, limit, prioritizeRules)
+		if err != nil {
+			return nil, err
+		}
+		contextChunks = append(contextChunks, dbChunks...)
+	}
+
+	if len(contextChunks) >= limit {
+		return contextChunks[:limit], nil
+	}
+	for _, chunk := range embeddedChunks {
+		contextChunks = append(contextChunks, chunk)
+		if len(contextChunks) >= limit {
+			break
+		}
+	}
+	return contextChunks, nil
+}
+
+func ensureInteractiveNarration(language string, narration string, rollRequest *RollRequest) string {
+	narration = strings.TrimSpace(narration)
+	if narration == "" || rollRequest != nil {
+		return narration
+	}
+	if strings.Contains(narration, "?") {
+		return narration
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+		return strings.TrimSpace(narration + " Was tut ihr jetzt?")
+	}
+	return strings.TrimSpace(narration + " What do you do now?")
+}
 
 func applyStateUpdatesToCharacters(ctx context.Context, store *Store, session Session, updates []StateUpdate) ([]Character, error) {
 	changed := make([]Character, 0)
@@ -98,6 +175,7 @@ func applyStateUpdatesToCharacters(ctx context.Context, store *Store, session Se
 			continue
 		}
 		character.Metadata = metadata
+		reconcileCharacterLevelProgress(&character, field)
 		updated, err := store.UpdateCharacter(ctx, character)
 		if err != nil {
 			return nil, err
@@ -141,6 +219,214 @@ func applyStateUpdatesToSession(session *Session, updates []StateUpdate) {
 		}
 	}
 	session.State.GroupInventory = nextInventory
+}
+
+var dnd5eXPThresholds = map[int]int{
+	1:  0,
+	2:  300,
+	3:  900,
+	4:  2700,
+	5:  6500,
+	6:  14000,
+	7:  23000,
+	8:  34000,
+	9:  48000,
+	10: 64000,
+	11: 85000,
+	12: 100000,
+	13: 120000,
+	14: 140000,
+	15: 165000,
+	16: 195000,
+	17: 225000,
+	18: 265000,
+	19: 305000,
+	20: 355000,
+}
+
+func parseMetadataBool(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		normalized := strings.ToLower(strings.TrimSpace(typed))
+		return normalized == "true" || normalized == "1" || normalized == "yes" || normalized == "ja"
+	case int:
+		return typed != 0
+	case float64:
+		return typed != 0
+	default:
+		return false
+	}
+}
+
+func parseCharacterLevel(classAndLevel string) int {
+	matches := regexp.MustCompile(`\b(\d{1,2})\b`).FindStringSubmatch(strings.TrimSpace(classAndLevel))
+	if len(matches) < 2 {
+		return 1
+	}
+	level, err := strconv.Atoi(matches[1])
+	if err != nil || level < 1 {
+		return 1
+	}
+	if level > 20 {
+		return 20
+	}
+	return level
+}
+
+func nextLevelThreshold(level int) (int, bool) {
+	if level >= 20 {
+		return 0, false
+	}
+	threshold, ok := dnd5eXPThresholds[level+1]
+	return threshold, ok
+}
+
+func characterEligibleForLevelUp(character Character) bool {
+	level := parseCharacterLevel(character.ClassAndLevel)
+	threshold, ok := nextLevelThreshold(level)
+	if !ok {
+		return false
+	}
+	metadata := defaultMetadata(character.Metadata)
+	if parseMetadataBool(metadata["level_up_available"]) {
+		return true
+	}
+	return parseMetadataInt(metadata["experience_points"]) >= threshold
+}
+
+func reconcileCharacterLevelProgress(character *Character, triggerField string) {
+	if character == nil {
+		return
+	}
+	metadata := defaultMetadata(character.Metadata)
+	level := parseCharacterLevel(character.ClassAndLevel)
+	manualReady := parseMetadataBool(metadata["level_up_available"])
+	threshold, hasNextLevel := nextLevelThreshold(level)
+	if !hasNextLevel {
+		metadata["level_up_available"] = "false"
+		character.Metadata = metadata
+		return
+	}
+	xpReady := parseMetadataInt(metadata["experience_points"]) >= threshold
+	if manualReady || xpReady {
+		metadata["level_up_available"] = "true"
+	} else if triggerField == "experience_points" || triggerField == "xp" || triggerField == "ep" {
+		metadata["level_up_available"] = "false"
+	}
+	character.Metadata = metadata
+}
+
+func loadActiveSessionCharacters(ctx context.Context, store *Store, session Session) ([]Character, error) {
+	slots, err := store.ListPlayerSlots(ctx, session.ID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]Character, 0, len(slots))
+	seen := map[string]struct{}{}
+	for _, slot := range slots {
+		if slot.CharacterID == nil || *slot.CharacterID == "" {
+			continue
+		}
+		if _, ok := seen[*slot.CharacterID]; ok {
+			continue
+		}
+		seen[*slot.CharacterID] = struct{}{}
+		character, err := store.GetCharacter(ctx, *slot.CharacterID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			return nil, err
+		}
+		items = append(items, character)
+	}
+	return items, nil
+}
+
+func detectsCombatResolution(text string) bool {
+	source := strings.ToLower(strings.TrimSpace(text))
+	return containsAny(source,
+		"kampf ist vorbei", "kampf vorbei", "kampf endet", "combat is over", "combat over", "encounter over",
+		"letzter gegner", "last enemy", "gegner besiegt", "enemy defeated", "victory", "sieg",
+		"wir haben gewonnen", "we won", "begegnung beendet", "fight is done", "fight is over",
+	)
+}
+
+func detectsRestTransition(text string) bool {
+	source := strings.ToLower(strings.TrimSpace(text))
+	return containsAny(source,
+		"long rest", "short rest", "rast", "ruhe", "wir rasten", "wir ruhen", "camp", "lager aufschlagen", "downtime",
+	)
+}
+
+func buildLevelUpQueue(characters []Character, language string) []LevelUpQueueEntry {
+	queue := make([]LevelUpQueueEntry, 0)
+	for _, character := range characters {
+		if !characterEligibleForLevelUp(character) {
+			continue
+		}
+		currentLevel := parseCharacterLevel(character.ClassAndLevel)
+		entry := LevelUpQueueEntry{
+			CharacterID:   character.ID,
+			CharacterName: character.Name,
+			CurrentLevel:  currentLevel,
+			NextLevel:     min(currentLevel+1, 20),
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+			entry.Reason = "Stufenaufstieg nach Rast bereit"
+		} else {
+			entry.Reason = "Level-up ready after rest"
+		}
+		queue = append(queue, entry)
+	}
+	return queue
+}
+
+func buildRewardSummary(updates []StateUpdate, language string) string {
+	xpTotal := 0
+	groupGold := 0
+	items := make([]string, 0)
+	for _, update := range updates {
+		field := normalizeProgressField(update.Field)
+		switch field {
+		case "experience_points", "xp", "ep":
+			if update.Delta != 0 {
+				xpTotal += update.Delta
+			} else if strings.TrimSpace(update.Value) != "" {
+				xpTotal += parseMetadataInt(update.Value)
+			}
+		case "group_gold":
+			groupGold += update.Delta
+		case "group_inventory_add", "inventory_add", "item_add", "loot_add":
+			items = append(items, splitProgressItems(update.Value)...)
+		}
+	}
+	parts := make([]string, 0, 3)
+	if xpTotal > 0 {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+			parts = append(parts, fmt.Sprintf("%d EP vergeben", xpTotal))
+		} else {
+			parts = append(parts, fmt.Sprintf("%d XP awarded", xpTotal))
+		}
+	}
+	if groupGold > 0 {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+			parts = append(parts, fmt.Sprintf("%d Gruppen-Gold", groupGold))
+		} else {
+			parts = append(parts, fmt.Sprintf("%d group gold", groupGold))
+		}
+	}
+	if len(items) > 0 {
+		label := strings.Join(items, ", ")
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+			parts = append(parts, fmt.Sprintf("Beute: %s", label))
+		} else {
+			parts = append(parts, fmt.Sprintf("Loot: %s", label))
+		}
+	}
+	return strings.Join(parts, " · ")
 }
 
 func parseProficiencyBonus(value string) int {
@@ -274,6 +560,490 @@ func activeCharacterContextChunks(activeCharacters []map[string]any) []GMContext
 		})
 	}
 	return items
+}
+
+type enemyCombatProfile struct {
+	Name        string
+	AttackBonus int
+	DamageDice  string
+	DamageType  string
+}
+
+type enemyEncounterDefinition struct {
+	Keywords        []string
+	PluralKeywords  []string
+	BaseName        string
+	VariantProfiles []enemyCombatProfile
+}
+
+var encounterDefinitions = []enemyEncounterDefinition{
+	{
+		Keywords:       []string{"giant spider", "riesenspinne", "spider", "spinne"},
+		PluralKeywords: []string{"two giant spiders", "2 giant spiders", "zwei riesenspinnen", "spiders", "riesenspinnen"},
+		BaseName:       "spider",
+		VariantProfiles: []enemyCombatProfile{
+			{Name: "Hunting Spider", AttackBonus: 3, DamageDice: "1d4+1", DamageType: "piercing"},
+			{Name: "Young Giant Spider", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing"},
+			{Name: "Giant Spider", AttackBonus: 5, DamageDice: "1d8+3", DamageType: "piercing"},
+		},
+	},
+	{
+		Keywords:       []string{"goblin", "goblin"},
+		PluralKeywords: []string{"two goblins", "2 goblins", "zwei goblins", "goblins"},
+		BaseName:       "goblin",
+		VariantProfiles: []enemyCombatProfile{
+			{Name: "Goblin Scout", AttackBonus: 3, DamageDice: "1d4+1", DamageType: "slashing"},
+			{Name: "Goblin Raider", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing"},
+			{Name: "Goblin Skirmisher", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing"},
+		},
+	},
+	{
+		Keywords:       []string{"wolf", "wulf", "wolfe", "wölf", "woelf"},
+		PluralKeywords: []string{"two wolves", "2 wolves", "zwei wölfe", "zwei woelfe", "wolves", "wölfe", "woelfe"},
+		BaseName:       "wolf",
+		VariantProfiles: []enemyCombatProfile{
+			{Name: "Young Wolf", AttackBonus: 3, DamageDice: "1d4+1", DamageType: "piercing"},
+			{Name: "Wolf", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing"},
+			{Name: "Dire Wolf", AttackBonus: 5, DamageDice: "2d6+3", DamageType: "piercing"},
+		},
+	},
+}
+
+func rollTotalFromEvent(event *DiceRollEvent) int {
+	if event == nil {
+		return 0
+	}
+	if event.Total > 0 {
+		return event.Total
+	}
+	total := 0
+	for _, die := range event.Dice {
+		total += die.Value
+	}
+	return total
+}
+
+func looksLikeInitiativePrompt(input string) bool {
+	lower := strings.ToLower(strings.TrimSpace(input))
+	if lower == "" {
+		return false
+	}
+	for _, marker := range []string{"initiative", "ini", "initiative würfeln", "initiative wuerfeln", "roll initiative"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldAutoStartCombat(session Session, req GMRespondRequest, response GMResponse) bool {
+	if session.State.Combat.Active {
+		return false
+	}
+	enemyNames := detectCombatEnemyNames(session, req.PlayerInput, response, nil)
+	if len(enemyNames) == 0 {
+		return false
+	}
+	if looksLikeInitiativePrompt(req.PlayerInput) {
+		return true
+	}
+	if req.DiceRoll != nil {
+		return true
+	}
+	if response.RollRequest != nil {
+		rollType := strings.ToLower(strings.TrimSpace(response.RollRequest.Type))
+		if rollType == "attack" || rollType == "damage" || rollType == "save" {
+			return true
+		}
+		if rollType == "check" {
+			source := strings.ToLower(strings.Join([]string{
+				req.PlayerInput,
+				response.Narration,
+				response.RollRequest.Label,
+				response.RollRequest.Reason,
+			}, " "))
+			if containsAny(source, "spider", "spinne", "goblin", "monster", "enemy", "feind", "attack", "angriff", "combat", "kampf") {
+				return true
+			}
+		}
+	}
+	source := strings.ToLower(strings.Join([]string{req.PlayerInput, response.Narration}, " "))
+	return containsAny(source, "attacks", "attack", "angriff", "initiative", "combat", "kampf", "ambush", "spider", "spinne")
+}
+
+func combatPartyLevelBand(activeCharacters []map[string]any) (partySize int, averageLevel int, highestLevel int) {
+	ready := combatReadyCharacters(activeCharacters)
+	if len(ready) == 0 {
+		ready = activeCharacters
+	}
+	if len(ready) == 0 {
+		return 0, 1, 1
+	}
+	total := 0
+	highest := 1
+	for _, character := range ready {
+		level := parseCharacterLevel(strings.TrimSpace(fmt.Sprintf("%v", character["class_and_level"])))
+		total += level
+		if level > highest {
+			highest = level
+		}
+	}
+	average := total / len(ready)
+	if average < 1 {
+		average = 1
+	}
+	return len(ready), average, highest
+}
+
+func containsAnySubstring(source string, values []string) bool {
+	for _, value := range values {
+		if value != "" && strings.Contains(source, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func selectEncounterVariantIndex(partySize, averageLevel, highestLevel int) int {
+	switch {
+	case partySize <= 1 && highestLevel <= 1:
+		return 0
+	case partySize <= 2 && averageLevel <= 1:
+		return 0
+	case partySize <= 2 && highestLevel <= 2:
+		return 1
+	default:
+		return 2
+	}
+}
+
+func chooseEncounterCount(explicitPlural bool, partySize, averageLevel, highestLevel int) int {
+	if explicitPlural {
+		if partySize <= 1 && highestLevel <= 1 {
+			return 1
+		}
+		return 2
+	}
+	if partySize >= 4 && averageLevel >= 3 {
+		return 2
+	}
+	return 1
+}
+
+func balanceEncounterNames(source string, activeCharacters []map[string]any, definition enemyEncounterDefinition) []string {
+	partySize, averageLevel, highestLevel := combatPartyLevelBand(activeCharacters)
+	explicitPlural := containsAnySubstring(source, definition.PluralKeywords)
+	explicitSingle := containsAnySubstring(source, definition.Keywords)
+	if !explicitPlural && !explicitSingle {
+		return nil
+	}
+	variantIndex := selectEncounterVariantIndex(partySize, averageLevel, highestLevel)
+	if variantIndex >= len(definition.VariantProfiles) {
+		variantIndex = len(definition.VariantProfiles) - 1
+	}
+	count := chooseEncounterCount(explicitPlural, partySize, averageLevel, highestLevel)
+	baseName := definition.VariantProfiles[variantIndex].Name
+	if count <= 1 {
+		return []string{baseName}
+	}
+	items := make([]string, 0, count)
+	for i := 1; i <= count; i++ {
+		items = append(items, fmt.Sprintf("%s %d", baseName, i))
+	}
+	return items
+}
+
+func detectCombatEnemyNames(session Session, input string, response GMResponse, activeCharacters []map[string]any) []string {
+	if len(session.State.Combat.InitiativeOrder) > 0 {
+		items := make([]string, 0)
+		for _, turn := range session.State.Combat.InitiativeOrder {
+			if turn.Side == "enemy" {
+				items = append(items, turn.Name)
+			}
+		}
+		if len(items) > 0 {
+			return items
+		}
+	}
+	if len(session.State.ActiveNPCs) > 0 {
+		return defaultStringSlice(session.State.ActiveNPCs)
+	}
+	source := strings.ToLower(strings.Join([]string{input, response.Narration}, " "))
+	for _, definition := range encounterDefinitions {
+		if enemies := balanceEncounterNames(source, activeCharacters, definition); len(enemies) > 0 {
+			return enemies
+		}
+	}
+	return []string{}
+}
+
+func enemyProfileForName(name string) enemyCombatProfile {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	for _, definition := range encounterDefinitions {
+		for _, profile := range definition.VariantProfiles {
+			if strings.Contains(lower, strings.ToLower(profile.Name)) {
+				return profile
+			}
+		}
+	}
+	if strings.Contains(lower, "spinne") || strings.Contains(lower, "spider") {
+		return enemyCombatProfile{Name: "Giant Spider", AttackBonus: 5, DamageDice: "1d8+3", DamageType: "piercing"}
+	}
+	if strings.Contains(lower, "goblin") {
+		return enemyCombatProfile{Name: "Goblin Raider", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "slashing"}
+	}
+	if strings.Contains(lower, "wolf") || strings.Contains(lower, "wölf") || strings.Contains(lower, "woelf") {
+		return enemyCombatProfile{Name: "Wolf", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "piercing"}
+	}
+	return enemyCombatProfile{Name: "Enemy", AttackBonus: 4, DamageDice: "1d6+2", DamageType: "damage"}
+}
+
+var simpleDiceFormulaPattern = regexp.MustCompile(`(?i)^\s*(\d+)\s*[dw]\s*(\d+)(?:\s*([+-])\s*(\d+))?\s*$`)
+
+func rollDiceFormula(formula string) (int, []int) {
+	matches := simpleDiceFormulaPattern.FindStringSubmatch(strings.TrimSpace(formula))
+	if len(matches) == 0 {
+		return 0, nil
+	}
+	count, _ := strconv.Atoi(matches[1])
+	sides, _ := strconv.Atoi(matches[2])
+	if count <= 0 || sides <= 0 {
+		return 0, nil
+	}
+	values := make([]int, 0, count)
+	total := 0
+	for i := 0; i < count; i++ {
+		value := rand.Intn(sides) + 1
+		values = append(values, value)
+		total += value
+	}
+	if len(matches) >= 5 && matches[4] != "" {
+		modifier, _ := strconv.Atoi(matches[4])
+		if matches[3] == "-" {
+			total -= modifier
+		} else {
+			total += modifier
+		}
+	}
+	return total, values
+}
+
+func combatReadyCharacters(activeCharacters []map[string]any) []map[string]any {
+	items := make([]map[string]any, 0, len(activeCharacters))
+	for _, character := range activeCharacters {
+		status := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", character["status"])))
+		if status == "ready" || status == "joined" || status == "active" {
+			items = append(items, character)
+		}
+	}
+	if len(items) == 0 && len(activeCharacters) > 0 {
+		return append(items, activeCharacters...)
+	}
+	return items
+}
+
+func currentPlayerTurnCharacter(activeCharacters []map[string]any) map[string]any {
+	ready := combatReadyCharacters(activeCharacters)
+	if len(ready) == 0 {
+		return nil
+	}
+	return ready[0]
+}
+
+func activeCombatPlayerCharacter(state CombatState, activeCharacters []map[string]any) map[string]any {
+	activeTurn := activeCombatTurn(state)
+	if activeTurn == nil || activeTurn.Side != "player" {
+		return currentPlayerTurnCharacter(activeCharacters)
+	}
+	for _, character := range activeCharacters {
+		if strings.TrimSpace(fmt.Sprintf("%v", character["id"])) == activeTurn.ID {
+			return character
+		}
+	}
+	return currentPlayerTurnCharacter(activeCharacters)
+}
+
+func initiativeFallbackForCharacter(character map[string]any) int {
+	const base = 10
+	if abilities, ok := character["abilities"].(map[string]int); ok {
+		if dex, exists := abilities["dexterity"]; exists {
+			return base + abilityModifierFromAny(dex)
+		}
+	}
+	if abilities, ok := character["abilities"].(map[string]any); ok {
+		if dex, exists := abilities["dexterity"]; exists {
+			return base + abilityModifierFromAny(dex)
+		}
+	}
+	return base
+}
+
+func initializeCombatState(session Session, req GMRespondRequest, response GMResponse, activeCharacters []map[string]any) CombatState {
+	players := combatReadyCharacters(activeCharacters)
+	enemyNames := detectCombatEnemyNames(session, req.PlayerInput, response, activeCharacters)
+	if len(players) == 0 || len(enemyNames) == 0 {
+		return session.State.Combat
+	}
+	rolledPlayerID := strings.TrimSpace(fmt.Sprintf("%v", players[0]["id"]))
+	rolledPlayerInit := rollTotalFromEvent(req.DiceRoll)
+	order := make([]CombatTurnEntry, 0, len(players)+len(enemyNames))
+	for _, player := range players {
+		playerID := strings.TrimSpace(fmt.Sprintf("%v", player["id"]))
+		playerInit := initiativeFallbackForCharacter(player)
+		if playerID == rolledPlayerID && rolledPlayerInit > 0 {
+			playerInit = rolledPlayerInit
+		}
+		order = append(order, CombatTurnEntry{
+			ID:         playerID,
+			Name:       firstNonEmpty(strings.TrimSpace(fmt.Sprintf("%v", player["name"])), "Spieler"),
+			Side:       "player",
+			Initiative: playerInit,
+			Status:     "ready",
+		})
+	}
+	for index, enemyName := range enemyNames {
+		enemyInit := rand.Intn(20) + 1
+		order = append(order, CombatTurnEntry{
+			ID:         fmt.Sprintf("enemy:%d:%s", index+1, strings.ToLower(strings.ReplaceAll(enemyName, " ", "-"))),
+			Name:       enemyName,
+			Side:       "enemy",
+			Initiative: enemyInit,
+			Status:     "ready",
+		})
+	}
+	for i := 0; i < len(order)-1; i++ {
+		for j := i + 1; j < len(order); j++ {
+			if order[j].Initiative > order[i].Initiative {
+				order[i], order[j] = order[j], order[i]
+			}
+		}
+	}
+	logEntries := []CombatLogEntry{{
+		Timestamp:  time.Now().UTC(),
+		ActorID:    rolledPlayerID,
+		ActorName:  firstNonEmpty(strings.TrimSpace(fmt.Sprintf("%v", players[0]["name"])), "Spieler"),
+		Side:       "system",
+		Kind:       "initiative_started",
+		Summary:    "Initiative established.",
+		Details:    map[string]any{"initiative_order": order},
+		PublicText: "Der Kampf beginnt, als alle Beteiligten gleichzeitig reagieren.",
+	}}
+	return CombatState{
+		Active:          true,
+		Round:           1,
+		ActiveTurnIndex: 0,
+		InitiativeOrder: order,
+		Log:             logEntries,
+	}
+}
+
+func advanceCombatTurn(state *CombatState) {
+	if state == nil || !state.Active || len(state.InitiativeOrder) == 0 {
+		return
+	}
+	state.ActiveTurnIndex++
+	if state.ActiveTurnIndex >= len(state.InitiativeOrder) {
+		state.ActiveTurnIndex = 0
+		state.Round++
+	}
+}
+
+func activeCombatTurn(state CombatState) *CombatTurnEntry {
+	if !state.Active || len(state.InitiativeOrder) == 0 || state.ActiveTurnIndex < 0 || state.ActiveTurnIndex >= len(state.InitiativeOrder) {
+		return nil
+	}
+	return &state.InitiativeOrder[state.ActiveTurnIndex]
+}
+
+func resolveEnemyTurns(language string, state *CombatState, activeCharacters []map[string]any) (string, []CombatLogEntry) {
+	if state == nil || !state.Active {
+		return "", nil
+	}
+	target := activeCombatPlayerCharacter(*state, activeCharacters)
+	if target == nil {
+		return "", nil
+	}
+	targetName := firstNonEmpty(strings.TrimSpace(fmt.Sprintf("%v", target["name"])), "Der Held")
+	targetAC := 10
+	switch typed := target["armor_class"].(type) {
+	case int:
+		targetAC = typed
+	case *int:
+		if typed != nil {
+			targetAC = *typed
+		}
+	}
+	paragraphs := make([]string, 0)
+	entries := make([]CombatLogEntry, 0)
+	for turn := activeCombatTurn(*state); turn != nil && turn.Side == "enemy"; turn = activeCombatTurn(*state) {
+		profile := enemyProfileForName(turn.Name)
+		baseRoll := rand.Intn(20) + 1
+		attackTotal := baseRoll + profile.AttackBonus
+		hit := attackTotal >= targetAC
+		entry := CombatLogEntry{
+			Timestamp: time.Now().UTC(),
+			ActorID:   turn.ID,
+			ActorName: turn.Name,
+			Side:      "enemy",
+			Kind:      "attack_roll",
+			Details: map[string]any{
+				"roll":         baseRoll,
+				"attack_bonus": profile.AttackBonus,
+				"total":        attackTotal,
+				"target_ac":    targetAC,
+				"target_name":  targetName,
+			},
+		}
+		if hit {
+			damageTotal, damageRolls := rollDiceFormula(profile.DamageDice)
+			entry.Summary = fmt.Sprintf("%s trifft %s (%d gegen RK %d) und verursacht %d %s.", turn.Name, targetName, attackTotal, targetAC, damageTotal, profile.DamageType)
+			entry.Details["damage_rolls"] = damageRolls
+			entry.Details["damage_total"] = damageTotal
+			entry.Details["damage_formula"] = profile.DamageDice
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+				entry.PublicText = fmt.Sprintf("%s schießt plötzlich vor, zwingt %s aus dem Gleichgewicht und trifft hart. %s verliert %d Trefferpunkte.", turn.Name, targetName, targetName, damageTotal)
+				paragraphs = append(paragraphs, fmt.Sprintf("%s stößt blitzartig vor, erwischt %s trotz aller Deckung und reißt eine schmerzhafte Wunde. %s verliert %d Trefferpunkte.", turn.Name, targetName, targetName, damageTotal))
+			} else {
+				entry.PublicText = fmt.Sprintf("%s lunges forward, throws %s off balance, and lands a solid hit. %s loses %d hit points.", turn.Name, targetName, targetName, damageTotal)
+				paragraphs = append(paragraphs, fmt.Sprintf("%s darts in with startling speed, slips past %s's guard, and tears open a painful wound. %s loses %d hit points.", turn.Name, targetName, targetName, damageTotal))
+			}
+		} else {
+			entry.Summary = fmt.Sprintf("%s verfehlt %s (%d gegen RK %d).", turn.Name, targetName, attackTotal, targetAC)
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+				entry.PublicText = fmt.Sprintf("%s greift an, aber %s weicht im letzten Moment aus.", turn.Name, targetName)
+				paragraphs = append(paragraphs, fmt.Sprintf("%s schnellt nach vorn, doch %s fängt den Angriff im letzten Moment ab und lässt die Attacke wirkungslos an sich vorbeiziehen.", turn.Name, targetName))
+			} else {
+				entry.PublicText = fmt.Sprintf("%s attacks, but %s slips away at the last second.", turn.Name, targetName)
+				paragraphs = append(paragraphs, fmt.Sprintf("%s snaps forward, but %s catches the movement just in time and lets the strike glance away harmlessly.", turn.Name, targetName))
+			}
+		}
+		entries = append(entries, entry)
+		advanceCombatTurn(state)
+	}
+	if len(paragraphs) == 0 {
+		return "", entries
+	}
+	return strings.Join(paragraphs, " "), entries
+}
+
+func buildCombatStateNarration(language string, state CombatState) string {
+	if !state.Active || len(state.InitiativeOrder) == 0 {
+		return ""
+	}
+	orderParts := make([]string, 0, len(state.InitiativeOrder))
+	for _, turn := range state.InitiativeOrder {
+		orderParts = append(orderParts, fmt.Sprintf("%s %d", turn.Name, turn.Initiative))
+	}
+	if current := activeCombatTurn(state); current != nil {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+			return fmt.Sprintf("Initiative steht. Runde %d. Reihenfolge: %s. Zuerst handelt %s.", state.Round, strings.Join(orderParts, ", "), current.Name)
+		}
+		return fmt.Sprintf("Initiative is set. Round %d. Order: %s. %s acts first.", state.Round, strings.Join(orderParts, ", "), current.Name)
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+		return fmt.Sprintf("Initiative steht. Runde %d. Reihenfolge: %s.", state.Round, strings.Join(orderParts, ", "))
+	}
+	return fmt.Sprintf("Initiative is set. Round %d. Order: %s.", state.Round, strings.Join(orderParts, ", "))
 }
 
 func buildScenePromptContext(session Session, req GMRespondRequest, workingSummary map[string]any, contextChunks []GMContextChunk) map[string]any {
@@ -470,6 +1240,29 @@ func deriveSessionFacts(session Session, workingSummary map[string]any, adventur
 
 	for _, key := range []string{"recent_summary", "last_outcome", "important_state"} {
 		appendFact(fmt.Sprintf("%v", defaultMetadata(workingSummary)[key]))
+	}
+	if session.State.Combat.Active && len(session.State.Combat.InitiativeOrder) > 0 {
+		orderParts := make([]string, 0, len(session.State.Combat.InitiativeOrder))
+		for _, turn := range session.State.Combat.InitiativeOrder {
+			orderParts = append(orderParts, fmt.Sprintf("%s (%s, Ini %d)", turn.Name, turn.Side, turn.Initiative))
+		}
+		appendFact(fmt.Sprintf("Kampf aktiv. Runde %d. Initiative: %s.", session.State.Combat.Round, strings.Join(orderParts, " -> ")))
+		if activeTurn := activeCombatTurn(session.State.Combat); activeTurn != nil {
+			appendFact(fmt.Sprintf("Gerade am Zug: %s.", activeTurn.Name))
+		}
+	}
+	if strings.TrimSpace(session.State.LastRewardSummary) != "" {
+		appendFact(fmt.Sprintf("Letzte Belohnung: %s.", session.State.LastRewardSummary))
+	}
+	if session.State.AwaitingLevelUpRest {
+		appendFact("Mindestens ein Charakter ist stufenaufstiegsbereit, aber der Aufstieg soll erst bei einer Rast beginnen.")
+	}
+	if len(session.State.LevelUpQueue) > 0 {
+		names := make([]string, 0, len(session.State.LevelUpQueue))
+		for _, item := range session.State.LevelUpQueue {
+			names = append(names, fmt.Sprintf("%s (%d -> %d)", item.CharacterName, item.CurrentLevel, item.NextLevel))
+		}
+		appendFact(fmt.Sprintf("Stufenaufstiegs-Reihenfolge vorbereitet: %s.", strings.Join(names, ", ")))
 	}
 
 	for _, chunk := range adventureChunks {
@@ -709,38 +1502,34 @@ func (h *Handler) gmRespond(c *gin.Context) {
 	characterContextChunks := activeCharacterContextChunks(activeCharacters)
 	contextChunks := make([]GMContextChunk, 0)
 	if isRulesQuery {
-		shortRulebookIDs := make([]string, 0, len(rulebookDocuments))
-		rulebookIDs := make([]string, 0, len(rulebookDocuments))
+		shortRulebookDocuments := make([]Document, 0, len(rulebookDocuments))
+		regularRulebookDocuments := make([]Document, 0, len(rulebookDocuments))
 		for _, document := range rulebookDocuments {
 			if strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", document.Metadata["kind"])), "short_rules_guide") {
-				shortRulebookIDs = append(shortRulebookIDs, document.ID)
+				shortRulebookDocuments = append(shortRulebookDocuments, document)
 				continue
 			}
-			rulebookIDs = append(rulebookIDs, document.ID)
+			regularRulebookDocuments = append(regularRulebookDocuments, document)
 		}
-		if len(shortRulebookIDs) > 0 {
-			contextChunks, err = h.store.RetrieveRelevantChunksForDocuments(c.Request.Context(), shortRulebookIDs, req.PlayerInput, contextLimit, true)
+		if len(shortRulebookDocuments) > 0 {
+			contextChunks, err = h.retrieveRelevantContextForDocuments(c.Request.Context(), shortRulebookDocuments, req.PlayerInput, contextLimit, true)
 			if err != nil {
 				errorResponse(c, http.StatusInternalServerError, "retrieve short rules chunks", err)
 				return
 			}
 		}
 		if len(contextChunks) == 0 {
-			if len(rulebookIDs) == 0 {
-				rulebookIDs = append(rulebookIDs, shortRulebookIDs...)
+			if len(regularRulebookDocuments) == 0 {
+				regularRulebookDocuments = append(regularRulebookDocuments, shortRulebookDocuments...)
 			}
-			contextChunks, err = h.store.RetrieveRelevantChunksForDocuments(c.Request.Context(), rulebookIDs, req.PlayerInput, contextLimit, true)
+			contextChunks, err = h.retrieveRelevantContextForDocuments(c.Request.Context(), regularRulebookDocuments, req.PlayerInput, contextLimit, true)
 			if err != nil {
 				errorResponse(c, http.StatusInternalServerError, "retrieve rulebook chunks", err)
 				return
 			}
 		}
 	} else {
-		adventureIDs := make([]string, 0, len(adventureDocuments))
-		for _, document := range adventureDocuments {
-			adventureIDs = append(adventureIDs, document.ID)
-		}
-		contextChunks, err = h.store.RetrieveRelevantChunksForDocuments(c.Request.Context(), adventureIDs, req.PlayerInput, contextLimit, false)
+		contextChunks, err = h.retrieveRelevantContextForDocuments(c.Request.Context(), adventureDocuments, req.PlayerInput, contextLimit, false)
 		if err != nil {
 			errorResponse(c, http.StatusInternalServerError, "retrieve adventure chunks", err)
 			return
@@ -865,6 +1654,55 @@ func (h *Handler) gmRespond(c *gin.Context) {
 			}
 		}
 	}
+	response.Narration = ensureInteractiveNarration(response.Language, response.Narration, response.RollRequest)
+
+	nextCombat := session.State.Combat
+	combatJustStarted := false
+	if shouldAutoStartCombat(session, req, response) && !nextCombat.Active {
+		nextCombat = initializeCombatState(session, req, response, activeCharacters)
+		if nextCombat.Active {
+			combatJustStarted = true
+			session.State.ActiveNPCs = detectCombatEnemyNames(session, req.PlayerInput, response, activeCharacters)
+			response.DMNotes = append(response.DMNotes, fmt.Sprintf("Combat started. Round %d.", nextCombat.Round))
+		}
+	}
+	if nextCombat.Active {
+		if req.DiceRoll != nil {
+			if activeTurn := activeCombatTurn(nextCombat); activeTurn != nil && activeTurn.Side == "player" {
+				playerName := firstNonEmpty(strings.TrimSpace(activeTurn.Name), "Spieler")
+				nextCombat.Log = append(nextCombat.Log, CombatLogEntry{
+					Timestamp:  time.Now().UTC(),
+					ActorID:    activeTurn.ID,
+					ActorName:  playerName,
+					Side:       "player",
+					Kind:       "player_roll",
+					Summary:    fmt.Sprintf("%s würfelt %d.", playerName, rollTotalFromEvent(req.DiceRoll)),
+					Details:    map[string]any{"dice_roll": req.DiceRoll, "player_input": req.PlayerInput},
+					PublicText: fmt.Sprintf("%s handelt entschlossen, während der Ausgang des Manövers einen Atemzug lang in der Luft hängt.", playerName),
+				})
+			}
+		}
+		if response.RollRequest == nil {
+			preResolutionNarration := ""
+			if combatJustStarted {
+				preResolutionNarration = buildCombatStateNarration(response.Language, nextCombat)
+			}
+			if activeTurn := activeCombatTurn(nextCombat); activeTurn != nil && activeTurn.Side == "player" {
+				advanceCombatTurn(&nextCombat)
+			}
+			enemyNarration, enemyLogEntries := resolveEnemyTurns(response.Language, &nextCombat, activeCharacters)
+			if len(enemyLogEntries) > 0 {
+				nextCombat.Log = append(nextCombat.Log, enemyLogEntries...)
+			}
+			if combatJustStarted {
+				response.Narration = strings.TrimSpace(strings.Join([]string{preResolutionNarration, enemyNarration}, " "))
+				response.Narration = ensureInteractiveNarration(response.Language, response.Narration, nil)
+			} else if strings.TrimSpace(enemyNarration) != "" {
+				response.Narration = strings.TrimSpace(strings.Join([]string{strings.TrimSpace(response.Narration), enemyNarration}, " "))
+				response.Narration = ensureInteractiveNarration(response.Language, response.Narration, nil)
+			}
+		}
+	}
 	activeLLMSession.MessageHistory = appendLLMMessage(activeLLMSession.MessageHistory, "assistant", response.Narration, time.Now().UTC())
 	activeLLMSession.LastActiveAt = time.Now().UTC()
 	activeLLMSession.EstimatedPromptTokens = estimatePromptTokens(messageHistoryToStrings(activeLLMSession.MessageHistory))
@@ -880,9 +1718,19 @@ func (h *Handler) gmRespond(c *gin.Context) {
 	}
 
 	nextState := session.State
+	nextState.Combat = nextCombat
+	if len(session.State.ActiveNPCs) > 0 {
+		nextState.ActiveNPCs = session.State.ActiveNPCs
+	}
 	nextState.LastNarration = response.Narration
 	nextState.LastDMNotes = response.DMNotes
 	nextState.SceneSummary = firstNonEmpty(response.Narration, session.State.SceneSummary)
+	if req.DiceRoll != nil {
+		nextState.VisualMode = "scene"
+		nextState.VisualPayload = map[string]any{
+			"narration": response.Narration,
+		}
+	}
 	if response.RollRequest != nil && req.DiceRoll == nil {
 		nextState.VisualMode = "dice_capture"
 		nextState.VisualPayload = map[string]any{
@@ -957,6 +1805,24 @@ func (h *Handler) gmRespond(c *gin.Context) {
 		nextState.AudioPayload = payload
 	}
 	nextState.SessionRecap = firstNonEmpty(response.Narration, nextState.SessionRecap)
+	if nextState.Combat.Active && response.RollRequest == nil && (detectsCombatResolution(req.PlayerInput) || detectsRestTransition(req.PlayerInput)) {
+		nextState.Combat.Log = append(nextState.Combat.Log, CombatLogEntry{
+			Timestamp: time.Now().UTC(),
+			ActorID:   "system",
+			ActorName: "System",
+			Side:      "system",
+			Kind:      "combat_ended",
+			Summary:   "Combat resolved.",
+			PublicText: func() string {
+				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(response.Language)), "de") {
+					return "Der unmittelbare Kampf ist vorerst beendet."
+				}
+				return "The immediate combat has ended for now."
+			}(),
+		})
+		nextState.Combat.Active = false
+		nextState.Combat.ActiveTurnIndex = 0
+	}
 
 	if err := h.store.UpdateSessionState(c.Request.Context(), session.ID, nextState); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "update session state", err)
@@ -971,6 +1837,45 @@ func (h *Handler) gmRespond(c *gin.Context) {
 	session.State = nextState
 	applyStateUpdatesToSession(&session, response.StateUpdates)
 	nextState = session.State
+	if summary := buildRewardSummary(response.StateUpdates, response.Language); strings.TrimSpace(summary) != "" {
+		nextState.LastRewardSummary = summary
+		response.DMNotes = append(response.DMNotes, summary)
+	}
+	activeSessionCharacters, err := loadActiveSessionCharacters(c.Request.Context(), h.store, session)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "load active session characters", err)
+		return
+	}
+	eligibleLevelUps := buildLevelUpQueue(activeSessionCharacters, response.Language)
+	if len(eligibleLevelUps) == 0 {
+		nextState.AwaitingLevelUpRest = false
+		nextState.LevelUpQueue = []LevelUpQueueEntry{}
+	} else if detectsRestTransition(req.PlayerInput) {
+		nextState.AwaitingLevelUpRest = false
+		nextState.LevelUpQueue = eligibleLevelUps
+		names := make([]string, 0, len(eligibleLevelUps))
+		for _, item := range eligibleLevelUps {
+			names = append(names, item.CharacterName)
+		}
+		firstName := eligibleLevelUps[0].CharacterName
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(response.Language)), "de") {
+			response.Narration = strings.TrimSpace(response.Narration + " Während dieser Rast sind folgende Stufenaufstiege bereit: " + strings.Join(names, ", ") + ". Soll ich mit " + firstName + " beginnen?")
+			response.DMNotes = append(response.DMNotes, "Level-up queue prepared after rest.")
+		} else {
+			response.Narration = strings.TrimSpace(response.Narration + " During this rest, the following level-ups are ready: " + strings.Join(names, ", ") + ". Shall I begin with " + firstName + "?")
+			response.DMNotes = append(response.DMNotes, "Level-up queue prepared after rest.")
+		}
+		response.Narration = ensureInteractiveNarration(response.Language, response.Narration, nil)
+	} else {
+		nextState.AwaitingLevelUpRest = true
+		if len(nextState.LevelUpQueue) > 0 {
+			nextState.LevelUpQueue = eligibleLevelUps
+		}
+	}
+	nextState.LastNarration = response.Narration
+	nextState.LastDMNotes = response.DMNotes
+	nextState.SceneSummary = firstNonEmpty(response.Narration, nextState.SceneSummary)
+	nextState.SessionRecap = firstNonEmpty(response.Narration, nextState.SessionRecap)
 	if err := h.store.UpdateSessionState(c.Request.Context(), session.ID, nextState); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "update session group inventory", err)
 		return
@@ -1024,6 +1929,9 @@ func (h *Handler) gmRespond(c *gin.Context) {
 		"player_input":            req.PlayerInput,
 		"response":                response,
 		"character_updates_count": len(changedCharacters),
+		"last_reward_summary":     nextState.LastRewardSummary,
+		"awaiting_level_up_rest":  nextState.AwaitingLevelUpRest,
+		"level_up_queue":          nextState.LevelUpQueue,
 	}
 	if len(changedCharacters) > 0 {
 		names := make([]string, 0, len(changedCharacters))

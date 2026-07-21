@@ -3012,5 +3012,15 @@ func defaultSessionState() SessionState {
 			Items: []string{},
 			Notes: "",
 		},
+		Combat: CombatState{
+			Active:          false,
+			Round:           0,
+			ActiveTurnIndex: 0,
+			InitiativeOrder: []CombatTurnEntry{},
+			Log:             []CombatLogEntry{},
+		},
+		AwaitingLevelUpRest: false,
+		LevelUpQueue:        []LevelUpQueueEntry{},
+		LastRewardSummary:   "",
 	}
 }

@@ -47,6 +47,10 @@ type SessionState struct {
 	SceneSummary         string                `json:"scene_summary"`
 	ActiveNPCs           []string              `json:"active_npcs"`
 	OpenQuests           []string              `json:"open_quests"`
+	Combat               CombatState           `json:"combat,omitempty"`
+	AwaitingLevelUpRest  bool                  `json:"awaiting_level_up_rest,omitempty"`
+	LevelUpQueue         []LevelUpQueueEntry   `json:"level_up_queue,omitempty"`
+	LastRewardSummary    string                `json:"last_reward_summary,omitempty"`
 	LastDiceRoll         *DiceRollEvent        `json:"last_dice_roll"`
 	LastConfirmedRoll    *DiceRollEvent        `json:"last_confirmed_roll,omitempty"`
 	LastNarration        string                `json:"last_narration"`
@@ -84,6 +88,41 @@ type SessionGroupInventory struct {
 	Gold  int      `json:"gold"`
 	Items []string `json:"items"`
 	Notes string   `json:"notes"`
+}
+
+type CombatState struct {
+	Active          bool              `json:"active"`
+	Round           int               `json:"round"`
+	ActiveTurnIndex int               `json:"active_turn_index"`
+	InitiativeOrder []CombatTurnEntry `json:"initiative_order"`
+	Log             []CombatLogEntry  `json:"log"`
+}
+
+type CombatTurnEntry struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Side       string `json:"side"`
+	Initiative int    `json:"initiative"`
+	Status     string `json:"status,omitempty"`
+}
+
+type CombatLogEntry struct {
+	Timestamp  time.Time      `json:"timestamp"`
+	ActorID    string         `json:"actor_id"`
+	ActorName  string         `json:"actor_name"`
+	Side       string         `json:"side"`
+	Kind       string         `json:"kind"`
+	Summary    string         `json:"summary"`
+	Details    map[string]any `json:"details,omitempty"`
+	PublicText string         `json:"public_text,omitempty"`
+}
+
+type LevelUpQueueEntry struct {
+	CharacterID   string `json:"character_id"`
+	CharacterName string `json:"character_name"`
+	CurrentLevel  int    `json:"current_level"`
+	NextLevel     int    `json:"next_level"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 type DiceRollEvent struct {
