@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
+## [0.1.1] - 2026-07-21
+
+### Added
+- Persistent combat state with initiative order, structured combat log, and session-level reward tracking
+- Encounter balancing for spider, goblin, and wolf fights based on active party size and character level
+- Player-facing initiative overlay and combat condition indicators for the visual board
+- Session-side combat tracker with full fight history and live combat state polling
+
+### Changed
+- Updated GM turn handling to keep combat flow, enemy turns, and initiative narration aligned with authoritative session state
+- Improved session defaults and API typings for combat, reward, and level-up progression data
+- Refined combat UI to hide raw HP details from initiative order while keeping color-based condition feedback visible
+
+### Fixed
+- Fallback and embedded document context retrieval for non-database rule/adventure content
+- Interactive narration endings so non-roll GM responses consistently hand the turn back to the players
+- Localized enemy combat narration to avoid mixed-language output during active encounters
+
 ## [0.1.0] - 2026-07-20
 
 ### Added
