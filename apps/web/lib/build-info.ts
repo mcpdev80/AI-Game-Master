@@ -6,7 +6,7 @@ export type AppBuildInfo = {
 
 export function getWebBuildInfo(): AppBuildInfo {
   return {
-    version: process.env.NEXT_PUBLIC_APP_VERSION?.trim() || "0.1.0",
+    version: process.env.NEXT_PUBLIC_APP_VERSION?.trim() || "dev",
     commit: process.env.NEXT_PUBLIC_GIT_COMMIT?.trim() || "dev",
     date: process.env.NEXT_PUBLIC_BUILD_DATE?.trim() || "unknown",
   };

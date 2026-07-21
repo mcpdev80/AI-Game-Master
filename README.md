@@ -42,7 +42,7 @@ This repository documents the Build Week conversion of an existing local project
 
 ## Release metadata
 
-- Current development release: `v0.1.0`
+- Version source of truth: [`VERSION`](VERSION)
 - Recommended development tag later: `build-week-2026`
 - Final submission tag later: `build-week-2026-final`
 - Runtime build metadata is visible in the API health/summary endpoints and in the web UI sidebar/control center

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-APP_VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.1.0)
+APP_VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.1.1)
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 

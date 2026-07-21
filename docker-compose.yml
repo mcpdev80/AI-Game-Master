@@ -37,7 +37,7 @@ services:
     build:
       context: ./apps/api
       args:
-        APP_VERSION: ${APP_VERSION:-0.1.0}
+        APP_VERSION: ${APP_VERSION:-dev}
         GIT_COMMIT: ${GIT_COMMIT:-dev}
         BUILD_DATE: ${BUILD_DATE:-unknown}
     environment:
@@ -103,13 +103,13 @@ services:
     build:
       context: ./apps/web
       args:
-        APP_VERSION: ${APP_VERSION:-0.1.0}
+        APP_VERSION: ${APP_VERSION:-dev}
         GIT_COMMIT: ${GIT_COMMIT:-dev}
         BUILD_DATE: ${BUILD_DATE:-unknown}
     environment:
       API_INTERNAL_BASE_URL: ${API_INTERNAL_BASE_URL:-http://api:8080}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:18085}
-      NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-0.1.0}
+      NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-dev}
       NEXT_PUBLIC_GIT_COMMIT: ${GIT_COMMIT:-dev}
       NEXT_PUBLIC_BUILD_DATE: ${BUILD_DATE:-unknown}
     depends_on:

@@ -3,7 +3,7 @@ package httpapi
 import "strings"
 
 var (
-	buildVersion = "0.1.0"
+	buildVersion = "dev"
 	buildCommit  = "dev"
 	buildDate    = "unknown"
 )
@@ -16,7 +16,7 @@ type BuildInfo struct {
 
 func currentBuildInfo() BuildInfo {
 	return BuildInfo{
-		Version: firstNonBlank(strings.TrimSpace(buildVersion), "0.1.0"),
+		Version: firstNonBlank(strings.TrimSpace(buildVersion), "dev"),
 		Commit:  firstNonBlank(strings.TrimSpace(buildCommit), "dev"),
 		Date:    firstNonBlank(strings.TrimSpace(buildDate), "unknown"),
 	}

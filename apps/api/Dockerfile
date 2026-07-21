@@ -2,7 +2,7 @@ FROM golang:1.25.8-bookworm AS build
 
 WORKDIR /app
 
-ARG APP_VERSION=0.1.0
+ARG APP_VERSION=dev
 ARG GIT_COMMIT=dev
 ARG BUILD_DATE=unknown
 
