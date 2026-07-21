@@ -5585,8 +5585,8 @@ func builderReplyImpliesProgressBeyondStage(reply string, actualStage string) bo
 	}
 	stageMarkers := map[string][]string{
 		"race":                            {"volk festgelegt", "race set", "ancestry set"},
-		"class_and_level":                 {"klassenfolge festgelegt", "klasse und stufe festgelegt", "class progression set", "class and level set"},
-		"background_and_alignment":        {"hintergrund ist damit festgelegt", "background is now fixed", "alignment is set"},
+		"class_and_level":                 {"klassenfolge festgelegt", "klasse und stufe festgelegt", "class progression set", "class and level set", "startklasse", "starting class", "choose paladin or wizard"},
+		"background_and_alignment":        {"hintergrund ist damit festgelegt", "background is now fixed", "alignment is set", "background and alignment", "hintergrund und gesinnung", "choose the rules background"},
 		"ability_scores":                  {"grundwerte sind verteilt", "ability scores are assigned", "attribute sind uebernommen", "attribute are now recorded"},
 		"class_proficiencies_and_choices": {"fertigkeiten sind jetzt festgelegt", "skills are now fixed", "proficiencies are now set"},
 		"hit_points_hit_dice_and_movement": {"trefferpunkte sind festgelegt", "hit points are set", "hit dice", "bewegungsrate"},
