@@ -196,7 +196,7 @@ func TestSanitizeCharacterBuilderPatchForStageReviewKeepsRepairFields(t *testing
 		HitPointMax: intPtr(52),
 		Speed:       &speed,
 		Metadata: map[string]any{
-			"hit_dice":      "3W10 + 3W6",
+			"hit_dice":       "3W10 + 3W6",
 			"combat_attacks": "Langschwert | +5 | 1W8+3",
 		},
 	}
