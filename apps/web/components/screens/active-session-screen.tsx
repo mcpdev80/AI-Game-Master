@@ -145,11 +145,17 @@ function summarizeEvent(event: SessionEvent, locale: "en" | "de"): { title: stri
   }
 
   if (event.type === "private_sidebar_message") {
-    const speaker = typeof event.payload.speaker === "string" ? event.payload.speaker : locale === "de" ? "Unbekannt" : "Unknown";
-    const playerName = typeof event.payload.player_name === "string" ? event.payload.player_name : "";
+    const role = typeof event.payload.role === "string" ? event.payload.role : "";
+    const displayName = typeof event.payload.display_name === "string" ? event.payload.display_name : "";
+    const characterName = typeof event.payload.character_name === "string" ? event.payload.character_name : "";
     const content = typeof event.payload.content === "string" ? event.payload.content : locale === "de" ? "Keine Nachricht" : "No message";
+    const speaker =
+      role === "assistant"
+        ? locale === "de" ? "KI-Spielleiter" : "AI DM"
+        : displayName || characterName || (locale === "de" ? "Unbekannt" : "Unknown");
+    const detail = characterName && displayName && characterName !== displayName ? `${displayName} · ${characterName}` : characterName || displayName;
     return {
-      title: playerName ? `${speaker} · ${playerName}` : speaker,
+      title: detail ? `${speaker} · ${detail}` : speaker,
       body: content,
     };
   }
@@ -194,7 +200,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
   const [selectedCharacterTab, setSelectedCharacterTab] = useState<SessionSheetTab>("overview");
   const [joinUrlCopied, setJoinUrlCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const recentEvents = liveEvents.slice(0, 8);
+  const recentEvents = liveEvents.filter((event) => event.type !== "private_sidebar_message").slice(0, 8);
   const privateSidebarEvents = liveEvents.filter((event) => event.type === "private_sidebar_message").slice(0, 20);
   const releasedHandouts = documents.filter((document) => document.type === "handout" || document.type === "character_sheet" || document.type === "adventure");
   const releasedAssets = assets.filter((asset) => ["image", "portrait", "battlemap", "map", "handout"].includes(asset.type));
