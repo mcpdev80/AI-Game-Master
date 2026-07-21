@@ -4,6 +4,7 @@ import { Bell, CheckCircle2, Info, TriangleAlert, XCircle } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { createClientId } from "../lib/client-id";
 import { useI18n } from "../lib/i18n";
+import { LanguageSwitcher } from "./language-switcher";
 
 type NotificationTone = "success" | "info" | "warning" | "error";
 
@@ -50,10 +51,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     <NotificationContext.Provider value={value}>
       {children}
       <div className="notification-hub">
-        <button className="notification-bell" onClick={() => setIsOpen((current) => !current)} type="button">
-          <Bell size={18} />
-          {historyItems.length > 0 ? <span className="notification-bell__count">{historyItems.length}</span> : null}
-        </button>
+        <div className="notification-hub__controls">
+          <LanguageSwitcher compact />
+          <button className="notification-bell" onClick={() => setIsOpen((current) => !current)} type="button">
+            <Bell size={18} />
+            {historyItems.length > 0 ? <span className="notification-bell__count">{historyItems.length}</span> : null}
+          </button>
+        </div>
 
         {visibleToast ? (
           <div className={`notification-toast notification-toast--${visibleToast.tone}`}>

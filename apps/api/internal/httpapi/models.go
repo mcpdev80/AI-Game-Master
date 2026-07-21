@@ -245,6 +245,22 @@ type UpdatePlayerVisibleStateRequest struct {
 	MediaAssetIDs      []string `json:"media_asset_ids"`
 }
 
+type UpdatePlayerPortalCharacterRequest struct {
+	CurrentHitPoints   *int     `json:"current_hit_points"`
+	TemporaryHitPoints *int     `json:"temporary_hit_points"`
+	CurrentMoney       *string  `json:"current_money"`
+	ExperiencePoints   *string  `json:"experience_points"`
+	Inspiration        *string  `json:"inspiration"`
+	SessionNotes       *string  `json:"session_notes"`
+	CurrentInventory   []string `json:"current_inventory"`
+}
+
+type UpdatePlayerPortalGroupInventoryRequest struct {
+	Gold  *int     `json:"gold"`
+	Items []string `json:"items"`
+	Notes *string  `json:"notes"`
+}
+
 type ResolveAbilityScoresRequest struct {
 	Method     string  `json:"method" binding:"required,oneof=standard point_buy rolled"`
 	Class      string  `json:"class"`
@@ -321,6 +337,28 @@ type PlayerPortalSession struct {
 	Character           *Character         `json:"character"`
 	VisibleState        PlayerVisibleState `json:"visible_state"`
 	AvailableCharacters []Character        `json:"available_characters"`
+}
+
+type PrivateChatMessage struct {
+	ID           string    `json:"id"`
+	SessionID    string    `json:"session_id"`
+	PlayerSlotID string    `json:"player_slot_id"`
+	CharacterID  *string   `json:"character_id,omitempty"`
+	Role         string    `json:"role"`
+	Content      string    `json:"content"`
+	Language     string    `json:"language"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type PlayerPortalPrivateChatRequest struct {
+	Message  string `json:"message" binding:"required,min=1,max=4000"`
+	Language string `json:"language"`
+}
+
+type PlayerPortalPrivateChatResponse struct {
+	Message  PrivateChatMessage   `json:"message"`
+	Reply    PrivateChatMessage   `json:"reply"`
+	Messages []PrivateChatMessage `json:"messages"`
 }
 
 type CreateCampaignRequest struct {

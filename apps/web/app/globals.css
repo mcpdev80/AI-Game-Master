@@ -201,12 +201,6 @@ pre {
   color: var(--gold-strong);
 }
 
-.studio-language-mobile {
-  display: none;
-  justify-content: flex-end;
-  margin-bottom: 12px;
-}
-
 .sr-only {
   clip: rect(0, 0, 0, 0);
   clip-path: inset(50%);
@@ -2084,6 +2078,12 @@ pre {
   gap: 12px;
 }
 
+.notification-hub__controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .notification-bell {
   position: relative;
   width: 48px;
@@ -2365,6 +2365,28 @@ pre {
   color: var(--text-soft);
   font-size: 0.88rem;
   line-height: 1.45;
+}
+
+.player-session-recap {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(183, 128, 58, 0.16);
+}
+
+.player-session-recap strong {
+  color: var(--text);
+  font-size: 0.84rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.player-session-recap p {
+  margin: 0;
+  max-width: 920px;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  line-height: 1.55;
 }
 
 .player-stage__session-box {
@@ -3383,10 +3405,6 @@ pre {
 @media (max-width: 1099px) {
   .studio-main {
     padding-bottom: 100px;
-  }
-
-  .studio-language-mobile {
-    display: flex;
   }
 }
 

@@ -24,6 +24,12 @@ type LLMClient struct {
 	mu              sync.RWMutex
 }
 
+type PrivateChatLLMResponse struct {
+	Reply    string   `json:"reply"`
+	Language string   `json:"language"`
+	DMNotes  []string `json:"dm_notes"`
+}
+
 func NewLLMClient(cfg Config) *LLMClient {
 	return &LLMClient{
 		provider:        strings.ToLower(strings.TrimSpace(cfg.LLMProvider)),
@@ -378,6 +384,171 @@ func (c *LLMClient) CompleteGMSceneNarrationFallback(ctx context.Context, sessio
 	}, nil
 }
 
+func (c *LLMClient) CompletePrivateSidebarResponse(
+	ctx context.Context,
+	session Session,
+	playerSlot PlayerSlot,
+	character *Character,
+	language string,
+	message string,
+	privateHistory []PrivateChatMessage,
+	contextChunks []GMContextChunk,
+) (PrivateChatLLMResponse, error) {
+	requestedLanguage := chooseLanguage(language, session.Language)
+	payload := map[string]any{
+		"session": map[string]any{
+			"id":               session.ID,
+			"name":             session.Name,
+			"status":           session.Status,
+			"language":         session.Language,
+			"current_scene":    session.CurrentScene,
+			"current_location": session.CurrentLocation,
+			"scene_summary":    session.State.SceneSummary,
+			"session_recap":    session.State.SessionRecap,
+		},
+		"player_slot": map[string]any{
+			"id":           playerSlot.ID,
+			"display_name": playerSlot.DisplayName,
+			"status":       playerSlot.Status,
+		},
+		"character": map[string]any{
+			"id":              valueOrEmpty(character, func(ch *Character) string { return ch.ID }),
+			"name":            valueOrEmpty(character, func(ch *Character) string { return ch.Name }),
+			"class_and_level": valueOrEmpty(character, func(ch *Character) string { return ch.ClassAndLevel }),
+			"race":            valueOrEmpty(character, func(ch *Character) string { return ch.Race }),
+			"background":      valueOrEmpty(character, func(ch *Character) string { return ch.Background }),
+			"alignment":       valueOrEmpty(character, func(ch *Character) string { return ch.Alignment }),
+			"abilities":       abilitiesOrEmpty(character),
+			"features":        featuresOrEmpty(character),
+			"languages":       languagesOrEmpty(character),
+			"metadata":        privateSidebarCharacterMetadata(character),
+		},
+		"requested_language":     requestedLanguage,
+		"latest_private_message": strings.TrimSpace(message),
+		"private_history":        privateChatHistoryStrings(privateHistory, 10),
+		"adventure_context":      compactContextChunks(contextChunks, "scene"),
+		"confidentiality_rule":   "This is a private sidebar between the DM and exactly one player. Treat all private-history content as confidential. Do not phrase your answer as public narration for the whole table.",
+		"table_rule":             "You may discuss secret intentions, hidden actions, and side arrangements. Keep them internally consistent with the public session state and the adventure.",
+		"reveal_rule":            "Do not reveal other players' secrets. Do not convert this private sidebar into public outcomes automatically. If a private action would later become visible in the fiction, describe that only when it actually happens in the public scene.",
+		"output_rule":            gmOutputLanguageInstruction(requestedLanguage),
+	}
+	body, _ := json.MarshalIndent(payload, "", "  ")
+	messages := []map[string]string{
+		{"role": "system", "content": "You are an experienced tabletop RPG dungeon master handling a private sidebar with one player. Reply briefly, concretely, and in-character or table-natural language as appropriate. Return JSON only with keys reply, language, dm_notes."},
+		{"role": "user", "content": string(body)},
+	}
+	content, _, err := c.chatCompletion(ctx, messages, true, 600)
+	if err != nil {
+		return PrivateChatLLMResponse{}, err
+	}
+	trimmed := strings.TrimSpace(content)
+	trimmed = strings.TrimPrefix(trimmed, "```json")
+	trimmed = strings.TrimPrefix(trimmed, "```")
+	trimmed = strings.TrimSuffix(trimmed, "```")
+	trimmed = strings.TrimSpace(trimmed)
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &raw); err != nil {
+		return PrivateChatLLMResponse{}, fmt.Errorf("parse private sidebar json: %w", err)
+	}
+	result := PrivateChatLLMResponse{
+		Reply:    strings.TrimSpace(fmt.Sprintf("%v", raw["reply"])),
+		Language: strings.TrimSpace(fmt.Sprintf("%v", raw["language"])),
+		DMNotes:  normalizeDMNotes(raw["dm_notes"]),
+	}
+	result.Reply = strings.TrimSpace(result.Reply)
+	result.Language = chooseLanguage(result.Language, requestedLanguage)
+	if result.Reply == "" {
+		return PrivateChatLLMResponse{}, fmt.Errorf("private sidebar response was empty")
+	}
+	return result, nil
+}
+
+func normalizeDMNotes(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return defaultStringSlice(typed)
+	case []any:
+		items := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text := strings.TrimSpace(fmt.Sprintf("%v", item))
+			if text != "" && text != "<nil>" {
+				items = append(items, text)
+			}
+		}
+		return items
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" {
+			return []string{}
+		}
+		return []string{text}
+	default:
+		return []string{}
+	}
+}
+
+func valueOrEmpty(character *Character, getter func(*Character) string) string {
+	if character == nil {
+		return ""
+	}
+	return getter(character)
+}
+
+func abilitiesOrEmpty(character *Character) map[string]int {
+	if character == nil || character.Abilities == nil {
+		return map[string]int{}
+	}
+	return character.Abilities
+}
+
+func featuresOrEmpty(character *Character) []string {
+	if character == nil || character.Features == nil {
+		return []string{}
+	}
+	return character.Features
+}
+
+func languagesOrEmpty(character *Character) []string {
+	if character == nil || character.Languages == nil {
+		return []string{}
+	}
+	return character.Languages
+}
+
+func privateSidebarCharacterMetadata(character *Character) map[string]any {
+	if character == nil {
+		return map[string]any{}
+	}
+	metadata := defaultMetadata(character.Metadata)
+	return map[string]any{
+		"current_money":        metadata["current_money"],
+		"current_inventory":    metadata["current_inventory"],
+		"experience_points":    metadata["experience_points"],
+		"current_hit_points":   metadata["current_hit_points"],
+		"temporary_hit_points": metadata["temporary_hit_points"],
+		"session_notes":        metadata["session_notes"],
+	}
+}
+
+func privateChatHistoryStrings(messages []PrivateChatMessage, limit int) []string {
+	if limit <= 0 {
+		limit = 10
+	}
+	start := 0
+	if len(messages) > limit {
+		start = len(messages) - limit
+	}
+	items := make([]string, 0, len(messages)-start)
+	for _, message := range messages[start:] {
+		role := strings.TrimSpace(message.Role)
+		if role == "" {
+			role = "message"
+		}
+		items = append(items, fmt.Sprintf("%s: %s", role, strings.TrimSpace(message.Content)))
+	}
+	return items
+}
+
 func (c *LLMClient) chatCompletion(ctx context.Context, messages []map[string]string, requireJSON bool, maxTokens int) (string, string, error) {
 	if maxTokens <= 0 {
 		if requireJSON {
@@ -644,6 +815,7 @@ func gmUserPrompt(session Session, req GMRespondRequest, documents []Document, c
 		"language_rule":         gmOutputLanguageInstruction(requestedLanguage),
 		"translation_rule":      "If selected adventure context or uploaded material is written in another language, translate or paraphrase it into the requested output language while preserving proper nouns, item names, place names, and exact rule terms when needed.",
 		"player_options_rule":   "If the player asks what they can do, respond as a DM inside the fiction. Suggest options drawn from the scene, the adventure, the group situation, and the active character sheets, but phrase them as natural possibilities in the story rather than as sheet commentary.",
+		"private_sidebar_rule":  "Some active characters may include private_sidebar_context. Treat it as confidential DM knowledge for that character only. Never reveal another character's private sidebar content to the table unless it has become visible in the fiction or was explicitly disclosed.",
 		"scene_event_contract": map[string]any{
 			"allowed_types":         []string{"sfx", "music", "ambience", "video", "image", "map", "portrait"},
 			"asset_cue_rule":        "For image, map, or portrait events, use an exact cue key explicitly present in the selected adventure context. Never invent an asset cue.",
@@ -732,26 +904,27 @@ func compactActiveCharactersForPrompt(activeCharacters []map[string]any) []map[s
 	items := make([]map[string]any, 0, len(activeCharacters))
 	for _, character := range activeCharacters {
 		items = append(items, map[string]any{
-			"id":                  strings.TrimSpace(fmt.Sprintf("%v", character["id"])),
-			"name":                strings.TrimSpace(fmt.Sprintf("%v", character["name"])),
-			"player_name":         strings.TrimSpace(fmt.Sprintf("%v", character["player_name"])),
-			"slot_display":        strings.TrimSpace(fmt.Sprintf("%v", character["slot_display"])),
-			"status":              strings.TrimSpace(fmt.Sprintf("%v", character["status"])),
-			"class_and_level":     strings.TrimSpace(fmt.Sprintf("%v", character["class_and_level"])),
-			"race":                strings.TrimSpace(fmt.Sprintf("%v", character["race"])),
-			"background":          strings.TrimSpace(fmt.Sprintf("%v", character["background"])),
-			"armor_class":         character["armor_class"],
-			"speed":               character["speed"],
-			"hit_point_max":       character["hit_point_max"],
-			"abilities":           defaultMetadata(asMap(character["abilities"])),
-			"current_inventory":   character["current_inventory"],
-			"current_money":       character["current_money"],
-			"features":            defaultStringSlice(asStringSlice(character["features"])),
-			"skill_proficiencies": defaultStringSlice(asStringSlice(character["skill_proficiencies"])),
-			"passive_perception":  character["passive_perception"],
-			"combat_attacks":      strings.TrimSpace(fmt.Sprintf("%v", character["combat_attacks"])),
-			"weapon_notes":        strings.TrimSpace(fmt.Sprintf("%v", character["weapon_notes"])),
-			"starting_equipment":  strings.TrimSpace(fmt.Sprintf("%v", character["starting_equipment"])),
+			"id":                      strings.TrimSpace(fmt.Sprintf("%v", character["id"])),
+			"name":                    strings.TrimSpace(fmt.Sprintf("%v", character["name"])),
+			"player_name":             strings.TrimSpace(fmt.Sprintf("%v", character["player_name"])),
+			"slot_display":            strings.TrimSpace(fmt.Sprintf("%v", character["slot_display"])),
+			"status":                  strings.TrimSpace(fmt.Sprintf("%v", character["status"])),
+			"class_and_level":         strings.TrimSpace(fmt.Sprintf("%v", character["class_and_level"])),
+			"race":                    strings.TrimSpace(fmt.Sprintf("%v", character["race"])),
+			"background":              strings.TrimSpace(fmt.Sprintf("%v", character["background"])),
+			"armor_class":             character["armor_class"],
+			"speed":                   character["speed"],
+			"hit_point_max":           character["hit_point_max"],
+			"abilities":               defaultMetadata(asMap(character["abilities"])),
+			"current_inventory":       character["current_inventory"],
+			"current_money":           character["current_money"],
+			"features":                defaultStringSlice(asStringSlice(character["features"])),
+			"skill_proficiencies":     defaultStringSlice(asStringSlice(character["skill_proficiencies"])),
+			"passive_perception":      character["passive_perception"],
+			"combat_attacks":          strings.TrimSpace(fmt.Sprintf("%v", character["combat_attacks"])),
+			"weapon_notes":            strings.TrimSpace(fmt.Sprintf("%v", character["weapon_notes"])),
+			"starting_equipment":      strings.TrimSpace(fmt.Sprintf("%v", character["starting_equipment"])),
+			"private_sidebar_context": strings.TrimSpace(fmt.Sprintf("%v", character["private_sidebar_context"])),
 		})
 	}
 	return items

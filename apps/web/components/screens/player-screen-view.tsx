@@ -1761,6 +1761,12 @@ export function PlayerScreenView({
                   </button>
                   <p>{sessionAdventure?.description || tr("No described adventure has been assigned to this session.", "Dieser Sitzung ist noch kein beschriebenes Abenteuer zugeordnet.")}</p>
                 </div>
+                {liveSession?.state.session_recap ? (
+                  <div className="player-session-recap">
+                    <strong>{tr("What happened so far", "Was bisher geschah")}</strong>
+                    <p>{liveSession.state.session_recap}</p>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

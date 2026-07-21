@@ -509,32 +509,37 @@ func activeCharactersForSession(ctx context.Context, store *Store, session Sessi
 			}
 			return nil, err
 		}
+		privateSidebarContext := ""
+		if privateMessages, err := store.ListPrivateChatMessages(ctx, session.ID, slot.ID, 8); err == nil {
+			privateSidebarContext = summarizePrivateSidebarMessages(privateMessages)
+		}
 		items = append(items, map[string]any{
-			"id":                  character.ID,
-			"name":                character.Name,
-			"player_name":         character.PlayerName,
-			"slot_display":        slot.DisplayName,
-			"status":              slot.Status,
-			"class_and_level":     character.ClassAndLevel,
-			"race":                character.Race,
-			"background":          character.Background,
-			"alignment":           character.Alignment,
-			"armor_class":         character.ArmorClass,
-			"speed":               character.Speed,
-			"hit_point_max":       character.HitPointMax,
-			"proficiency_bonus":   character.Proficiency,
-			"abilities":           character.Abilities,
-			"current_money":       defaultMetadata(character.Metadata)["current_money"],
-			"current_inventory":   defaultMetadata(character.Metadata)["current_inventory"],
-			"experience_points":   defaultMetadata(character.Metadata)["experience_points"],
-			"level_up_available":  defaultMetadata(character.Metadata)["level_up_available"],
-			"features":            character.Features,
-			"languages":           character.Languages,
-			"skill_proficiencies": metadataStringList(defaultMetadata(character.Metadata)["skill_proficiencies"]),
-			"passive_perception":  passivePerceptionForCharacter(character),
-			"combat_attacks":      defaultMetadata(character.Metadata)["combat_attacks"],
-			"weapon_notes":        defaultMetadata(character.Metadata)["weapon_notes"],
-			"starting_equipment":  defaultMetadata(character.Metadata)["starting_equipment"],
+			"id":                      character.ID,
+			"name":                    character.Name,
+			"player_name":             character.PlayerName,
+			"slot_display":            slot.DisplayName,
+			"status":                  slot.Status,
+			"class_and_level":         character.ClassAndLevel,
+			"race":                    character.Race,
+			"background":              character.Background,
+			"alignment":               character.Alignment,
+			"armor_class":             character.ArmorClass,
+			"speed":                   character.Speed,
+			"hit_point_max":           character.HitPointMax,
+			"proficiency_bonus":       character.Proficiency,
+			"abilities":               character.Abilities,
+			"current_money":           defaultMetadata(character.Metadata)["current_money"],
+			"current_inventory":       defaultMetadata(character.Metadata)["current_inventory"],
+			"experience_points":       defaultMetadata(character.Metadata)["experience_points"],
+			"level_up_available":      defaultMetadata(character.Metadata)["level_up_available"],
+			"features":                character.Features,
+			"languages":               character.Languages,
+			"skill_proficiencies":     metadataStringList(defaultMetadata(character.Metadata)["skill_proficiencies"]),
+			"passive_perception":      passivePerceptionForCharacter(character),
+			"combat_attacks":          defaultMetadata(character.Metadata)["combat_attacks"],
+			"weapon_notes":            defaultMetadata(character.Metadata)["weapon_notes"],
+			"starting_equipment":      defaultMetadata(character.Metadata)["starting_equipment"],
+			"private_sidebar_context": privateSidebarContext,
 		})
 	}
 	return items, nil
@@ -569,6 +574,7 @@ func activeCharacterContextChunks(activeCharacters []map[string]any) []GMContext
 			fmt.Sprintf("Kampfangriffe: %v", character["combat_attacks"]),
 			fmt.Sprintf("Waffenhinweise: %v", character["weapon_notes"]),
 			fmt.Sprintf("Startausrüstung: %v", character["starting_equipment"]),
+			fmt.Sprintf("Private Sidebar: %v", character["private_sidebar_context"]),
 		}
 		items = append(items, GMContextChunk{
 			DocumentID:   fmt.Sprintf("character-sheet:%v", character["id"]),
@@ -577,6 +583,29 @@ func activeCharacterContextChunks(activeCharacters []map[string]any) []GMContext
 		})
 	}
 	return items
+}
+
+func summarizePrivateSidebarMessages(messages []PrivateChatMessage) string {
+	if len(messages) == 0 {
+		return ""
+	}
+	start := 0
+	if len(messages) > 6 {
+		start = len(messages) - 6
+	}
+	lines := make([]string, 0, len(messages)-start)
+	for _, message := range messages[start:] {
+		role := strings.TrimSpace(message.Role)
+		if role == "" {
+			role = "message"
+		}
+		content := strings.TrimSpace(message.Content)
+		if content == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s", role, content))
+	}
+	return strings.Join(lines, " | ")
 }
 
 type enemyCombatProfile struct {
@@ -1618,7 +1647,9 @@ func describeAdventureAsset(asset Asset) string {
 }
 
 func queryTokenOverlap(a, b string) bool {
-	for _, token := range strings.FieldsFunc(a, func(r rune) bool { return r == ' ' || r == '_' || r == '-' || r == ',' || r == '.' || r == ':' || r == ';' }) {
+	for _, token := range strings.FieldsFunc(a, func(r rune) bool {
+		return r == ' ' || r == '_' || r == '-' || r == ',' || r == '.' || r == ':' || r == ';'
+	}) {
 		token = strings.TrimSpace(token)
 		if len(token) < 4 {
 			continue

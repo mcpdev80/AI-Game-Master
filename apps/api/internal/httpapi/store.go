@@ -2623,6 +2623,56 @@ func (s *Store) ListSessionEvents(ctx context.Context, sessionID string, limit i
 	return items, rows.Err()
 }
 
+func (s *Store) ListPrivateChatMessages(ctx context.Context, sessionID string, playerSlotID string, limit int) ([]PrivateChatMessage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, session_id::text, payload_json, created_at
+		FROM session_events
+		WHERE session_id = $1
+		  AND type = 'private_sidebar_message'
+		  AND payload_json->>'player_slot_id' = $2
+		ORDER BY created_at ASC
+		LIMIT $3
+	`, sessionID, playerSlotID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]PrivateChatMessage, 0)
+	for rows.Next() {
+		var id string
+		var sid string
+		var rawPayload []byte
+		var createdAt time.Time
+		if err := rows.Scan(&id, &sid, &rawPayload, &createdAt); err != nil {
+			return nil, err
+		}
+		payload := map[string]any{}
+		if len(rawPayload) > 0 {
+			if err := json.Unmarshal(rawPayload, &payload); err != nil {
+				return nil, err
+			}
+		}
+		msg := PrivateChatMessage{
+			ID:           id,
+			SessionID:    sid,
+			PlayerSlotID: strings.TrimSpace(fmt.Sprintf("%v", payload["player_slot_id"])),
+			Role:         strings.TrimSpace(fmt.Sprintf("%v", payload["role"])),
+			Content:      strings.TrimSpace(fmt.Sprintf("%v", payload["content"])),
+			Language:     strings.TrimSpace(fmt.Sprintf("%v", payload["language"])),
+			CreatedAt:    createdAt,
+		}
+		if characterID := strings.TrimSpace(fmt.Sprintf("%v", payload["character_id"])); characterID != "" && characterID != "<nil>" {
+			msg.CharacterID = &characterID
+		}
+		items = append(items, msg)
+	}
+	return items, rows.Err()
+}
+
 func (s *Store) ListDocuments(ctx context.Context) ([]Document, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT d.id::text, d.adventure_id::text, d.type, d.name, d.source_file_path, d.metadata_json, d.created_at, COUNT(dc.id) AS chunk_count

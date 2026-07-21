@@ -350,6 +350,17 @@ export type PlayerPortalSession = {
   available_characters: Character[];
 };
 
+export type PrivateChatMessage = {
+  id: string;
+  session_id: string;
+  player_slot_id: string;
+  character_id?: string | null;
+  role: string;
+  content: string;
+  language: string;
+  created_at: string;
+};
+
 export type SessionJoinCandidate = {
   player_slot: PlayerSlot;
   character: Character | null;
@@ -725,6 +736,47 @@ export async function updatePlayerSlotCharacter(playerSlotId: string, payload: {
 
 export async function updatePlayerSlotStatus(playerSlotId: string, payload: { status: "invited" | "joined" | "ready" | "locked" }) {
   return apiPut(`/api/player-slots/${playerSlotId}/status`, payload);
+}
+
+export async function updatePlayerPortalCharacter(
+  token: string,
+  payload: {
+    current_hit_points?: number;
+    temporary_hit_points?: number;
+    current_money?: string;
+    experience_points?: string;
+    inspiration?: string;
+    session_notes?: string;
+    current_inventory?: string[];
+  }
+): Promise<Character> {
+  return apiPut<Character>(`/api/player-portal/character?token=${encodeURIComponent(token)}`, payload);
+}
+
+export async function updatePlayerPortalGroupInventory(
+  token: string,
+  payload: {
+    gold?: number;
+    items?: string[];
+    notes?: string;
+  }
+): Promise<SessionState["group_inventory"]> {
+  return apiPut<SessionState["group_inventory"]>(`/api/player-portal/group-inventory?token=${encodeURIComponent(token)}`, payload);
+}
+
+export async function fetchPlayerPortalPrivateChat(token: string): Promise<PrivateChatMessage[]> {
+  const response = await apiGet<{ items: PrivateChatMessage[] }>(`/api/player-portal/private-chat?token=${encodeURIComponent(token)}`);
+  return response.items;
+}
+
+export async function sendPlayerPortalPrivateChat(
+  token: string,
+  payload: { message: string; language: string }
+): Promise<{ message: PrivateChatMessage; reply: PrivateChatMessage; messages: PrivateChatMessage[] }> {
+  return apiPost<{ message: PrivateChatMessage; reply: PrivateChatMessage; messages: PrivateChatMessage[] }>(
+    `/api/player-portal/private-chat?token=${encodeURIComponent(token)}`,
+    payload
+  );
 }
 
 export async function updateSessionRuntimeState(

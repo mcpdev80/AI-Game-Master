@@ -144,6 +144,16 @@ function summarizeEvent(event: SessionEvent, locale: "en" | "de"): { title: stri
     };
   }
 
+  if (event.type === "private_sidebar_message") {
+    const speaker = typeof event.payload.speaker === "string" ? event.payload.speaker : locale === "de" ? "Unbekannt" : "Unknown";
+    const playerName = typeof event.payload.player_name === "string" ? event.payload.player_name : "";
+    const content = typeof event.payload.content === "string" ? event.payload.content : locale === "de" ? "Keine Nachricht" : "No message";
+    return {
+      title: playerName ? `${speaker} · ${playerName}` : speaker,
+      body: content,
+    };
+  }
+
   return {
     title: event.type,
     body: JSON.stringify(event.payload),
@@ -185,6 +195,7 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
   const [joinUrlCopied, setJoinUrlCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
   const recentEvents = liveEvents.slice(0, 8);
+  const privateSidebarEvents = liveEvents.filter((event) => event.type === "private_sidebar_message").slice(0, 20);
   const releasedHandouts = documents.filter((document) => document.type === "handout" || document.type === "character_sheet" || document.type === "adventure");
   const releasedAssets = assets.filter((asset) => ["image", "portrait", "battlemap", "map", "handout"].includes(asset.type));
   const availableRulesets = buildRulesetOptions(documents);
@@ -736,6 +747,10 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 <dt>{tr("Ambient", "Umgebung")}</dt>
                 <dd>{liveSession.state.ambient_cue_id || tr("None", "Keine")}</dd>
               </div>
+              <div>
+                <dt>{tr("What happened so far", "Was bisher geschah")}</dt>
+                <dd>{liveSession.state.session_recap || tr("No story recap yet.", "Noch keine Story-Zusammenfassung.")}</dd>
+              </div>
             </dl>
           </Panel>
 
@@ -1056,6 +1071,32 @@ export function ActiveSessionScreen({ session, events, playerLinks, adventures, 
                 <p className="empty-copy">{tr("No DM notes yet.", "Noch keine Spielleiter-Notizen.")}</p>
               ) : (
                 displayedNotes.map((note) => <p className="note-chip" key={note}>{note}</p>)
+              )}
+            </div>
+          </Panel>
+
+          <Panel
+            title={tr("Private Sidebars", "Private Nebenabsprachen")}
+            description={tr("Private player ↔ AI DM conversations recorded for operator visibility.", "Private Spieler-↔-KI-Spielleiter-Gespräche zur Einsicht für die Spielleitung.")}
+          >
+            <div className="list-stack">
+              {privateSidebarEvents.length === 0 ? (
+                <p className="empty-copy">{tr("No private sidebar messages yet.", "Noch keine privaten Nebenabsprachen.")}</p>
+              ) : (
+                privateSidebarEvents.map((event) => {
+                  const summary = summarizeEvent(event, locale);
+                  const timestamp = new Date(event.created_at).toLocaleString(locale === "de" ? "de-DE" : "en-US");
+                  return (
+                    <article className="narrative-card" key={event.id}>
+                      <div className="narrative-card__meta">
+                        <StatusPill tone="warning">{tr("private", "privat")}</StatusPill>
+                        <span className="muted-copy">{timestamp}</span>
+                      </div>
+                      <strong className="event-title">{summary.title}</strong>
+                      <p>{summary.body}</p>
+                    </article>
+                  );
+                })
               )}
             </div>
           </Panel>
