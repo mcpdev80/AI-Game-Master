@@ -89,6 +89,34 @@ What this validates:
 - player-safe portal output
 - browser flow via Playwright
 
+## External import compatibility check
+
+If you want one additional manual proof that the importer can handle a real third-party adventure package shape, use `The Abbey` by Internal Rock as an external test source:
+
+- source page: [The Abbey](https://internalrock.itch.io/the-abbey-knave)
+- published package shape includes an adventure PDF, tokens, portraits, paperminis, and battlemaps
+- this repository does not redistribute those files
+
+What was verified locally on July 21, 2026:
+
+- the live `POST /api/adventures/create-package` endpoint accepted an Abbey-shaped package
+- the importer correctly classified:
+  - battlemaps
+  - tokens
+  - portraits
+  - printables / paperminis
+  - handout PDFs
+- the verified runtime stores the imported adventure once in its original language and answers in the active session language at play time, instead of creating duplicated full-language copies
+- the verified package limits for this flow are 500 MB upload size and 1 GB extracted size
+
+How to use it during a local check:
+
+1. Download the original files from the source page.
+2. Keep the adventure PDF as the required `pdf` upload.
+3. Put the extra files into a ZIP using descriptive names that contain keywords such as `battlemap`, `token`, `portrait`, `paperminis`, `map`, `letter`, or `brief`.
+4. Import through the Library adventure-creation flow.
+5. Confirm the created adventure shows the expected document and asset counts.
+
 ## Manual fallback checks
 
 Useful quick checks during judging:

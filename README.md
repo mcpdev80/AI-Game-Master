@@ -169,6 +169,18 @@ Current highlighted coverage includes:
 - browser test for camera-denied manual roll fallback
 - browser test for visible rate-limit failure in the player screen
 
+External compatibility check that is documented but not bundled:
+
+- `The Abbey` by Internal Rock can be used as a manual import-compatibility test case because its published package structure includes an adventure PDF, tokens, portraits, paperminis, and battlemaps
+- on July 21, 2026, the live `POST /api/adventures/create-package` flow was verified locally against an Abbey-shaped package and correctly classified imported battlemaps, tokens, portraits, printables, and handouts
+- imported adventures stay stored once in their original source language; when a session runs in English or German, retrieval and narration are translated at runtime instead of duplicating full adventure data per language
+- ZIP package limits were raised for real-world adventure bundles to 500 MB upload size and 1 GB extracted size
+- the third-party files are not redistributed in this repository; download them from the original source and import them locally for your own check
+
+Suggested external test source:
+
+- [The Abbey by Internal Rock](https://internalrock.itch.io/the-abbey-knave)
+
 For the current evaluation status, see [docs/evals.md](docs/evals.md).
 
 ## Human decisions and Codex contribution

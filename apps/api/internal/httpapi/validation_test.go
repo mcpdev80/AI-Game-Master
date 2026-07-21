@@ -134,13 +134,14 @@ func TestValidateStateUpdatesAcceptsSessionEntity(t *testing.T) {
 	updates := []StateUpdate{
 		{EntityID: "session", Field: "group_gold", Delta: 100, Value: ""},
 		{EntityID: "session", Field: "group_inventory_add", Delta: 0, Value: "Map"},
+		{EntityID: "session", Field: "scene_summary", Delta: 0, Value: "Die Gruppe erreicht die Krypta."},
 	}
 	validated, errs := validateStateUpdates(updates, knownIDs)
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
 	}
-	if len(validated) != 2 {
-		t.Fatalf("expected 2 validated updates, got %d", len(validated))
+	if len(validated) != 3 {
+		t.Fatalf("expected 3 validated updates, got %d", len(validated))
 	}
 }
 

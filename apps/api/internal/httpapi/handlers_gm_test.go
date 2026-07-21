@@ -1,6 +1,10 @@
 package httpapi
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestCombatReadyCharactersFiltersJoinedAndReady(t *testing.T) {
 	input := []map[string]any{
@@ -172,6 +176,89 @@ func TestBuildRewardSummary(t *testing.T) {
 	}, "en")
 	if summary == "" {
 		t.Fatal("expected non-empty reward summary")
+	}
+}
+
+func TestBuildSessionStorySummaryAccumulatesNarrativeWithoutMechanics(t *testing.T) {
+	got := buildSessionStorySummary(
+		Session{CurrentScene: "the web-choked cavern", CurrentLocation: "the lower passage"},
+		SessionState{ActiveNPCs: []string{"Mira"}},
+		"Thoras entered the web-choked cavern and heard movement in the dark.",
+		"Two giant spiders descend from the ceiling. Roll 1d20 for initiative. What do you do now?",
+		"en",
+	)
+	if got == "" {
+		t.Fatal("expected non-empty story summary")
+	}
+	if !strings.Contains(got, "Thoras entered the web-choked cavern") {
+		t.Fatalf("expected prior recap to be preserved, got %q", got)
+	}
+	if !strings.Contains(got, "The story is currently at the web-choked cavern") {
+		t.Fatalf("expected contextual chapter-style sentence, got %q", got)
+	}
+	if !strings.Contains(got, "Two giant spiders descend from the ceiling.") {
+		t.Fatalf("expected narrative consequence in recap, got %q", got)
+	}
+	for _, forbidden := range []string{"1d20", "What do you do now", "initiative"} {
+		if strings.Contains(strings.ToLower(got), strings.ToLower(forbidden)) {
+			t.Fatalf("did not expect %q in story summary: %q", forbidden, got)
+		}
+	}
+}
+
+func TestBuildSessionWorkingSummaryIncludesStorySummary(t *testing.T) {
+	summary := buildSessionWorkingSummary(Session{ID: "s1", CampaignID: "c1"}, SessionState{
+		SceneSummary:  "A cavern opens ahead.",
+		SessionRecap:  "Thoras entered the cavern and spotted movement in the webs.",
+		LastNarration: "The webs tremble as something approaches.",
+	}, GMResponse{})
+	if got := strings.TrimSpace(fmt.Sprint(summary["story_summary"])); got == "" {
+		t.Fatal("expected story_summary in working summary")
+	}
+	if got := strings.TrimSpace(fmt.Sprint(summary["recent_summary"])); got == "" {
+		t.Fatal("expected recent_summary in working summary")
+	}
+}
+
+func TestBuildScenePromptContextIncludesMatchingAdventureEntitiesAndAssets(t *testing.T) {
+	benjamin := "Brother Benjamin"
+	crypt := "Abbey Crypt"
+	context := buildScenePromptContext(
+		Session{CurrentScene: "Vor der Abtei", CurrentLocation: "Eingang"},
+		GMRespondRequest{PlayerInput: "Wer ist Bruder Benjamin und welche Karte der Krypta gibt es?"},
+		map[string]any{},
+		[]GMContextChunk{
+			{DocumentName: "Die Abtei", ChunkText: "Benjamin ist ein verängstigter Mönch in der Abtei. In der alten Krypta wartet Fellehar."},
+		},
+		[]Asset{
+			{Type: "portrait", Name: "Brother_Benjamin.png", EntityName: &benjamin},
+			{Type: "battlemap", Name: "AbbeyCrypt_colour_4k.jpg", LocationName: &crypt, Tags: []string{"battlemap", "abbey_crypt"}},
+		},
+	)
+	known := defaultAnySliceValue(context, "known_npcs")
+	if len(known) == 0 {
+		t.Fatal("expected known_npcs to include matched entity from adventure assets")
+	}
+	adventureCtx := defaultAnySliceValue(context, "adventure_context")
+	if len(adventureCtx) == 0 {
+		t.Fatal("expected adventure_context entries")
+	}
+	foundBenjamin := false
+	foundCryptAsset := false
+	for _, item := range adventureCtx {
+		text := fmt.Sprintf("%v", item)
+		if strings.Contains(text, "Brother Benjamin") || strings.Contains(text, "Benjamin") {
+			foundBenjamin = true
+		}
+		if strings.Contains(text, "AbbeyCrypt") || strings.Contains(text, "Abbey Crypt") {
+			foundCryptAsset = true
+		}
+	}
+	if !foundBenjamin {
+		t.Fatal("expected Benjamin context in adventure_context")
+	}
+	if !foundCryptAsset {
+		t.Fatal("expected crypt asset context in adventure_context")
 	}
 }
 

@@ -156,11 +156,11 @@ func (h *Handler) createSession(c *gin.Context) {
 	if len(item.State.VisualPayload) == 0 {
 		item.State.VisualPayload = map[string]any{
 			"title": item.Name,
-			"scene": "Session angelegt. Warte auf Spieler und Start.",
+			"scene": localizedSessionCreatedText(item.Language),
 		}
 	}
 	if strings.TrimSpace(item.State.SessionRecap) == "" {
-		item.State.SessionRecap = "Session angelegt. Warte auf Spieler und Start."
+		item.State.SessionRecap = localizedSessionCreatedText(item.Language)
 	}
 	if err := h.store.UpdateSessionState(c.Request.Context(), item.ID, item.State); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "link llm sessions to session", err)
@@ -322,7 +322,7 @@ func (h *Handler) updateSessionStatus(c *gin.Context, status string) {
 		nextState.TTSStatus = "idle"
 		nextState.VisualPayload = map[string]any{
 			"title": session.Name,
-			"scene": firstNonEmpty(session.State.SessionRecap, "Session pausiert oder beendet."),
+			"scene": firstNonEmpty(session.State.SessionRecap, localizedSessionStoppedText(session.Language)),
 		}
 		_ = h.store.UpdateSessionState(c.Request.Context(), session.ID, nextState)
 		session.State = nextState
@@ -330,15 +330,6 @@ func (h *Handler) updateSessionStatus(c *gin.Context, status string) {
 	if status == "live" {
 		nextState := session.State
 		isReopening := hasMeaningfulSessionProgress(session)
-		placeholder := "Die Session beginnt. Der AI DM eröffnet die Szene."
-		if isReopening {
-			placeholder = firstNonEmpty(
-				session.State.SessionRecap,
-				session.State.SceneSummary,
-				session.State.LastNarration,
-				"Ihr nehmt das Abenteuer wieder auf. Der AI DM fasst die Lage kurz zusammen.",
-			)
-		}
 		nextState.VisualMode = "scene"
 		nextState.VisualPayload = map[string]any{}
 		nextState.AudioMode = "tts_only"
@@ -349,12 +340,7 @@ func (h *Handler) updateSessionStatus(c *gin.Context, status string) {
 		nextState.TTSStatus = "queued"
 		nextState.LastDiceRoll = nil
 		nextState.LastConfirmedRoll = nil
-		opening := firstNonEmpty(
-			session.CurrentScene,
-			session.State.SceneSummary,
-			session.State.LastNarration,
-			placeholder,
-		)
+		opening := initialLiveOpeningText(session, isReopening)
 		nextState.LastNarration = opening
 		nextState.SceneSummary = firstNonEmpty(nextState.SceneSummary, opening)
 		nextState.VisualPayload = map[string]any{
@@ -368,6 +354,50 @@ func (h *Handler) updateSessionStatus(c *gin.Context, status string) {
 	}
 
 	c.JSON(http.StatusOK, session)
+}
+
+func localizedSessionCreatedText(language string) string {
+	if normalizeUILanguage(language) == "de" {
+		return "Session angelegt. Warte auf Spieler und Start."
+	}
+	return "Session created. Waiting for players and start."
+}
+
+func localizedSessionStoppedText(language string) string {
+	if normalizeUILanguage(language) == "de" {
+		return "Session pausiert oder beendet."
+	}
+	return "Session paused or finished."
+}
+
+func localizedSessionOpeningPlaceholder(language string) string {
+	if normalizeUILanguage(language) == "de" {
+		return "Die Session beginnt. Der AI DM eröffnet die Szene."
+	}
+	return "The session begins. The AI DM opens the scene."
+}
+
+func localizedSessionReopeningPlaceholder(language string) string {
+	if normalizeUILanguage(language) == "de" {
+		return "Ihr nehmt das Abenteuer wieder auf. Der AI DM fasst die Lage kurz zusammen."
+	}
+	return "You pick the adventure back up. The AI DM gives a short recap of the situation."
+}
+
+func initialLiveOpeningText(session Session, isReopening bool) string {
+	placeholder := localizedSessionOpeningPlaceholder(session.Language)
+	if isReopening {
+		return firstNonEmpty(
+			session.CurrentScene,
+			session.State.SceneSummary,
+			session.State.LastNarration,
+			placeholder,
+		)
+	}
+	if strings.TrimSpace(session.CurrentScene) != "" {
+		return session.CurrentScene
+	}
+	return placeholder
 }
 
 func (h *Handler) generateLiveSessionNarration(session Session, reopening bool) {
@@ -412,6 +442,6 @@ func (h *Handler) generateLiveSessionNarration(session Session, reopening bool) 
 		nextState.AudioMode = "tts_only"
 		nextState.AudioPayload = nil
 	}
-	nextState.SessionRecap = firstNonEmpty(response.Narration, nextState.SessionRecap)
+	nextState.SessionRecap = buildSessionStorySummary(currentSession, nextState, nextState.SessionRecap, response.Narration, response.Language)
 	_ = h.store.UpdateSessionState(ctx, currentSession.ID, nextState)
 }

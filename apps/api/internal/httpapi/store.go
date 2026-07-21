@@ -2370,6 +2370,35 @@ func expandedSearchTokens(tokens []string) []string {
 			add("talent")
 		case strings.Contains(token, "monster"):
 			add("monster")
+		case strings.Contains(token, "abbey") || strings.Contains(token, "abtei"):
+			add("abbey")
+			add("abtei")
+		case strings.Contains(token, "crypt") || strings.Contains(token, "krypt"):
+			add("crypt")
+			add("krypta")
+		case strings.Contains(token, "brother") || strings.Contains(token, "bruder"):
+			add("brother")
+			add("bruder")
+		case strings.Contains(token, "hag") || strings.Contains(token, "hexe") || strings.Contains(token, "witch"):
+			add("hag")
+			add("hexe")
+			add("witch")
+		case strings.Contains(token, "roof") || strings.Contains(token, "dach"):
+			add("roof")
+			add("dach")
+		case strings.Contains(token, "tower") || strings.Contains(token, "turm") || strings.Contains(token, "belltower") || strings.Contains(token, "glockenturm"):
+			add("tower")
+			add("turm")
+			add("belltower")
+			add("glockenturm")
+		case strings.Contains(token, "map") || strings.Contains(token, "karte") || strings.Contains(token, "battlemap"):
+			add("map")
+			add("karte")
+			add("battlemap")
+		case strings.Contains(token, "letter") || strings.Contains(token, "brief") || strings.Contains(token, "handout"):
+			add("letter")
+			add("brief")
+			add("handout")
 		}
 	}
 

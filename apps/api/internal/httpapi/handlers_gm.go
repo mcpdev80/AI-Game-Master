@@ -1105,7 +1105,7 @@ func buildCombatStateNarration(language string, state CombatState) string {
 	return fmt.Sprintf("Initiative is set. Round %d. Order: %s.", state.Round, strings.Join(orderParts, ", "))
 }
 
-func buildScenePromptContext(session Session, req GMRespondRequest, workingSummary map[string]any, contextChunks []GMContextChunk) map[string]any {
+func buildScenePromptContext(session Session, req GMRespondRequest, workingSummary map[string]any, contextChunks []GMContextChunk, adventureAssets []Asset) map[string]any {
 	adventureChunks := filterAdventurePromptChunks(contextChunks)
 	return map[string]any{
 		"scene_context": map[string]any{
@@ -1115,12 +1115,32 @@ func buildScenePromptContext(session Session, req GMRespondRequest, workingSumma
 			"scene_mode":       inferSceneMode(session, req),
 		},
 		"session_facts":     deriveSessionFacts(session, workingSummary, adventureChunks),
-		"known_npcs":        deriveKnownNPCs(session, adventureChunks),
-		"adventure_context": deriveAdventureContext(adventureChunks),
+		"known_npcs":        deriveKnownNPCs(session, req.PlayerInput, adventureChunks, adventureAssets),
+		"adventure_context": deriveAdventureContext(req.PlayerInput, adventureChunks, adventureAssets),
 	}
 }
 
+func adventureAssetsForSession(ctx context.Context, store *Store, session Session) ([]Asset, error) {
+	if session.AdventureID == nil || strings.TrimSpace(*session.AdventureID) == "" {
+		return []Asset{}, nil
+	}
+	allAssets, err := store.ListAssets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]Asset, 0)
+	for _, asset := range allAssets {
+		if asset.AdventureID != nil && *asset.AdventureID == *session.AdventureID {
+			items = append(items, asset)
+		}
+	}
+	return items, nil
+}
+
 var damageDicePattern = regexp.MustCompile(`(?i)\b(\d+\s*[wd]\s*\d+(?:\s*[+-]\s*\d+)?)\b`)
+var storySummaryDicePattern = regexp.MustCompile(`(?i)\b\d+\s*[wd]\s*\d+(?:\s*[+-]\s*\d+)?\b`)
+var storySummaryNumberPattern = regexp.MustCompile(`\b\d+\b`)
+var storySummaryMarkdownPattern = regexp.MustCompile(`[*_` + "`" + `#>]+`)
 
 func ensureAttackFollowUpRollRequest(playerInput string, activeCharacters []map[string]any, request *RollRequest) *RollRequest {
 	if request == nil || !strings.EqualFold(strings.TrimSpace(request.Type), "attack") || request.FollowUpOnSuccess != nil {
@@ -1239,6 +1259,109 @@ func normalizeDiceToken(input string) string {
 	return token
 }
 
+func buildSessionStorySummary(session Session, nextState SessionState, previous string, narration string, language string) string {
+	sentences := make([]string, 0, 8)
+	seen := map[string]struct{}{}
+	appendSentence := func(text string) {
+		clean := sanitizeStorySummarySentence(text, language)
+		if clean == "" {
+			return
+		}
+		key := strings.ToLower(clean)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		sentences = append(sentences, clean)
+	}
+
+	appendSentence(storySummaryContextSentence(session, nextState, language))
+	for _, sentence := range firstNSentences(previous, 12) {
+		appendSentence(sentence)
+	}
+	for _, sentence := range firstNSentences(narration, 6) {
+		appendSentence(sentence)
+	}
+
+	if len(sentences) > 6 {
+		sentences = sentences[len(sentences)-6:]
+	}
+	return strings.TrimSpace(strings.Join(sentences, " "))
+}
+
+func storySummaryContextSentence(session Session, nextState SessionState, language string) string {
+	parts := make([]string, 0, 3)
+	if scene := strings.TrimSpace(firstNonEmpty(session.CurrentScene, nextState.SceneSummary)); scene != "" {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+			parts = append(parts, fmt.Sprintf("Die Geschichte befindet sich aktuell bei %s", scene))
+		} else {
+			parts = append(parts, fmt.Sprintf("The story is currently at %s", scene))
+		}
+	}
+	if location := strings.TrimSpace(session.CurrentLocation); location != "" {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+			parts = append(parts, fmt.Sprintf("am Ort %s", location))
+		} else {
+			parts = append(parts, fmt.Sprintf("in %s", location))
+		}
+	}
+	npcs := compactStringList(defaultStringSlice(nextState.ActiveNPCs), 3, 60)
+	if len(npcs) > 0 {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(language)), "de") {
+			parts = append(parts, fmt.Sprintf("wobei %s eine wichtige Rolle spielen", joinGermanList(npcs)))
+		} else {
+			parts = append(parts, fmt.Sprintf("with %s currently in focus", joinLocalizedList(npcs, "en")))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+func sanitizeStorySummarySentence(text string, language string) string {
+	clean := strings.TrimSpace(text)
+	if clean == "" {
+		return ""
+	}
+	clean = storySummaryMarkdownPattern.ReplaceAllString(clean, "")
+	clean = storySummaryDicePattern.ReplaceAllString(clean, "")
+	clean = storySummaryNumberPattern.ReplaceAllString(clean, "")
+	clean = strings.Join(strings.Fields(clean), " ")
+	if skipStorySummarySentence(clean, language) {
+		return ""
+	}
+	clean = strings.TrimSpace(strings.Trim(clean, " ,;:"))
+	if clean == "" {
+		return ""
+	}
+	last := clean[len(clean)-1]
+	if last != '.' && last != '!' {
+		clean += "."
+	}
+	return clean
+}
+
+func skipStorySummarySentence(text string, language string) bool {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if lower == "" {
+		return true
+	}
+	if strings.Contains(lower, "?") {
+		return true
+	}
+	badFragments := []string{
+		"what do you do", "what happens next", "reply with", "roll ", "give me the total", "confirm roll",
+		"was tut ihr", "was tust du", "wie reagierst du", "antworte mit", "würfle", "wurf", "bestätige",
+		"armor class", "spell save dc", "spell attack", "initiative is set", "order:",
+		"rüstungsklasse", "zauber-sg", "zauberangriff", "initiative steht", "reihenfolge:",
+		"trefferpunkte", "hit points", "xp", "ep", "dc ", " ac ", " hp ",
+	}
+	for _, fragment := range badFragments {
+		if strings.Contains(lower, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
 func filterAdventurePromptChunks(chunks []GMContextChunk) []GMContextChunk {
 	items := make([]GMContextChunk, 0, len(chunks))
 	for _, chunk := range chunks {
@@ -1338,9 +1461,11 @@ func deriveSessionFacts(session Session, workingSummary map[string]any, adventur
 	return facts
 }
 
-func deriveKnownNPCs(session Session, adventureChunks []GMContextChunk) []map[string]any {
+func deriveKnownNPCs(session Session, query string, adventureChunks []GMContextChunk, adventureAssets []Asset) []map[string]any {
 	items := make([]map[string]any, 0, 3)
-	for _, name := range compactStringList(defaultStringSlice(session.State.ActiveNPCs), 3, 80) {
+	names := compactStringList(defaultStringSlice(session.State.ActiveNPCs), 3, 80)
+	names = appendUniqueStrings(names, matchingAdventureEntityNames(query, adventureAssets, 4)...)
+	for _, name := range compactStringList(names, 5, 80) {
 		matches := collectSentencesContaining(adventureChunks, name, 2)
 		visibleTraits := ""
 		lastKnownState := ""
@@ -1361,8 +1486,21 @@ func deriveKnownNPCs(session Session, adventureChunks []GMContextChunk) []map[st
 	return items
 }
 
-func deriveAdventureContext(adventureChunks []GMContextChunk) []map[string]any {
-	items := make([]map[string]any, 0, 2)
+func deriveAdventureContext(query string, adventureChunks []GMContextChunk, adventureAssets []Asset) []map[string]any {
+	items := make([]map[string]any, 0, 6)
+	for _, name := range matchingAdventureEntityNames(query, adventureAssets, 4) {
+		matches := collectSentencesContaining(adventureChunks, name, 2)
+		if len(matches) == 0 {
+			continue
+		}
+		items = append(items, map[string]any{
+			"source":  "adventure_entity",
+			"summary": truncatePromptContextText(fmt.Sprintf("%s: %s", name, strings.Join(matches, " ")), 220),
+		})
+		if len(items) >= 3 {
+			break
+		}
+	}
 	for _, chunk := range adventureChunks {
 		sentences := firstNSentences(chunk.ChunkText, 2)
 		if len(sentences) == 0 {
@@ -1373,10 +1511,161 @@ func deriveAdventureContext(adventureChunks []GMContextChunk) []map[string]any {
 			"summary": truncatePromptContextText(strings.Join(sentences, " "), 220),
 		})
 		if len(items) >= 2 {
+			continue
+		}
+	}
+	for _, summary := range matchingAdventureAssetSummaries(query, adventureAssets, 3) {
+		items = append(items, map[string]any{
+			"source":  "adventure_asset",
+			"summary": truncatePromptContextText(summary, 220),
+		})
+		if len(items) >= 6 {
 			break
 		}
 	}
 	return items
+}
+
+func matchingAdventureEntityNames(query string, adventureAssets []Asset, limit int) []string {
+	lowerQuery := expandedAdventureQuery(strings.ToLower(strings.TrimSpace(query)))
+	if lowerQuery == "" || limit <= 0 {
+		return nil
+	}
+	names := make([]string, 0, limit)
+	seen := map[string]struct{}{}
+	for _, asset := range adventureAssets {
+		if asset.EntityName == nil {
+			continue
+		}
+		name := strings.TrimSpace(*asset.EntityName)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		if strings.Contains(lowerQuery, key) || strings.Contains(key, lowerQuery) || queryTokenOverlap(lowerQuery, key) {
+			seen[key] = struct{}{}
+			names = append(names, name)
+			if len(names) >= limit {
+				break
+			}
+		}
+	}
+	return names
+}
+
+func matchingAdventureAssetSummaries(query string, adventureAssets []Asset, limit int) []string {
+	lowerQuery := expandedAdventureQuery(strings.ToLower(strings.TrimSpace(query)))
+	if lowerQuery == "" || limit <= 0 {
+		return nil
+	}
+	items := make([]string, 0, limit)
+	seen := map[string]struct{}{}
+	for _, asset := range adventureAssets {
+		candidates := []string{asset.Name, asset.Type}
+		if asset.EntityName != nil {
+			candidates = append(candidates, *asset.EntityName)
+		}
+		if asset.LocationName != nil {
+			candidates = append(candidates, *asset.LocationName)
+		}
+		matched := false
+		for _, candidate := range candidates {
+			candidate = strings.TrimSpace(candidate)
+			if candidate == "" {
+				continue
+			}
+			lowerCandidate := strings.ToLower(candidate)
+			if strings.Contains(lowerQuery, lowerCandidate) || strings.Contains(lowerCandidate, lowerQuery) || queryTokenOverlap(lowerQuery, lowerCandidate) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		summary := describeAdventureAsset(asset)
+		key := strings.ToLower(summary)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		items = append(items, summary)
+		if len(items) >= limit {
+			break
+		}
+	}
+	return items
+}
+
+func describeAdventureAsset(asset Asset) string {
+	parts := []string{fmt.Sprintf("Asset %s", asset.Name)}
+	if asset.Type != "" {
+		parts = append(parts, fmt.Sprintf("type %s", asset.Type))
+	}
+	if asset.EntityName != nil && strings.TrimSpace(*asset.EntityName) != "" {
+		parts = append(parts, fmt.Sprintf("entity %s", strings.TrimSpace(*asset.EntityName)))
+	}
+	if asset.LocationName != nil && strings.TrimSpace(*asset.LocationName) != "" {
+		parts = append(parts, fmt.Sprintf("location %s", strings.TrimSpace(*asset.LocationName)))
+	}
+	if len(asset.Tags) > 0 {
+		parts = append(parts, fmt.Sprintf("tags %s", strings.Join(asset.Tags, ", ")))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func queryTokenOverlap(a, b string) bool {
+	for _, token := range strings.FieldsFunc(a, func(r rune) bool { return r == ' ' || r == '_' || r == '-' || r == ',' || r == '.' || r == ':' || r == ';' }) {
+		token = strings.TrimSpace(token)
+		if len(token) < 4 {
+			continue
+		}
+		if strings.Contains(b, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func expandedAdventureQuery(input string) string {
+	if strings.TrimSpace(input) == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer(
+		"krypta", "krypta crypt",
+		"abtei", "abtei abbey",
+		"dach", "dach roof",
+		"glockenturm", "glockenturm belltower",
+		"erster stock", "erster stock first floor",
+		"stock", "stock floor",
+		"bruder", "bruder brother",
+		"hexe", "hexe hag witch",
+		"karte", "karte map battlemap",
+		"brief", "brief letter handout",
+	)
+	return replacer.Replace(input)
+}
+
+func appendUniqueStrings(existing []string, extra ...string) []string {
+	seen := make(map[string]struct{}, len(existing))
+	for _, item := range existing {
+		seen[strings.ToLower(strings.TrimSpace(item))] = struct{}{}
+	}
+	for _, item := range extra {
+		key := strings.ToLower(strings.TrimSpace(item))
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		existing = append(existing, item)
+	}
+	return existing
 }
 
 func collectSentencesContaining(chunks []GMContextChunk, needle string, limit int) []string {
@@ -1558,6 +1847,14 @@ func (h *Handler) gmRespond(c *gin.Context) {
 		errorResponse(c, http.StatusInternalServerError, "load active session characters", err)
 		return
 	}
+	adventureAssets := make([]Asset, 0)
+	if adventure != nil {
+		adventureAssets, err = adventureAssetsForSession(c.Request.Context(), h.store, session)
+		if err != nil {
+			errorResponse(c, http.StatusInternalServerError, "load adventure assets", err)
+			return
+		}
+	}
 	characterContextChunks := activeCharacterContextChunks(activeCharacters)
 	contextChunks := make([]GMContextChunk, 0)
 	if isRulesQuery {
@@ -1627,7 +1924,7 @@ func (h *Handler) gmRespond(c *gin.Context) {
 	}
 	activeLLMSession.MessageHistory = liveHistory
 	activeLLMSession.EstimatedSummaryTokens = estimatePromptTokens(messageHistoryToStrings(activeLLMSession.MessageHistory))
-	scenePromptContext := buildScenePromptContext(session, req, summaryLLMSession.WorkingSummary, contextChunks)
+	scenePromptContext := buildScenePromptContext(session, req, summaryLLMSession.WorkingSummary, contextChunks, adventureAssets)
 	response, err := h.llmClient.CompleteGMResponse(
 		ctx,
 		session,
@@ -1863,7 +2160,7 @@ func (h *Handler) gmRespond(c *gin.Context) {
 		nextState.AudioMode = "ambient_loop"
 		nextState.AudioPayload = payload
 	}
-	nextState.SessionRecap = firstNonEmpty(response.Narration, nextState.SessionRecap)
+	nextState.SessionRecap = buildSessionStorySummary(session, nextState, nextState.SessionRecap, response.Narration, response.Language)
 	if nextState.Combat.Active && response.RollRequest == nil && (detectsCombatResolution(req.PlayerInput) || detectsRestTransition(req.PlayerInput)) {
 		nextState.Combat.Log = append(nextState.Combat.Log, CombatLogEntry{
 			Timestamp: time.Now().UTC(),
@@ -1934,7 +2231,7 @@ func (h *Handler) gmRespond(c *gin.Context) {
 	nextState.LastNarration = response.Narration
 	nextState.LastDMNotes = response.DMNotes
 	nextState.SceneSummary = firstNonEmpty(response.Narration, nextState.SceneSummary)
-	nextState.SessionRecap = firstNonEmpty(response.Narration, nextState.SessionRecap)
+	nextState.SessionRecap = buildSessionStorySummary(session, nextState, nextState.SessionRecap, response.Narration, response.Language)
 	if err := h.store.UpdateSessionState(c.Request.Context(), session.ID, nextState); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "update session group inventory", err)
 		return
@@ -2029,6 +2326,10 @@ func (h *Handler) generateSessionOpening(ctx context.Context, session Session) (
 	if err != nil {
 		return GMResponse{}, err
 	}
+	adventureAssets, err := adventureAssetsForSession(ctx, h.store, session)
+	if err != nil {
+		return GMResponse{}, err
+	}
 
 	adventurePrompt := firstNonEmpty(session.Name, session.CurrentScene)
 	if adventure != nil {
@@ -2078,7 +2379,7 @@ func (h *Handler) generateSessionOpening(ctx context.Context, session Session) (
 
 	scenePromptContext := buildScenePromptContext(session, req, map[string]any{
 		"session_phase": "opening",
-	}, contextChunks)
+	}, contextChunks, adventureAssets)
 	response, err := h.llmClient.CompleteGMResponse(
 		llmCtx,
 		session,
@@ -2130,6 +2431,10 @@ func (h *Handler) generateSessionReopening(ctx context.Context, session Session)
 	if err != nil {
 		return GMResponse{}, err
 	}
+	adventureAssets, err := adventureAssetsForSession(ctx, h.store, session)
+	if err != nil {
+		return GMResponse{}, err
+	}
 
 	query := strings.TrimSpace(strings.Join([]string{
 		"Session fortsetzen",
@@ -2178,7 +2483,7 @@ func (h *Handler) generateSessionReopening(ctx context.Context, session Session)
 	scenePromptContext := buildScenePromptContext(session, req, map[string]any{
 		"session_phase": "reopening",
 		"session_recap": session.State.SessionRecap,
-	}, contextChunks)
+	}, contextChunks, adventureAssets)
 	response, err := h.llmClient.CompleteGMResponse(
 		llmCtx,
 		session,
@@ -2478,7 +2783,10 @@ func buildSessionWorkingSummary(session Session, nextState SessionState, respons
 		"current_scene":         session.CurrentScene,
 		"current_location":      session.CurrentLocation,
 		"scene_summary":         nextState.SceneSummary,
+		"story_summary":         nextState.SessionRecap,
 		"session_recap":         nextState.SessionRecap,
+		"recent_summary":        nextState.SessionRecap,
+		"last_outcome":          nextState.LastNarration,
 		"last_narration":        nextState.LastNarration,
 		"active_npcs":           defaultStringSlice(nextState.ActiveNPCs),
 		"open_quests":           defaultStringSlice(nextState.OpenQuests),

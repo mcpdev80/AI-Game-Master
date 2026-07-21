@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-func importAdventureZip(ctx context.Context, store *Store, uploadsDir string, filePath string, adventure Adventure) (ZipImportReport, error) {
-	if err := validateZipArchive(filePath, 200, 120<<20); err != nil {
+func importAdventureZip(ctx context.Context, store *Store, uploadsDir string, filePath string, adventure Adventure, maxEntries int, maxExtractBytes int64) (ZipImportReport, error) {
+	if err := validateZipArchive(filePath, maxEntries, maxExtractBytes); err != nil {
 		return ZipImportReport{}, err
 	}
 
