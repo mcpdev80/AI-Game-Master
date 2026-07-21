@@ -9,6 +9,7 @@
     "build:web": "npm --workspace apps/web run build",
     "start:web": "npm --workspace apps/web run start",
     "test:e2e": "npm --workspace apps/web run test:e2e",
+    "test:demo-video": "npm --workspace apps/web run test:demo-video",
     "test:golden-path": "bash scripts/test_golden_path.sh",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"

@@ -6,7 +6,8 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --grep-invert \"demo video\"",
+    "test:demo-video": "playwright test e2e/demo-video.spec.ts"
   },
   "dependencies": {
     "lucide-react": "^0.552.0",

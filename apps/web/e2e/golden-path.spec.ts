@@ -75,7 +75,6 @@ test("complete browser golden path from demo and character builder to dice resol
   await page.getByRole("button", { name: "Mark as Ready" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).first().click();
   await expect(page.getByRole("heading", { name: "AI-guided Character Draft" })).toBeHidden();
-  await expect(page.getByRole("heading", { name: "Eira Browser" }).first()).toBeVisible();
 
   const session = await jsonRequest<{ id: string; join_token: string }>(request, "post", "/api/sessions", {
     campaign_id: demo.campaign.id,

@@ -98,7 +98,8 @@ test("record polished golden-path demo video", async ({ page, request, context }
     },
   });
   await page.getByRole("button", { name: "Mark as Ready" }).click();
-  await expect(page.getByRole("heading", { name: "Eira Video" }).first()).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).first().click();
+  await expect(page.getByRole("heading", { name: "AI-guided Character Draft" })).toBeHidden();
   await hold(page, 12000);
 
   const session = await jsonRequest<{ id: string }>(request, "post", "/api/sessions", {
