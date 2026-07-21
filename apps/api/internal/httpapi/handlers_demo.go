@@ -227,20 +227,33 @@ func (h *Handler) ensureFungalDemoCharacter(ctx context.Context, campaign Campai
 	if err != nil {
 		return err
 	}
+	targetCharacters := fungalDemoCharacters(campaign.ID)
+	targetNames := map[string]struct{}{}
+	for _, character := range targetCharacters {
+		targetNames[strings.TrimSpace(character.Name)] = struct{}{}
+	}
+	existingNames := map[string]struct{}{}
 	for _, character := range characters {
 		if metadataString(character.Metadata, "demo_id") == fungalCavernsDemoID {
-			return nil
+			name := strings.TrimSpace(character.Name)
+			if _, ok := targetNames[name]; !ok {
+				if err := h.store.DeleteCharacter(ctx, character.ID); err != nil {
+					return err
+				}
+				continue
+			}
+			existingNames[name] = struct{}{}
 		}
 	}
-	armorClass, hitPoints := 13, 10
-	_, err = h.store.CreateCharacter(ctx, Character{
-		CampaignID: &campaign.ID, Name: "Rowan", PlayerName: "Demo Player", ClassAndLevel: "Scout 1", Background: "Cave Cartographer",
-		Race: "Human", Alignment: "Curious", ArmorClass: &armorClass, Speed: "30 ft", HitPointMax: &hitPoints, Proficiency: "+2",
-		Abilities: map[string]int{"strength": 10, "dexterity": 15, "constitution": 12, "intelligence": 14, "wisdom": 13, "charisma": 8},
-		Languages: []string{"Common / Gemeinsprache"}, Features: []string{"Keen observer / Aufmerksame Beobachtung", "Cartographer / Kartografie"},
-		Metadata: map[string]any{"demo_id": fungalCavernsDemoID, "system_neutral": true},
-	})
-	return err
+	for _, character := range targetCharacters {
+		if _, ok := existingNames[strings.TrimSpace(character.Name)]; ok {
+			continue
+		}
+		if _, err := h.store.CreateCharacter(ctx, character); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *Handler) ensureFungalDemoSession(ctx context.Context, campaign Campaign, adventure Adventure, mapAsset Asset, language string) (Session, bool, error) {
@@ -448,4 +461,229 @@ func removeDemoUploadDirectory(path string) {
 		return
 	}
 	_ = os.RemoveAll(trimmed)
+}
+
+func fungalDemoCharacters(campaignID string) []Character {
+	baseMetadata := func(extra map[string]any) map[string]any {
+		metadata := map[string]any{
+			"demo_id":                    fungalCavernsDemoID,
+			"demo_character":             true,
+			"rules_profile":              "5E SRD 5.1",
+			"current_hit_points":         "",
+			"temporary_hit_points":       "0",
+			"current_money":              "",
+			"experience_points":          "0",
+			"level_up_available":         "No",
+			"session_notes":              []string{},
+			"allies":                     "The other demo adventurers in the Fungal Caverns party.",
+			"senses":                     "Passive Perception 10",
+			"size":                       "Medium",
+			"weight":                     "",
+			"age":                        "",
+			"eyes":                       "",
+			"skin":                       "",
+			"hair":                       "",
+			"spell_attacks":              "",
+			"spell_notes":                "",
+			"spells":                     []string{},
+			"starting_money":             "",
+			"starting_equipment":         []string{},
+			"current_inventory":          []string{},
+			"tools_and_proficiencies":    []string{},
+			"skill_proficiencies":        []string{},
+			"saving_throw_proficiencies": []string{},
+			"weapon_notes":               []string{},
+			"combat_attacks":             "",
+			"combat_overview":            "",
+			"concept":                    "",
+			"backstory":                  "",
+			"personality_traits":         "",
+			"ideals":                     "",
+			"bonds":                      "",
+			"flaws":                      "",
+			"hit_dice":                   "",
+			"passive_perception":         "",
+		}
+		for key, value := range extra {
+			metadata[key] = value
+		}
+		return metadata
+	}
+
+	return []Character{
+		{
+			CampaignID:    &campaignID,
+			Name:          "Seraphine Vale",
+			PlayerName:    "Demo Player",
+			ClassAndLevel: "Paladin 1",
+			Background:    "Acolyte",
+			Race:          "Human",
+			Alignment:     "Lawful Good",
+			ArmorClass:    demoIntPtr(18),
+			Speed:         "30 ft",
+			HitPointMax:   demoIntPtr(12),
+			Proficiency:   "+2",
+			Abilities:     map[string]int{"strength": 16, "dexterity": 10, "constitution": 14, "intelligence": 10, "wisdom": 12, "charisma": 14},
+			Languages:     []string{"Common", "Celestial"},
+			Features:      []string{"Divine Sense", "Lay on Hands", "Holy Resolve"},
+			Metadata: baseMetadata(map[string]any{
+				"current_hit_points":         "12",
+				"current_money":              "15 gp",
+				"age":                        "24",
+				"weight":                     "180 lb",
+				"eyes":                       "Steel gray",
+				"skin":                       "Fair",
+				"hair":                       "Black",
+				"hit_dice":                   "1d10",
+				"passive_perception":         "11",
+				"concept":                    "A steadfast frontline guardian built to protect the group and stabilize a fight.",
+				"backstory":                  "Seraphine was raised in a monastery hospice and took sacred vows after surviving a border raid. She now travels to stop corruption before it spreads.",
+				"personality_traits":         "Calm under pressure; direct; quietly compassionate.",
+				"ideals":                     "Duty. The strong must shield those who cannot shield themselves.",
+				"bonds":                      "She carries a sun-marked prayer strip from the abbey where she trained.",
+				"flaws":                      "She is slow to trust people who hide the truth.",
+				"skill_proficiencies":        []string{"Athletics", "Insight", "Religion", "Persuasion"},
+				"saving_throw_proficiencies": []string{"Wisdom", "Charisma"},
+				"tools_and_proficiencies":    []string{"Herbalism kit"},
+				"starting_equipment":         []string{"Chain mail", "Shield", "Longsword", "5 javelins", "Priest's pack", "Holy symbol"},
+				"current_inventory":          []string{"Chain mail", "Shield", "Longsword", "5 javelins", "Holy symbol", "Bedroll", "Rations (5 days)"},
+				"weapon_notes":               []string{"Use the longsword and shield in melee.", "Open with a javelin throw if enemies are closing at range."},
+				"combat_attacks":             "Longsword | +5 to hit | 1d8+3 slashing\nJavelin | +5 to hit | 1d6+3 piercing | 30/120 ft",
+				"combat_overview":            "Frontline defender with strong AC, emergency healing from Lay on Hands, and solid melee accuracy.",
+			}),
+		},
+		{
+			CampaignID:    &campaignID,
+			Name:          "Rowan Quickstep",
+			PlayerName:    "Demo Player",
+			ClassAndLevel: "Rogue 1",
+			Background:    "Criminal",
+			Race:          "Lightfoot Halfling",
+			Alignment:     "Chaotic Good",
+			ArmorClass:    demoIntPtr(15),
+			Speed:         "25 ft",
+			HitPointMax:   demoIntPtr(9),
+			Proficiency:   "+2",
+			Abilities:     map[string]int{"strength": 8, "dexterity": 17, "constitution": 13, "intelligence": 12, "wisdom": 14, "charisma": 12},
+			Languages:     []string{"Common", "Halfling", "Thieves' Cant"},
+			Features:      []string{"Sneak Attack", "Expertise", "Halfling Nimbleness"},
+			Metadata: baseMetadata(map[string]any{
+				"current_hit_points":         "9",
+				"current_money":              "12 gp, 8 sp",
+				"age":                        "22",
+				"weight":                     "38 lb",
+				"eyes":                       "Hazel",
+				"skin":                       "Tan",
+				"hair":                       "Chestnut",
+				"hit_dice":                   "1d8",
+				"passive_perception":         "14",
+				"concept":                    "A fast scout and skill expert who opens locks, spots danger, and lands precise ranged hits.",
+				"backstory":                  "Rowan grew up running messages and contraband through crowded river wards. A close call with a gang boss convinced him to put his talents to better use.",
+				"personality_traits":         "Restless, observant, and impossible to intimidate for long.",
+				"ideals":                     "Freedom. No tyrant, lock, or lie should control the road ahead.",
+				"bonds":                      "He still sends coin to his younger sister whenever he can.",
+				"flaws":                      "He pushes his luck because he hates backing down from a challenge.",
+				"skill_proficiencies":        []string{"Acrobatics", "Perception", "Sleight of Hand", "Stealth", "Investigation", "Deception"},
+				"saving_throw_proficiencies": []string{"Dexterity", "Intelligence"},
+				"tools_and_proficiencies":    []string{"Thieves' tools", "Disguise kit"},
+				"starting_equipment":         []string{"Leather armor", "Rapier", "Shortbow", "20 arrows", "2 daggers", "Thieves' tools", "Burglar's pack"},
+				"current_inventory":          []string{"Leather armor", "Rapier", "Shortbow", "20 arrows", "2 daggers", "Thieves' tools", "Crowbar", "Hooded lantern"},
+				"weapon_notes":               []string{"Aim for advantage to trigger Sneak Attack.", "Stay mobile and avoid ending a turn exposed in the front line."},
+				"combat_attacks":             "Rapier | +5 to hit | 1d8+3 piercing\nShortbow | +5 to hit | 1d6+3 piercing | 80/320 ft\nSneak Attack | +1d6 once per turn when eligible",
+				"combat_overview":            "Scout, trap-handler, and precision striker. Best when attacking with advantage or beside an ally engaging the same target.",
+			}),
+		},
+		{
+			CampaignID:    &campaignID,
+			Name:          "Brother Alden",
+			PlayerName:    "Demo Player",
+			ClassAndLevel: "Cleric 1",
+			Background:    "Hermit",
+			Race:          "Hill Dwarf",
+			Alignment:     "Neutral Good",
+			ArmorClass:    demoIntPtr(18),
+			Speed:         "25 ft",
+			HitPointMax:   demoIntPtr(11),
+			Proficiency:   "+2",
+			Abilities:     map[string]int{"strength": 14, "dexterity": 10, "constitution": 14, "intelligence": 10, "wisdom": 16, "charisma": 12},
+			Languages:     []string{"Common", "Dwarvish"},
+			Features:      []string{"Spellcasting", "Life Domain", "Disciple of Life"},
+			Metadata: baseMetadata(map[string]any{
+				"current_hit_points":         "11",
+				"current_money":              "10 gp",
+				"age":                        "58",
+				"weight":                     "162 lb",
+				"eyes":                       "Blue",
+				"skin":                       "Ruddy",
+				"hair":                       "Brown with silver braids",
+				"hit_dice":                   "1d8",
+				"passive_perception":         "13",
+				"concept":                    "A sturdy healer and support caster who can also hold a doorway in armor.",
+				"backstory":                  "Brother Alden spent years in a mountain shrine preserving old records and tending pilgrims. He left isolation after recurring visions of blight spreading underground.",
+				"personality_traits":         "Patient, practical, and gently stubborn.",
+				"ideals":                     "Mercy. A life saved today can still change the world tomorrow.",
+				"bonds":                      "He records the names of everyone he fails to save and prays for them at dawn.",
+				"flaws":                      "He will overextend himself before admitting exhaustion.",
+				"skill_proficiencies":        []string{"Insight", "Medicine", "Religion", "Survival"},
+				"saving_throw_proficiencies": []string{"Wisdom", "Charisma"},
+				"tools_and_proficiencies":    []string{"Herbalism kit", "Brewer's supplies"},
+				"starting_equipment":         []string{"Chain mail", "Shield", "Mace", "Light crossbow", "20 bolts", "Priest's pack", "Holy symbol"},
+				"current_inventory":          []string{"Chain mail", "Shield", "Mace", "Light crossbow", "20 bolts", "Holy symbol", "Healer's kit", "Rations (5 days)"},
+				"weapon_notes":               []string{"Hold the line with shield and mace.", "Use Sacred Flame when melee would be unsafe."},
+				"combat_attacks":             "Mace | +4 to hit | 1d6+2 bludgeoning\nLight Crossbow | +2 to hit | 1d8 piercing | 80/320 ft",
+				"spell_attacks":              "Sacred Flame | DC 13 Dexterity save | 1d8 radiant\nGuiding Bolt | +5 to hit | 4d6 radiant",
+				"spell_notes":                "Prepared support-focused spell list. Life Domain keeps Bless and Cure Wounds ready.",
+				"spells":                     []string{"Guidance", "Light", "Sacred Flame", "Bless", "Cure Wounds", "Healing Word", "Guiding Bolt", "Sanctuary"},
+				"combat_overview":            "Primary healer and support caster. Strong opening turns are Bless, Guiding Bolt, or Healing Word to recover a fallen ally.",
+			}),
+		},
+		{
+			CampaignID:    &campaignID,
+			Name:          "Elira Moonfall",
+			PlayerName:    "Demo Player",
+			ClassAndLevel: "Wizard 1",
+			Background:    "Sage",
+			Race:          "High Elf",
+			Alignment:     "Neutral",
+			ArmorClass:    demoIntPtr(12),
+			Speed:         "30 ft",
+			HitPointMax:   demoIntPtr(7),
+			Proficiency:   "+2",
+			Abilities:     map[string]int{"strength": 8, "dexterity": 14, "constitution": 13, "intelligence": 16, "wisdom": 12, "charisma": 10},
+			Languages:     []string{"Common", "Elvish", "Draconic"},
+			Features:      []string{"Spellcasting", "Arcane Recovery", "Cantrip Training"},
+			Metadata: baseMetadata(map[string]any{
+				"current_hit_points":         "7",
+				"current_money":              "8 gp",
+				"age":                        "121",
+				"weight":                     "118 lb",
+				"eyes":                       "Violet",
+				"skin":                       "Pale bronze",
+				"hair":                       "Silver-blond",
+				"hit_dice":                   "1d6",
+				"passive_perception":         "11",
+				"concept":                    "A battlefield controller and utility caster with strong ranged cantrips and classic defensive magic.",
+				"backstory":                  "Elira apprenticed under a reclusive archivist who taught her to value preparation above bravado. She adventures to recover lore before it is lost or misused.",
+				"personality_traits":         "Curious, exacting, and always mentally three steps ahead.",
+				"ideals":                     "Knowledge. A hidden truth is still a kind of danger.",
+				"bonds":                      "Her master's annotated spellbook margins still guide every difficult decision.",
+				"flaws":                      "She can become so focused on the ideal solution that she hesitates in messy situations.",
+				"skill_proficiencies":        []string{"Arcana", "History", "Investigation", "Insight"},
+				"saving_throw_proficiencies": []string{"Intelligence", "Wisdom"},
+				"tools_and_proficiencies":    []string{"Calligrapher's supplies"},
+				"starting_equipment":         []string{"Quarterstaff", "Component pouch", "Scholar's pack", "Spellbook"},
+				"current_inventory":          []string{"Quarterstaff", "Dagger", "Component pouch", "Spellbook", "Ink and quill", "Scholar's pack"},
+				"weapon_notes":               []string{"Open with control or ranged damage before enemies close.", "Cast Mage Armor early if danger is expected."},
+				"combat_attacks":             "Quarterstaff | +2 to hit | 1d6 bludgeoning\nDagger | +4 to hit | 1d4+2 piercing | 20/60 ft",
+				"spell_attacks":              "Fire Bolt | +5 to hit | 1d10 fire\nMagic Missile | automatic hit | 3d4+3 force",
+				"spell_notes":                "Prepared to solve early fights with Sleep or Magic Missile and stay safe behind Mage Armor and Shield.",
+				"spells":                     []string{"Fire Bolt", "Mage Hand", "Minor Illusion", "Light", "Mage Armor", "Magic Missile", "Shield", "Sleep", "Detect Magic", "Comprehend Languages"},
+				"combat_overview":            "Backline caster with flexible utility. Best protected by allies while she controls the pace of a fight.",
+			}),
+		},
+	}
+}
+
+func demoIntPtr(value int) *int {
+	return &value
 }
