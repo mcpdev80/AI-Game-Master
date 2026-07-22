@@ -1,5 +1,13 @@
 # Build Week changelog
 
+## Release 0.2.0
+
+- Added DM-controlled companion support so solo players or small groups can bring cloned companion characters into a session without assigning them to separate human player slots.
+- Extended session models, API endpoints, storage, and GM prompt context so companions participate as first-class session actors.
+- Improved player/session surfaces to expose richer companion-aware summaries and a stronger local-table play flow.
+- Hardened builder and session browser coverage, including more stable narrative opening and player-screen flows.
+- Finalized the Build Week merge of the companion and player-surface work onto `main` for the public submission release.
+
 ## Release 0.1.2
 
 - Added a stable SRD 5.1 reference baseline to the repository: original local PDF snapshot, extracted text snapshot, current landing-page snapshot, and a refresh helper script.

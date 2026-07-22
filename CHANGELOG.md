@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
+## [0.2.0] - 2026-07-21
+
+### Added
+- DM-controlled companion support with session-scoped companion management, API endpoints, storage integration, and GM prompt context
+- Richer player-facing session surfaces, including expanded portal/session views and companion-aware summaries
+- Companion planning and implementation documentation for the Build Week release
+
+### Changed
+- Refined the player portal and active-session UI to better support solo and small-party play with AI-managed companions
+- Expanded GM/session orchestration, session models, and API typings to carry live companion state through the product
+- Updated README and project submission notes for the current public Build Week release state
+
+### Fixed
+- Builder stage rewind behavior when replies over-advance past the actual completion state
+- Narrative-opening, player-screen, and browser golden-path test stability around the live session flow
+- Session and player flows that previously broke when companion-aware state was missing or partially initialized
+
 ## [0.1.2] - 2026-07-21
 
 ### Added
