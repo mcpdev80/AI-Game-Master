@@ -569,8 +569,11 @@ func (h *Handler) loadPlayerPortalSession(ctx context.Context, token string) (Pl
 		if isSessionClone, ok := character.Metadata["is_session_clone"].(bool); ok && isSessionClone {
 			continue
 		}
-		if clonedForSessionID := strings.TrimSpace(fmt.Sprintf("%v", character.Metadata["cloned_for_session_id"])); clonedForSessionID != "" {
-			continue
+		if rawClonedForSessionID, ok := character.Metadata["cloned_for_session_id"]; ok {
+			clonedForSessionID := strings.TrimSpace(fmt.Sprintf("%v", rawClonedForSessionID))
+			if clonedForSessionID != "" && clonedForSessionID != "<nil>" {
+				continue
+			}
 		}
 		available = append(available, character)
 	}
